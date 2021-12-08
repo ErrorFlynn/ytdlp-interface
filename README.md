@@ -14,6 +14,8 @@ The project depends on two static libraries: [Nana C++ GUI library](https://gith
 
 The program also uses [JSON for modern C++](https://github.com/nlohmann/json) to get video info from `yt-dlp.exe` and to read/write the settings file, but that's just a header file that's included in the project (you can replace it with its latest version if you really want to).
 
+The easiest way to build the project is to open the solution file with Visual Studio 2019 or later. If that's not an option, you're a resourceful individual, I'm sure you'll come up with something (that's as far as my support goes, sorry).
+
 ---
 
 ![ytdlp-interface 1](https://user-images.githubusercontent.com/20293505/144982043-7f2eff3f-856b-4426-b61d-df53decf070a.png)
