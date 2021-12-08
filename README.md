@@ -7,6 +7,8 @@ Some third-party binaries are distributed with the program binary:
 
 To use, it's easiest to just dump the files in the folder where `yt-dlp.exe` is located, although you can put them anywhere. To completely remove from your system, also delete the settings file `%AppData%\ytdlp-interface.json`.
 
+Download link: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v1.0.0/ytdlp-interface.7z
+
 ---
 
 ## Building the source
