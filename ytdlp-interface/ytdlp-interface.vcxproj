@@ -154,6 +154,7 @@
     <ClInclude Include="gui.hpp" />
     <ClInclude Include="json.hpp" />
     <ClInclude Include="nana_subclassing.hpp" />
+    <ClInclude Include="progress_ex.hpp" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="util.hpp" />
   </ItemGroup>

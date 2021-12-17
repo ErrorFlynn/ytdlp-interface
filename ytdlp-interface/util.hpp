@@ -17,6 +17,7 @@ struct settings_t
 	std::wstring fmt1, fmt2;
 	double ratelim {0};
 	unsigned ratelim_unit {1};
+	bool cbsplit {false}, cbchaps {false}, cbsubs {false}, cbthumb {false}, cbtime {true}, cbkeyframes {false}, cbmp3 {false};
 }
 conf;
 
@@ -51,7 +52,30 @@ auto GetLastErrorStr()
 	return str;
 }
 
-auto run_piped_process(std::wstring cmd, bool *working = nullptr, nana::textbox *tb = nullptr, std::function<void(ULONGLONG, ULONGLONG)> cb = nullptr)
+HWND hwnd_from_pid(DWORD pid)
+{
+	struct lparam_t { HWND hwnd {nullptr}; DWORD pid {0}; } lparam;
+
+	WNDENUMPROC enumfn = [](HWND hwnd, LPARAM lparam) -> BOOL
+	{
+		auto &target {*reinterpret_cast<lparam_t*>(lparam)};
+		DWORD pid {0};
+		GetWindowThreadProcessId(hwnd, &pid);
+		if(pid == target.pid)
+		{
+			target.hwnd = hwnd;
+			return FALSE;
+		}
+		return TRUE;
+	};
+
+	lparam.pid = pid;
+	EnumWindows(enumfn, reinterpret_cast<LPARAM>(&lparam));
+	return lparam.hwnd;
+}
+
+auto run_piped_process(std::wstring cmd, bool *working = nullptr, nana::textbox *tb = nullptr, 
+	std::function<void(ULONGLONG, ULONGLONG, std::string)> cb = nullptr)
 {
 	std::string ret;
 	HANDLE hPipeRead, hPipeWrite;
@@ -81,8 +105,8 @@ auto run_piped_process(std::wstring cmd, bool *working = nullptr, nana::textbox 
 
 	auto killproc = [&pi]
 	{
-		if(TerminateProcess(pi.hProcess, 0xDeadBeef))
-			WaitForSingleObject(pi.hProcess, INFINITE);
+		auto hwnd {hwnd_from_pid(pi.dwProcessId)};
+		if(hwnd) SendMessageA(hwnd, WM_CLOSE, 0, 0);
 	};
 
 	bool procexit {false};
@@ -112,22 +136,39 @@ auto run_piped_process(std::wstring cmd, bool *working = nullptr, nana::textbox 
 			}
 
 			buf[dwRead] = 0;
-			ret += buf;
+			std::string s {buf};
 			if(cb)
 			{
-				auto pos {ret.rfind("[download]")};
-				if(pos != -1)
+				static bool subs {false};
+				if(s.find("Writing video subtitles") != -1)
+					subs = true;
+				auto pos1 {s.find('%')};
+				if(pos1 != -1)
 				{
-					auto pos2 {ret.find('%', pos)};
-					if(pos2 != -1)
+					if(!subs)
 					{
-						pos += 11;
-						auto completed {static_cast<ULONGLONG>(stod(ret.substr(pos, pos2-pos))*10)};
-						cb(completed, 1000);
+						auto pos2 {s.rfind('%')}, pos {s.rfind(' ', pos2)+1};
+						auto pct {s.substr(pos, pos2-pos)};
+						auto pos1a {s.rfind('\n', pos1)+1}, pos2a {s.find('\n', pos2)};
+						pos1 = s.rfind(' ', pos2)+1;
+						auto text {s.substr(pos1, pos2a-pos1)};
+						pos1 = text.rfind("  ");
+						if(pos1 != -1) text.erase(pos1, 1);
+						cb(static_cast<ULONGLONG>(stod(pct)*10), 1000, text);
+						s.erase(pos1a, pos2a == -1 ? pos2a : pos2a-pos1a);
+						if(s == "\n") s.clear();
+						if(!s.empty() && s.back() == '\n' && s[s.size()-2] == '\n')
+							s.pop_back();
+					}
+					else
+					{
+						if(s.find("100%") != -1)
+							subs = false;
 					}
 				}
 			}
-			if(tb) tb->append(buf, false);
+			else ret += buf;
+			if(tb) tb->append(s, false);
 		}
 		if(working && !*working)
 		{

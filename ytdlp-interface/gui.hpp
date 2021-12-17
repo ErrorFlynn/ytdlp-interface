@@ -19,6 +19,7 @@
 
 #include "util.hpp"
 #include "nana_subclassing.hpp"
+#include "progress_ex.hpp"
 
 class Label : public nana::label
 {
@@ -110,7 +111,7 @@ public:
 		hwnd = reinterpret_cast<HWND>(native_handle());
 
 		center(630, 193);
-		caption("ytdlp-interface v1.0");
+		caption("ytdlp-interface v1.1");
 		bgcolor(colors::white);
 
 		make_page1();
@@ -170,13 +171,17 @@ private:
 
 	/*** page3 widgets ***/
 	nana::group gpopt {page3, "Options"};
+	nana::progress_ex prog {page3};
 	nana::textbox tbpipe {page3}, tbrate {gpopt};
 	Button btnbackto2 {page3, "<<< Back "}, btndl {page3, "Begin download"};
 	Label l_out {gpopt, "Download folder:"}, l_rate {gpopt, "Download rate limit:"};
 	nana::label l_outpath {gpopt};
 	nana::button btn_outpath {gpopt, "..."};
 	nana::combox com_rate {gpopt};
-	cbox cbsplit {gpopt, "Split chapters"}, cbkeyframes {gpopt, "Force keyframes at cuts"}, cbmp3 {gpopt, "Convert audio to MP3"};
+	cbox cbsplit {gpopt, "Split chapters"}, cbkeyframes {gpopt, "Force keyframes at cuts"}, cbmp3 {gpopt, "Convert audio to MP3"}, 
+		cbchaps {gpopt, "Embed chapters"}, cbsubs {gpopt, "Embed subtitles"}, cbthumb {gpopt, "Embed thumbnail"}, 
+		cbtime {gpopt, "File modification time = time of writing"};
+
 
 	void on_btn_info()
 	{
@@ -187,6 +192,13 @@ private:
 		else id = id.substr(id.rfind("?v=")+3);
 		if(vidinfo.empty() || vidinfo["id"] != id)
 		{
+			if(!vidinfo.empty())
+			{
+				tbpipe.select(true);
+				tbpipe.del();
+				prog.value(0);
+				prog.caption("");
+			}
 			if(thr.joinable()) thr.join();
 			thr = std::thread([this]
 			{
@@ -335,6 +347,119 @@ private:
 		}
 	}
 
+
+	void on_btn_dl()
+	{
+		if(btndl.caption().find("Stop") == -1)
+		{
+			btndl.caption("Stop download");
+			btndl.fgcolor(nana::color {"#966"});
+			btndl.scheme().activated = nana::color {"#a77"};
+
+			std::wstring cmd {L'\"' + conf.ytdlp_path.wstring() + L"\" -f " + strfmt + L" --windows-filenames "};
+			if(conf.cbchaps) cmd += L"--embed-chapters ";
+			if(conf.cbsubs) cmd += L"--embed-subs ";
+			if(conf.cbthumb) cmd += L"--embed-thumbnail ";
+			if(conf.cbtime) cmd += L"--no-mtime ";
+			if(conf.cbkeyframes) cmd += L"--force-keyframes-at-cuts ";
+			if(!ffmpeg_loc.empty())
+				cmd += L"--ffmpeg-location \"" + ffmpeg_loc.wstring() + L"\" ";
+			if(tbrate.to_double())
+				cmd += L"-r " + tbrate.caption_wstring() + (com_rate.option() ? L"M " : L"K ");
+			if(cbmp3.checked())
+			{
+				cmd += L"-x --audio-format mp3 ";
+				auto sel {lbformats.selected()};
+				for(auto sel : lbformats.selected())
+					if(sel.cat == 1)
+					{
+						std::wstring txt {nana::charset{lbformats.at(sel).text(6)}};
+						cmd += L"--audio-quality " + txt + L"K ";
+					}
+			}
+			if(cbsplit.checked())
+				cmd += L"--split-chapters -o chapter:\"" + conf.outpath.wstring() + L"\\%(title)s - %(section_number)s -%(section_title)s.%(ext)s\" ";
+			if(cbkeyframes.checked())
+				cmd += L"--force-keyframes-at-cuts ";
+			cmd += L"-o \"" + conf.outpath.wstring() + L"\\%(title)s.%(ext)s\" ";
+			cmd += tblink.caption_wstring();
+			btnbackto1.enabled(false);
+			tbpipe.select(true);
+			tbpipe.del();
+			if(thr.joinable()) thr.join();
+			thr = std::thread([this, cmd]
+			{
+				working = true;
+				auto ca {tbpipe.colored_area_access()};
+				ca->clear();
+				tbpipe.append(L"[GUI] executing command line: " + cmd + L"\n\n", false);
+				auto p {ca->get(0)};
+				p->count = 1;
+				p->fgcolor = nana::color {"#569"};
+				nana::API::refresh_window(tbpipe);
+				unsigned fmtnum {0};
+				auto sel {lbformats.selected()};
+				ULONGLONG prev_val {0};
+				auto cb_progress = [&, this](ULONGLONG completed, ULONGLONG total, std::string text)
+				{
+					auto fmt {nana::to_utf8(fmtnum ? conf.fmt2 : conf.fmt1)};
+					if(i_taskbar) i_taskbar->SetProgressValue(hwnd, completed, total);
+					if(completed < 1000)
+						prog.caption(text/* + " (format " + fmt + ")"*/);
+					else
+					{
+						if(prev_val)
+						{
+							auto pos {text.find_last_not_of(" \t")};
+							if(text.size() > pos)
+								text.erase(pos+1);
+							prog.caption(text + " (format " + fmt + ")");
+						}
+						else prog.caption("Format " + fmt + " has already been downloaded!");
+						fmtnum++;
+					}
+					prog.value(completed);
+					prev_val = completed;
+				};
+				prog.value(0);
+				prog.caption("");
+				if(i_taskbar) i_taskbar->SetProgressState(hwnd, TBPF_NORMAL);
+				run_piped_process(cmd, &working, &tbpipe, cb_progress);
+				if(i_taskbar) i_taskbar->SetProgressState(hwnd, TBPF_NOPROGRESS);
+				if(!working) return;
+				btnbackto1.enabled(true);
+				btndl.enabled(true);
+				tbpipe.append("\n[GUI] yt-dlp.exe process has exited\n", false);
+				p = ca->get(tbpipe.text_line_count()-2);
+				p->count = 1;
+				p->fgcolor = nana::color {"#569"};
+				nana::API::refresh_window(tbpipe);
+				btndl.caption("Begin download");
+				btndl.fgcolor(btnbackto2.fgcolor());
+				btndl.scheme().activated = btnbackto2.scheme().activated;
+				working = false;
+			});
+		}
+		else
+		{
+			btndl.enabled(false);
+			working = false;
+			if(thr.joinable())
+				thr.join();
+			tbpipe.append("\n[GUI] yt-dlp.exe process was ended\n", false);
+			auto ca {tbpipe.colored_area_access()};
+			auto p {ca->get(tbpipe.text_line_count()-2)};
+			p->count = 1;
+			p->fgcolor = nana::color {"#832"};
+			nana::API::refresh_window(tbpipe);
+			btndl.enabled(true);
+			btndl.caption("Begin download");
+			btndl.fgcolor(btnbackto2.fgcolor());
+			btndl.scheme().activated = btnbackto2.scheme().activated;
+		}
+	}
+
+
 	void make_page1()
 	{
 		using namespace nana;
@@ -360,7 +485,10 @@ private:
 		l_path.fgcolor(color {"#354"});
 		l_path.typeface(paint::font_info {"Tahoma", 10});
 		l_path.text_align(align::center, align_v::center);
-		l_path.caption(conf.ytdlp_path.wstring());
+		l_path.events().resized([this]
+		{
+			label_path_caption(l_path, conf.ytdlp_path);
+		});
 
 		btn_path.bgcolor(colors::white);
 		separator_a.bgcolor(color {"#d6d6d6"});
@@ -465,6 +593,7 @@ private:
 		btn_path.events().click(find_ytdlp);
 		l_path.events().click(find_ytdlp);
 	}
+
 
 	void make_page2()
 	{
@@ -571,21 +700,34 @@ private:
 		});
 	}
 
+
 	void make_page3()
 	{
 		using namespace nana;
 
 		plc3.div(R"(
 			vert <tbpipe> <weight=20>
-			<gpopt weight=132> <weight=20>
+			<prog weight=30> <weight=20>
+			<gpopt weight=175> <weight=20>
 			<weight=35 <> <btnbackto2 weight=160> <weight=20> <btndl weight=200> <>>
 		)");
 		plc3["tbpipe"] << tbpipe;
+		plc3["prog"] << prog;
 		plc3["gpopt"] << gpopt;
 		plc3["btnbackto2"] << btnbackto2;
 		plc3["btndl"] << btndl;
 
+		prog.amount(1000);
+		prog.caption("");
+		prog.bgcolor(colors::white);
+		prog.typeface(paint::font_info {"", 11, {800}});
+		prog.text_contrast_colors(colors::white, color {"#678"});
+		paint::image img;
+		img.open(arr_progbar_jpg, sizeof arr_progbar_jpg);
+		prog.image(img);
+
 		tbpipe.editable(false);
+		tbpipe.line_wrapped(true);
 		tbpipe.scheme().mouse_wheel.lines = 3;
 		API::effects_edge_nimbus(tbpipe, effects::edge_nimbus::none);
 
@@ -600,8 +742,9 @@ private:
 			<weight=25 <l_out weight=122> <weight=15> <l_outpath> <weight=15> <btn_outpath weight=25> > <weight=20>
 			<weight=25 
 				<l_rate weight=144> <weight=15> <tbrate weight=45> <weight=15> <com_rate weight=55> 
-				<> <cbmp3 weight=173> <> <cbsplit weight=116> <> <cbkeyframes weight=186>
-			>
+				<> <cbchaps weight=133> <> <cbsplit weight=116> <> <cbkeyframes weight=186>
+			> <weight=20>
+			<weight=25 <cbtime weight=296> <> <cbthumb weight=144> <> <cbsubs weight=132> <> <cbmp3 weight=173>>
 		)");
 		gpopt["l_out"] << l_out;
 		gpopt["l_outpath"] << l_outpath;
@@ -612,8 +755,10 @@ private:
 		gpopt["cbsplit"] << cbsplit;
 		gpopt["cbkeyframes"] << cbkeyframes;
 		gpopt["cbmp3"] << cbmp3;
-
-		tbpipe.line_wrapped(true);
+		gpopt["cbchaps"] << cbchaps;
+		gpopt["cbsubs"] << cbsubs;
+		gpopt["cbthumb"] << cbthumb;
+		gpopt["cbtime"] << cbtime;
 
 		tbrate.multi_lines(false);
 		tbrate.padding(0, 5, 0, 5);
@@ -651,96 +796,21 @@ private:
 		l_outpath.fgcolor(color {"#354"});
 		l_outpath.typeface(paint::font_info {"Tahoma", 10});
 		l_outpath.text_align(align::center, align_v::center);
-		l_outpath.caption(conf.outpath.u8string());
+		l_outpath.events().resized([this]
+		{
+			label_path_caption(l_outpath, conf.outpath);
+		});
 
 		btn_outpath.bgcolor(colors::white);
-		cbsplit.tooltip("Split into multiple files based on internal chapters.");
+		cbsplit.tooltip("Split into multiple files based on internal chapters. (--split-chapters)");
 		cbkeyframes.tooltip("Force keyframes around the chapters before\nremoving/splitting them. Requires a\n"
-			"reencode and thus is very slow, but the\nresulting video may have fewer artifacts\naround the cuts.");
+			"reencode and thus is very slow, but the\nresulting video may have fewer artifacts\naround the cuts. (--force-keyframes-at-cuts)");
+		cbtime.tooltip("Do not use the Last-modified header to set the file modification time (--no-mtime)");
+		cbsubs.tooltip("Embed subtitles in the video (only for mp4, webm and mkv videos) (--embed-subs)");
+		cbchaps.tooltip("Add chapter markers to the video file (--embed-chapters)");
+		cbthumb.tooltip("Embed thumbnail in the video as cover art (--embed-thumbnail)");
 
-		btndl.events().click([this]
-		{
-			if(btndl.caption().find("Stop") == -1)
-			{
-				btndl.caption("Stop download");
-				btndl.fgcolor(color {"#966"});
-				btndl.scheme().activated = color {"#a77"};
-
-				std::wstring cmd {L'\"' + conf.ytdlp_path.wstring() + L"\" -f " + strfmt + L" --windows-filenames --newline "};
-				if(!ffmpeg_loc.empty())
-					cmd += L"--ffmpeg-location \"" + ffmpeg_loc.wstring() + L"\" ";
-				if(tbrate.to_double())
-					cmd += L"-r " + tbrate.caption_wstring() + (com_rate.option() ? L"M " : L"K ");
-				if(cbmp3.checked())
-				{
-					cmd += L"-x --audio-format mp3 ";
-					auto sel {lbformats.selected()};
-					for(auto sel : lbformats.selected())
-						if(sel.cat == 1)
-						{
-							std::wstring txt {charset{lbformats.at(sel).text(6)}};
-							cmd += L"--audio-quality " + txt + L"K ";
-						}
-				}
-				if(cbsplit.checked())
-					cmd += L"--split-chapters -o chapter:\"" + conf.outpath.wstring() + L"\\%(title)s - %(section_number)s -%(section_title)s.%(ext)s\" ";
-				if(cbkeyframes.checked())
-					cmd += L"--force-keyframes-at-cuts ";
-				cmd += L"-o \"" + conf.outpath.wstring() + L"\\%(title)s.%(ext)s\" ";
-				cmd += tblink.caption_wstring();
-				btnbackto1.enabled(false);
-				tbpipe.select(true);
-				tbpipe.del();
-				if(thr.joinable()) thr.join();
-				thr = std::thread([this, cmd]
-				{
-					working = true;
-					auto ca {tbpipe.colored_area_access()};
-					ca->clear();
-					tbpipe.append(L"[GUI] executing command line: " + cmd + L"\n\n", false);
-					auto p {ca->get(0)};
-					p->count = 1;
-					p->fgcolor = nana::color {"#569"};
-					API::refresh_window(tbpipe);
-					auto cb_progress = [this](ULONGLONG completed, ULONGLONG total)
-					{
-						if(i_taskbar) i_taskbar->SetProgressValue(hwnd, completed, total);
-					};
-					if(i_taskbar) i_taskbar->SetProgressState(hwnd, TBPF_NORMAL);
-					run_piped_process(cmd, &working, &tbpipe, cb_progress);
-					if(i_taskbar) i_taskbar->SetProgressState(hwnd, TBPF_NOPROGRESS);
-					if(!working) return;
-					btnbackto1.enabled(true);
-					btndl.enabled(true);
-					tbpipe.append("\n[GUI] yt-dlp.exe process has exited\n", false);
-					p = ca->get(tbpipe.text_line_count()-2);
-					p->count = 1;
-					p->fgcolor = nana::color {"#569"};
-					API::refresh_window(tbpipe);
-					btndl.caption("Begin download");
-					btndl.fgcolor(btnbackto2.fgcolor());
-					btndl.scheme().activated = btnbackto2.scheme().activated;
-					working = false;
-				});
-			}
-			else
-			{
-				btndl.enabled(false);
-				working = false;
-				if(thr.joinable())
-					thr.join();
-				tbpipe.append("\n[GUI] yt-dlp.exe process was terminated\n", false);
-				auto ca {tbpipe.colored_area_access()};
-				auto p {ca->get(tbpipe.text_line_count()-2)};
-				p->count = 1;
-				p->fgcolor = nana::color {"#832"};
-				API::refresh_window(tbpipe);
-				btndl.enabled(true);
-				btndl.caption("Begin download");
-				btndl.fgcolor(btnbackto2.fgcolor());
-				btndl.scheme().activated = btnbackto2.scheme().activated;
-			}
-		});
+		btndl.events().click([this] { on_btn_dl(); });
 
 		btnbackto2.events().click([this]
 		{
@@ -768,8 +838,40 @@ private:
 		btn_outpath.events().click(choose_outpath);
 		l_outpath.events().click(choose_outpath);
 
+		cbsplit.check(conf.cbsplit);
+		cbchaps.check(conf.cbchaps);
+		cbsubs.check(conf.cbsubs);
+		cbthumb.check(conf.cbthumb);
+		cbtime.check(conf.cbtime);
+		cbkeyframes.check(conf.cbkeyframes);
+		cbmp3.check(conf.cbmp3);
+
+		cbsplit.radio(true);
+		cbchaps.radio(true);
+
+		cbsplit.events().checked([this]
+		{
+			if(cbsplit.checked() && cbchaps.checked())
+				cbchaps.check(false);
+			conf.cbsplit = cbsplit.checked();
+		});
+
+		cbchaps.events().checked([this]
+		{
+			if(cbchaps.checked() && cbsplit.checked())
+				cbsplit.check(false);
+			conf.cbchaps = cbchaps.checked();
+		});
+
+		cbtime.events().checked([this]{ conf.cbtime = cbtime.checked(); });
+		cbthumb.events().checked([this] { conf.cbthumb = cbthumb.checked(); });
+		cbsubs.events().checked([this] { conf.cbsubs = cbsubs.checked(); });
+		cbkeyframes.events().checked([this] { conf.cbkeyframes = cbkeyframes.checked(); });
+		cbmp3.events().checked([this] { conf.cbmp3 = cbmp3.checked(); });
+
 		plc3.collocate();
 	}
+
 
 	nana::size dpi_transform(double w, double h = 0)
 	{
@@ -784,6 +886,7 @@ private:
 		return nana::size {static_cast<unsigned>(w), static_cast<unsigned>(h)};
 	}
 
+
 	void maximize_v(unsigned w = 0)
 	{
 		auto sz {nana::screen {}.from_window(*this).area().dimension()};
@@ -791,6 +894,7 @@ private:
 		move(nana::API::make_center(sz).position().x, 0);
 		nana::API::window_outline_size(*this, sz);
 	}
+
 
 	void center(double w, double h)
 	{
@@ -806,6 +910,7 @@ private:
 		}
 	}
 
+
 	bool is_ytlink(std::string_view text)
 	{
 		if(text.find(R"(https://www.youtube.com/watch?v=)") == 0)
@@ -815,5 +920,25 @@ private:
 			if(text.size() == 28)
 				return true;
 		return false;
+	}
+
+
+	void label_path_caption(nana::label &l, const std::filesystem::path &p)
+	{
+		if(!l.size().empty())
+		{
+			l.caption(p.wstring());
+			int offset {0};
+			while(l.measure(1234).width > l.size().width)
+			{
+				offset += 1;
+				if(p.wstring().size() - offset < 4)
+				{
+					l.caption("");
+					return;
+				}
+				l.caption(L"..." + std::wstring {p.wstring()}.substr(offset));
+			}
+		}
 	}
 };
