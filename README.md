@@ -2,7 +2,7 @@
 This is a Windows graphical interface for [yt-dlp](https://github.com/yt-dlp/yt-dlp), that is designed as a simple YouTube downloader. It doesn't download playlists, and generally speaking it doesn't attempt to accommodate the crazy number of features offered by yt-dlp (it just downloads a video using the selected format, with a few options for the download).
 
 Some third-party binaries are distributed with the program binary:
-- `yt-dlp.exe` : the command-line utility that downloads videos from YouTube; from v1.1 forward, this is included for user convenience
+- `yt-dlp.exe` : the command-line tool that downloads videos from YouTube; from v1.1 forward, this is included for user convenience
 - `curl.exe` : used by the program to download a video thumbnail to display in the interface (downloaded from https://curl.se/windows)
 - `ffmpeg.exe`, `ffprobe.exe` : used by `yt-dlp.exe` for postprocessing (muxing formats, etc), downloaded from https://github.com/yt-dlp/FFmpeg-Builds
 
