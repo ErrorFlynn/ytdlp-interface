@@ -1,5 +1,5 @@
 # ytdlp-interface
-This is a Windows graphical interface for [yt-dlp](https://github.com/yt-dlp/yt-dlp), that is designed as a simple YouTube downloader. Since v1.2, the interface also accepts non-YouTube URLs, so theoretically it can be used to download from any site that `yt-dlp` supports (see [this list](https://docs.yt-dlp.org/en/latest/supportedsites.html)).
+This is a Windows graphical interface for [yt-dlp](https://github.com/yt-dlp/yt-dlp), that is designed as a simple YouTube downloader. Since v1.2, the interface also accepts non-YouTube URLs, so theoretically it can be used to download from any site that `yt-dlp` supports (see [the list](https://docs.yt-dlp.org/en/latest/supportedsites.html)).
 
 Some third-party binaries are distributed with the program binary:
 - `yt-dlp.exe` : the command-line tool that downloads videos from YouTube; from v1.1 forward, this is included for user convenience
@@ -20,12 +20,12 @@ The easiest way to build the project is to open the solution file with Visual St
 
 ---
 
-![ytdpl-interface page1](https://user-images.githubusercontent.com/20293505/146545946-82fc75fe-959e-43ef-a253-b669fd6afb9b.png)
+![ytdpl-interface 1](https://user-images.githubusercontent.com/20293505/148423527-1c6d828f-2006-46d4-ae61-e94e75864f71.png)
 
 ---
 
-![ytdpl-interface page2](https://user-images.githubusercontent.com/20293505/146546331-c32c9d20-7f0f-4002-9096-c5cc40032dab.png)
+![ytdpl-interface 2](https://user-images.githubusercontent.com/20293505/148423559-6887482d-f684-4a7d-a73c-808b624d8a02.png)
 
 ---
 
-![ytdpl-interface page3](https://user-images.githubusercontent.com/20293505/146545999-566f8a9e-1cb4-47c7-87c0-9c0aec9817b7.png)
+![ytdpl-interface 3](https://user-images.githubusercontent.com/20293505/148423581-b9a131cc-1d1b-46ea-a909-c6335d5bea76.png)
