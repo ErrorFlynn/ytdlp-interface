@@ -2,7 +2,7 @@
 This is a Windows graphical interface for [yt-dlp](https://github.com/yt-dlp/yt-dlp), that is designed as a simple YouTube downloader. Since v1.2, the interface also accepts non-YouTube URLs, so theoretically it can be used to download from any site that `yt-dlp` supports (see [the list](https://docs.yt-dlp.org/en/latest/supportedsites.html)).
 
 Some third-party binaries are distributed with the program binary:
-- `yt-dlp.exe` : the command-line tool that downloads videos from YouTube; from v1.1 forward, this is included for user convenience
+- `yt-dlp.exe` : the command-line tool that downloads media from YouTube and other sites; from v1.1 forward, this is included for user convenience
 - `ffmpeg.exe`, `ffprobe.exe` : used by `yt-dlp.exe` for postprocessing (muxing formats, etc), downloaded from https://github.com/yt-dlp/FFmpeg-Builds
 
 To use, unpack the archive in a new folder at a location of your choice, and run `ytdlp-interface.exe`. To completely remove from your system, also delete the settings file `%AppData%\ytdlp-interface.json`.
