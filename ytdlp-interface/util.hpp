@@ -3,23 +3,16 @@
 #include "json.hpp"
 #include <Windows.h>
 #include <Shlobj.h>
+#include <WinInet.h>
 
 #include <string>
 #include <fstream>
 #include <sstream>
+#include <mutex>
 
 #include <nana/gui/widgets/textbox.hpp>
 
-
-struct settings_t
-{
-	std::filesystem::path ytdlp_path, outpath;
-	std::wstring fmt1, fmt2;
-	double ratelim {0};
-	unsigned ratelim_unit {1};
-	bool cbsplit {false}, cbchaps {false}, cbsubs {false}, cbthumb {false}, cbtime {true}, cbkeyframes {false}, cbmp3 {false};
-}
-conf;
+using callback = std::function<void(ULONGLONG, ULONGLONG, std::string)>;
 
 template<typename CharT>
 struct Sep : public std::numpunct<CharT>
@@ -27,169 +20,172 @@ struct Sep : public std::numpunct<CharT>
 	virtual std::string do_grouping() const { return "\003"; }
 };
 
-auto format_int(unsigned i)
-{
-	std::stringstream ss;
-	ss.imbue(std::locale {ss.getloc(), new Sep<char>{}});
-	ss << i;
-	return ss.str();
-}
+std::string format_int(unsigned i);
+std::string format_float(float f, unsigned precision = 2);
+std::string GetLastErrorStr();
+HWND hwnd_from_pid(DWORD pid);
+std::string run_piped_process(std::wstring cmd, bool *working = nullptr, nana::textbox *tb = nullptr, callback cb = nullptr);
+std::wstring get_sys_folder(REFKNOWNFOLDERID rfid);
+std::string get_inet_res(std::string res);
 
-auto format_float(float f, unsigned precision = 2)
+// https://github.com/qPCR4vir/nana-demo/blob/master/Examples/windows-subclassing.cpp
+class subclass
 {
-	std::stringstream ss;
-	ss << std::fixed << std::setprecision(precision) << f;
-	return ss.str();
-}
-
-auto GetLastErrorStr()
-{
-	std::string str(4096, '\0');
-	str.resize(FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(), 0, &str.front(), 4096, 0));
-	size_t pos {str.find_first_of("\r\n")};
-	if(pos != -1)
-		str.erase(pos);
-	return str;
-}
-
-HWND hwnd_from_pid(DWORD pid)
-{
-	struct lparam_t { HWND hwnd {nullptr}; DWORD pid {0}; } lparam;
-
-	WNDENUMPROC enumfn = [](HWND hwnd, LPARAM lparam) -> BOOL
+	struct msg_pro
 	{
-		auto &target {*reinterpret_cast<lparam_t*>(lparam)};
-		DWORD pid {0};
-		GetWindowThreadProcessId(hwnd, &pid);
-		if(pid == target.pid)
-		{
-			target.hwnd = hwnd;
-			return FALSE;
-		}
-		return TRUE;
+		std::function<bool(UINT, WPARAM, LPARAM, LRESULT*)> before;
+		std::function<bool(UINT, WPARAM, LPARAM, LRESULT*)> after;
 	};
 
-	lparam.pid = pid;
-	EnumWindows(enumfn, reinterpret_cast<LPARAM>(&lparam));
-	return lparam.hwnd;
-}
-
-auto run_piped_process(std::wstring cmd, bool *working = nullptr, nana::textbox *tb = nullptr, 
-	std::function<void(ULONGLONG, ULONGLONG, std::string)> cb = nullptr)
-{
-	std::string ret;
-	HANDLE hPipeRead, hPipeWrite;
-
-	SECURITY_ATTRIBUTES sa {sizeof(SECURITY_ATTRIBUTES)};
-	sa.bInheritHandle = TRUE;
-	sa.lpSecurityDescriptor = NULL;
-
-	if(!CreatePipe(&hPipeRead, &hPipeWrite, &sa, 0))
-		return ret;
-
-	STARTUPINFOW si {sizeof(STARTUPINFOW)};
-	si.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
-	si.hStdOutput = hPipeWrite;
-	si.hStdError = hPipeWrite;
-	si.wShowWindow = SW_HIDE;
-
-	PROCESS_INFORMATION pi {0};
-
-	BOOL res {CreateProcessW(NULL, &cmd.front(), NULL, NULL, TRUE, CREATE_NEW_CONSOLE, NULL, NULL, &si, &pi)};
-	if(!res)
+	typedef std::lock_guard<std::recursive_mutex> lock_guard;
+public:
+	subclass(nana::window wd)
+		: native_(reinterpret_cast<HWND>(nana::API::root(wd))),
+		old_proc_(nullptr)
 	{
-		CloseHandle(hPipeWrite);
-		CloseHandle(hPipeRead);
-		return ret;
 	}
 
-	auto killproc = [&pi]
+	~subclass()
 	{
-		auto hwnd {hwnd_from_pid(pi.dwProcessId)};
-		if(hwnd) SendMessageA(hwnd, WM_CLOSE, 0, 0);
-	};
+		clear();
+	}
 
-	bool procexit {false};
-	while(!procexit)
+	void make_before(UINT msg, std::function<bool(UINT, WPARAM, LPARAM, LRESULT*)> fn)
 	{
-		procexit = WaitForSingleObject(pi.hProcess, 50) == WAIT_OBJECT_0;
+		lock_guard lock(mutex_);
+		msg_table_[msg].before = std::move(fn);
+		_m_subclass(true);
+	}
 
-		for(;;)
+	void make_after(UINT msg, std::function<bool(UINT, WPARAM, LPARAM, LRESULT*)> fn)
+	{
+		lock_guard lock(mutex_);
+		msg_table_[msg].after = std::move(fn);
+		_m_subclass(true);
+	}
+
+	void umake_before(UINT msg)
+	{
+		lock_guard lock(mutex_);
+		auto i = msg_table_.find(msg);
+		if(msg_table_.end() != i)
 		{
-			char buf[1024];
-			DWORD dwRead = 0;
-			DWORD dwAvail = 0;
-
-			if(!::PeekNamedPipe(hPipeRead, NULL, 0, NULL, &dwAvail, NULL))
-				break;
-
-			if(!dwAvail)
-				break;
-
-			if(!::ReadFile(hPipeRead, buf, min(sizeof(buf) - 1, dwAvail), &dwRead, NULL) || !dwRead)
-				break;
-
-			if(working && !(*working))
+			i->second.before = nullptr;
+			if(nullptr == i->second.after)
 			{
-				killproc();
-				break;
+				msg_table_.erase(msg);
+				if(msg_table_.empty())
+					_m_subclass(false);
 			}
-
-			buf[dwRead] = 0;
-			std::string s {buf};
-			if(cb)
-			{
-				static bool subs {false};
-				if(s.find("Writing video subtitles") != -1)
-					subs = true;
-				auto pos1 {s.find('%')};
-				if(pos1 != -1)
-				{
-					if(!subs)
-					{
-						auto pos2 {s.rfind('%')}, pos {s.rfind(' ', pos2)+1};
-						auto pct {s.substr(pos, pos2-pos)};
-						auto pos1a {s.rfind('\n', pos1)+1}, pos2a {s.find('\n', pos2)};
-						pos1 = s.rfind(' ', pos2)+1;
-						auto text {s.substr(pos1, pos2a-pos1)};
-						pos1 = text.rfind("  ");
-						if(pos1 != -1) text.erase(pos1, 1);
-						cb(static_cast<ULONGLONG>(stod(pct)*10), 1000, text);
-						s.erase(pos1a, pos2a == -1 ? pos2a : pos2a-pos1a);
-						if(s == "\n") s.clear();
-						if(!s.empty() && s.back() == '\n' && s[s.size()-2] == '\n')
-							s.pop_back();
-					}
-					else
-					{
-						if(s.find("100%") != -1)
-							subs = false;
-					}
-				}
-			}
-			else ret += buf;
-			if(tb) tb->append(s, false);
-		}
-		if(working && !*working)
-		{
-			killproc();
-			break;
 		}
 	}
 
-	CloseHandle(hPipeWrite);
-	CloseHandle(hPipeRead);
-	CloseHandle(pi.hProcess);
-	CloseHandle(pi.hThread);
-	return ret;
-}
+	void umake_after(UINT msg)
+	{
+		lock_guard lock(mutex_);
+		auto i = msg_table_.find(msg);
+		if(msg_table_.end() != i)
+		{
+			i->second.after = nullptr;
+			if(nullptr == i->second.before)
+			{
+				msg_table_.erase(msg);
+				if(msg_table_.empty())
+					_m_subclass(false);
+			}
+		}
+	}
 
-auto get_sys_folder(REFKNOWNFOLDERID rfid)
-{
-	wchar_t *res {nullptr};
-	std::wstring sres;
-	if(SHGetKnownFolderPath(rfid, 0, 0, &res) == S_OK)
-		sres = res;
-	CoTaskMemFree(res);
-	return sres;
-}
+	void umake(UINT msg)
+	{
+		lock_guard lock(mutex_);
+		msg_table_.erase(msg);
+
+		if(msg_table_.empty())
+			_m_subclass(false);
+	}
+
+	void clear()
+	{
+		lock_guard lock(mutex_);
+		msg_table_.clear();
+		_m_subclass(false);
+	}
+private:
+	void _m_subclass(bool enable)
+	{
+		lock_guard lock(mutex_);
+
+		if(enable)
+		{
+			if(native_ && (nullptr == old_proc_))
+			{
+				old_proc_ = (WNDPROC)::SetWindowLongPtr(native_, -4 /* GWL_WNDPROC*/, (LONG_PTR)_m_subclass_proc);
+				if(old_proc_)
+					table_[native_] = this;
+			}
+		}
+		else
+		{
+			if(old_proc_)
+			{
+				table_.erase(native_);
+				::SetWindowLongPtr(native_, -4 /* GWL_WNDPROC*/, (LONG_PTR)old_proc_);
+				old_proc_ = nullptr;
+
+			}
+		}
+	}
+
+	static bool _m_call_before(msg_pro& pro, UINT msg, WPARAM wp, LPARAM lp, LRESULT* res)
+	{
+		return (pro.before ? pro.before(msg, wp, lp, res) : true);
+	}
+
+	static bool _m_call_after(msg_pro& pro, UINT msg, WPARAM wp, LPARAM lp, LRESULT* res)
+	{
+		return (pro.after ? pro.after(msg, wp, lp, res) : true);
+	}
+private:
+	static LRESULT CALLBACK _m_subclass_proc(HWND wd, UINT msg, WPARAM wp, LPARAM lp)
+	{
+		lock_guard lock(mutex_);
+
+		subclass * self = _m_find(wd);
+		if(nullptr == self || nullptr == self->old_proc_)
+			return 0;
+
+		auto i = self->msg_table_.find(msg);
+		if(self->msg_table_.end() == i)
+			return ::CallWindowProc(self->old_proc_, wd, msg, wp, lp);
+
+		LRESULT res = 0;
+		if(self->_m_call_before(i->second, msg, wp, lp, &res))
+		{
+			res = ::CallWindowProc(self->old_proc_, wd, msg, wp, lp);
+			self->_m_call_after(i->second, msg, wp, lp, &res);
+		}
+
+		if(WM_DESTROY == msg)
+			self->clear();
+
+		return res;
+	}
+
+	static subclass * _m_find(HWND wd)
+	{
+		lock_guard lock(mutex_);
+		std::map<HWND, subclass*>::iterator i = table_.find(wd);
+		if(i != table_.end())
+			return i->second;
+
+		return 0;
+	}
+private:
+	HWND native_;
+	WNDPROC old_proc_;
+	std::map<UINT, msg_pro> msg_table_;
+
+	static std::recursive_mutex mutex_;
+	static std::map<HWND, subclass*> table_;
+};

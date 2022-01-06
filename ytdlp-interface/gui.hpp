@@ -11,14 +11,13 @@
 #include <nana/gui/filebox.hpp>
 
 #include <thread>
-#include <iostream> // cout debugging
 #include <sstream>
 
+#include <iostream>
 #include <atlbase.h> // CComPtr
 #include <Shobjidl.h> // ITaskbarList3
 
 #include "util.hpp"
-#include "nana_subclassing.hpp"
 #include "progress_ex.hpp"
 
 class Label : public nana::label
@@ -36,7 +35,7 @@ public:
 class Text : public nana::label
 {
 public:
-	Text(nana::window parent) : nana::label(parent)
+	Text(nana::window parent, std::string_view text = "") : nana::label(parent, text)
 	{
 		fgcolor(nana::color {"#575"});
 		bgcolor(nana::colors::white);
@@ -69,92 +68,72 @@ public:
 	}
 };
 
+class Listbox : public nana::listbox
+{
+public:
+
+	Listbox(nana::window parent) : listbox(parent) {}
+
+	size_t item_count()
+	{
+		size_t count {0};
+		for(size_t cat_idx {0}; cat_idx < size_categ(); cat_idx++)
+			count += at(cat_idx).size();
+		return count;
+	}
+};
+
+class Progress : public nana::progress_ex
+{
+public:
+
+	Progress(nana::window parent) : progress_ex(parent)
+	{
+		bgcolor(nana::colors::white);
+		typeface(nana::paint::font_info {"", 11, {800}});
+		text_contrast_colors(nana::colors::white, nana::color {"#678"});
+		nana::paint::image img;
+		img.open(arr_progbar_jpg, sizeof arr_progbar_jpg);
+		image(img);
+	}
+};
+
 class GUI : public nana::form
 {
 public:
 
-	GUI() : form()
+	GUI();
+
+	static struct settings_t
 	{
-		using namespace nana;
-
-		if(WM_TASKBAR_BUTTON_CREATED = RegisterWindowMessageW(L"TaskbarButtonCreated"))
-		{
-			sc.make_before(WM_TASKBAR_BUTTON_CREATED, [&](UINT, WPARAM, LPARAM, LRESULT*)
-			{
-				if(FAILED(i_taskbar.CoCreateInstance(CLSID_TaskbarList)))
-					return false;
-
-				if(i_taskbar->HrInit() != S_OK)
-				{
-					i_taskbar.Release();
-					return false;
-				}
-
-				return true;
-			});
-		}
-
-		std::wstring modpath(4096, '\0');
-		modpath.resize(GetModuleFileNameW(0, &modpath.front(), modpath.size()));
-		modpath.erase(modpath.rfind('\\'));
-		appdir = modpath;
-
-		if(std::filesystem::exists(appdir.wstring() + L"\\ffmpeg.exe"))
-			ffmpeg_loc = appdir.wstring() + L"\\ffmpeg.exe";
-		else if(!conf.ytdlp_path.empty())
-		{
-			auto tmp {std::filesystem::path {conf.ytdlp_path}.replace_filename("ffmpeg.exe")};
-			if(std::filesystem::exists(tmp))
-				ffmpeg_loc = tmp;
-		}
-
-		hwnd = reinterpret_cast<HWND>(native_handle());
-
-		center(630, 193);
-		caption("ytdlp-interface v1.1");
-		bgcolor(colors::white);
-
-		make_page1();
-		make_page2();
-		make_page3();
-
-		div("margin=20 <switchable <page1> <page1a> <page2> <page3>>");
-		get_place()["page1"] << page1;
-		get_place()["page1a"] << page1a;
-		get_place()["page2"] << page2;
-		get_place()["page3"] << page3;
-		collocate();
-
-		events().unload([&](const nana::arg_unload &arg)
-		{
-			working = false;
-			if(thr.joinable())
-				thr.join();
-			if(thr.joinable())
-				thr.detach();
-			if(i_taskbar)
-				i_taskbar.Release();
-		});
+		std::filesystem::path ytdlp_path, outpath;
+		std::wstring fmt1, fmt2;
+		double ratelim {0};
+		unsigned ratelim_unit {1}, pref_res {2}, pref_video {1}, pref_audio {1};
+		bool cbsplit {false}, cbchaps {false}, cbsubs {false}, cbthumb {false}, cbtime {true}, cbkeyframes {false}, cbmp3 {false};
+		bool pref_fps {true}, vidinfo {false};
 	}
+	conf;
 
 private:
 
 	nlohmann::json vidinfo;
 	std::filesystem::path appdir, ffmpeg_loc;
 	std::wstring strfmt;
-	bool working {false};
+	bool working {false}, link_yt {false};
 	std::thread thr;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
 	subclass sc {*this};
 	HWND hwnd {nullptr};
+	const std::string ver_tag {"v1.2.0"};
 
 	nana::panel<false> page1 {*this}, page1a {*this}, page2 {*this}, page3 {*this};
 	nana::place plc1 {page1}, plc1a {page1a}, plc2 {page2}, plc3 {page3}, plcopt;
 
 	/*** page1 widgets ***/
-	Label l_ytdlp {page1, "Location of yt-dlp.exe:"}, l_ytlink {page1, "Link to YouTube video:"};
-	Button btn_info {page1, " Format selection >>>"};
+	Label l_ytdlp {page1, "Location of yt-dlp.exe:"}, l_ytlink {page1, "URL of video webpage:"};
+	Button btn_next {page1, " Download >>>"}, btn_settings {page1, " Settings"};
 	nana::button btn_path {page1, "..."};
 	nana::textbox tblink {page1};
 	nana::label separator_a {page1}, separator_b {page1}, l_path {page1};
@@ -166,12 +145,12 @@ private:
 	Text l_durtext {page2}, l_chaptext {page2}, l_upltext {page2}, l_datetext {page2};
 	nana::picture thumb {page2};
 	nana::label separator_1a {page2}, separator_1b {page2}, separator_2a {page2}, separator_2b {page2};
-	nana::listbox lbformats {page2};
+	Listbox lbformats {page2};
 	Button btntodl {page2, " Download >>>"}, btnbackto1 {page2, "<<< Back "};
 
 	/*** page3 widgets ***/
 	nana::group gpopt {page3, "Options"};
-	nana::progress_ex prog {page3};
+	Progress prog {page3};
 	nana::textbox tbpipe {page3}, tbrate {gpopt};
 	Button btnbackto2 {page3, "<<< Back "}, btndl {page3, "Begin download"};
 	Label l_out {gpopt, "Download folder:"}, l_rate {gpopt, "Download rate limit:"};
@@ -182,695 +161,17 @@ private:
 		cbchaps {gpopt, "Embed chapters"}, cbsubs {gpopt, "Embed subtitles"}, cbthumb {gpopt, "Embed thumbnail"}, 
 		cbtime {gpopt, "File modification time = time of writing"};
 
+	const std::vector<std::wstring>
+		com_res_options {L"2160", L"1440", L"1080", L"720", L"480", L"360"},
+		com_audio_options {L"none", L"m4a", L"mp3", L"ogg", L"webm"},
+		com_video_options {L"none", L"mp4", L"webm"};
 
-	void on_btn_info()
-	{
-		using namespace nana;
-		auto id {tblink.caption()};
-		if(id.find("youtu.be") != -1)
-			id = id.substr(id.rfind('/')+1);
-		else id = id.substr(id.rfind("?v=")+3);
-		if(vidinfo.empty() || vidinfo["id"] != id)
-		{
-			if(!vidinfo.empty())
-			{
-				tbpipe.select(true);
-				tbpipe.del();
-				prog.value(0);
-				prog.caption("");
-			}
-			if(thr.joinable()) thr.join();
-			thr = std::thread([this]
-			{
-				working = true;
-				btntodl.enabled(false);
-				get_place().field_display("page1a", true);
-				collocate();
-				thumb.focus();
-				cursor(cursor::wait);
-				l_wait.cursor(cursor::wait);
-
-				auto jtext {run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + L" -j " + tblink.caption_wstring())};
-				if(!working) return;
-				if(jtext.find("{\"id\":") != 0)
-				{
-					form fm {*this, API::make_center(*this, 1000, 600)};
-					fm.caption("yt-dlp.exe error");
-					fm.bgcolor(colors::white);
-					fm.div("vert margin=20 <label weight=30><weight=20><textbox>");
-					nana::label lbl {fm, "Received unexpected output from yt-dlp.exe after requesting video info!"};
-					fm["label"] << lbl;
-					lbl.text_align(align::center, align_v::center);
-					lbl.typeface(nana::paint::font_info {"", 13, {800}});
-					lbl.fgcolor(color {"#BA4B3E"});
-					nana::textbox tb {fm, jtext};
-					fm["textbox"] << tb;
-					tb.line_wrapped(true);
-					fm.collocate();
-					fm.modality();
-					get_place().field_display("page1", true);
-					collocate();
-					working = false;
-					return;
-				}
-				std::filesystem::path tmp_fname {std::tmpnam(nullptr)};
-				vidinfo.clear();
-				std::ofstream {tmp_fname} << jtext;
-				std::ifstream {tmp_fname} >> vidinfo;
-				std::filesystem::remove(tmp_fname);
-
-				std::wstring thumb_url;
-				for(auto &el : vidinfo["thumbnails"])
-				{
-					std::string url {el["url"]};
-					std::wstring wrl {charset{url}};
-					if(wrl.substr(wrl.rfind('/')+1) == L"mqdefault.jpg")
-					{
-						thumb_url = wrl;
-						thumb_url.erase(4, 1);
-						break;
-					}
-				}
-				l_wait.cursor(cursor::arrow);
-				cursor(cursor::arrow);
-				std::string title(vidinfo["title"]);
-				l_title.caption(title);
-
-				int dur {vidinfo["duration"]};
-				int hr {(dur/60)/60}, min {(dur/60)%60}, sec {dur%60};
-				if(dur < 60) sec = dur;
-				std::string durstr;
-				std::stringstream ss;
-				ss.width(2);
-				ss.fill('0');
-				if(hr)
-				{
-					ss << min;
-					durstr = std::to_string(hr) + ':' + ss.str();
-					ss.str("");
-				}
-				else durstr = std::to_string(min);
-				ss << sec;
-				durstr += ':' + ss.str();
-				l_durtext.caption(durstr);
-
-				auto strchap {std::to_string(vidinfo["chapters"].size())};
-				if(strchap == "0") l_chaptext.caption("none");
-				else l_chaptext.caption(strchap);
-
-				l_upltext.caption(std::string {vidinfo["uploader"]});
-
-				auto strdate {std::string {vidinfo["upload_date"]}};
-				l_datetext.caption(strdate.substr(0, 4) + '-' + strdate.substr(4, 2) + '-' + strdate.substr(6, 2));
-
-				tmp_fname = std::tmpnam(nullptr);
-				run_piped_process(L'\"' + appdir.wstring() + L"\\curl.exe\" -o " + tmp_fname.wstring() + L' ' + thumb_url, &working);
-				if(!working) return;
-				thumb.load(paint::image {tmp_fname});
-				std::filesystem::remove(tmp_fname);
-
-				lbformats.clear();
-				for(auto &fmt : vidinfo["formats"])
-				{
-					std::string format {fmt["format"]}, acodec {fmt["acodec"]}, vcodec {fmt["vcodec"]}, ext {fmt["ext"]},
-						fps {"null"}, vbr {"none"}, abr {"none"}, asr {"null"}, filesize {"null"};
-					if(fmt.contains("abr"))
-						abr = std::to_string(unsigned(fmt["abr"]));
-					if(fmt.contains("vbr"))
-						vbr = std::to_string(unsigned(fmt["vbr"]));
-					if(fmt["asr"] != nullptr)
-						asr = std::to_string(unsigned(fmt["asr"]));
-					if(fmt["fps"] != nullptr)
-						fps = std::to_string(unsigned(fmt["fps"]));
-					if(fmt["filesize"] != nullptr)
-					{
-						unsigned i {fmt["filesize"]};
-						float f {static_cast<float>(i)};
-						std::string s, bytes {" (" + format_int(i) + ")"};
-						if(i < 1024)
-							s = format_int(i);
-						else if(i < 1024*1024)
-							s = std::to_string(i/1024) + " KB" + bytes;
-						else if(i < 1024*1024*1024)
-							s = format_float(f/(1024*1024)) + " MB" + bytes;
-						else s = format_float(f/(1024*1024*1024)) + " GB" + bytes;
-						filesize = s;
-					}
-					unsigned catidx {0};
-					if(acodec == "none")
-						catidx = 2; // video only
-					else if(vcodec == "none")
-						catidx = 1; // audio only
-					lbformats.at(catidx).append({format, acodec, vcodec, ext, fps, vbr, abr, asr, filesize});
-					auto idstr {to_wstring(std::string {fmt["format_id"]})};
-					lbformats.at(catidx).back().value(idstr);
-					if(idstr == conf.fmt1 || idstr == conf.fmt2)
-						lbformats.at(catidx).back().select(true);
-				}
-				if(is_zoomed(true)) restore();
-				if(API::screen_dpi(true) > 96)
-					maximize_v(1000);
-				else center(1000, 384.0 + vidinfo["formats"].size()*20.4);
-				get_place().field_display("page2", true);
-				collocate();
-				working = false;
-			});
-		}
-		else
-		{
-			if(is_zoomed(true)) restore();
-			if(API::screen_dpi(true) > 96)
-				maximize_v(1000);
-			else center(1000, 384.0 + vidinfo["formats"].size()*20.4);
-			get_place().field_display("page2", true);
-			collocate();
-		}
-	}
-
-
-	void on_btn_dl()
-	{
-		if(btndl.caption().find("Stop") == -1)
-		{
-			btndl.caption("Stop download");
-			btndl.fgcolor(nana::color {"#966"});
-			btndl.scheme().activated = nana::color {"#a77"};
-
-			std::wstring cmd {L'\"' + conf.ytdlp_path.wstring() + L"\" -f " + strfmt + L" --windows-filenames "};
-			if(conf.cbchaps) cmd += L"--embed-chapters ";
-			if(conf.cbsubs) cmd += L"--embed-subs ";
-			if(conf.cbthumb) cmd += L"--embed-thumbnail ";
-			if(conf.cbtime) cmd += L"--no-mtime ";
-			if(conf.cbkeyframes) cmd += L"--force-keyframes-at-cuts ";
-			if(!ffmpeg_loc.empty())
-				cmd += L"--ffmpeg-location \"" + ffmpeg_loc.wstring() + L"\" ";
-			if(tbrate.to_double())
-				cmd += L"-r " + tbrate.caption_wstring() + (com_rate.option() ? L"M " : L"K ");
-			if(cbmp3.checked())
-			{
-				cmd += L"-x --audio-format mp3 ";
-				auto sel {lbformats.selected()};
-				for(auto sel : lbformats.selected())
-					if(sel.cat == 1)
-					{
-						std::wstring txt {nana::charset{lbformats.at(sel).text(6)}};
-						cmd += L"--audio-quality " + txt + L"K ";
-					}
-			}
-			if(cbsplit.checked())
-				cmd += L"--split-chapters -o chapter:\"" + conf.outpath.wstring() + L"\\%(title)s - %(section_number)s -%(section_title)s.%(ext)s\" ";
-			if(cbkeyframes.checked())
-				cmd += L"--force-keyframes-at-cuts ";
-			cmd += L"-o \"" + conf.outpath.wstring() + L"\\%(title)s.%(ext)s\" ";
-			cmd += tblink.caption_wstring();
-			btnbackto1.enabled(false);
-			tbpipe.select(true);
-			tbpipe.del();
-			if(thr.joinable()) thr.join();
-			thr = std::thread([this, cmd]
-			{
-				working = true;
-				auto ca {tbpipe.colored_area_access()};
-				ca->clear();
-				tbpipe.append(L"[GUI] executing command line: " + cmd + L"\n\n", false);
-				auto p {ca->get(0)};
-				p->count = 1;
-				p->fgcolor = nana::color {"#569"};
-				nana::API::refresh_window(tbpipe);
-				unsigned fmtnum {0};
-				auto sel {lbformats.selected()};
-				ULONGLONG prev_val {0};
-				auto cb_progress = [&, this](ULONGLONG completed, ULONGLONG total, std::string text)
-				{
-					auto fmt {nana::to_utf8(fmtnum ? conf.fmt2 : conf.fmt1)};
-					if(i_taskbar) i_taskbar->SetProgressValue(hwnd, completed, total);
-					if(completed < 1000)
-						prog.caption(text/* + " (format " + fmt + ")"*/);
-					else
-					{
-						if(prev_val)
-						{
-							auto pos {text.find_last_not_of(" \t")};
-							if(text.size() > pos)
-								text.erase(pos+1);
-							prog.caption(text + " (format " + fmt + ")");
-						}
-						else prog.caption("Format " + fmt + " has already been downloaded!");
-						fmtnum++;
-					}
-					prog.value(completed);
-					prev_val = completed;
-				};
-				prog.value(0);
-				prog.caption("");
-				if(i_taskbar) i_taskbar->SetProgressState(hwnd, TBPF_NORMAL);
-				run_piped_process(cmd, &working, &tbpipe, cb_progress);
-				if(i_taskbar) i_taskbar->SetProgressState(hwnd, TBPF_NOPROGRESS);
-				if(!working) return;
-				btnbackto1.enabled(true);
-				btndl.enabled(true);
-				tbpipe.append("\n[GUI] yt-dlp.exe process has exited\n", false);
-				p = ca->get(tbpipe.text_line_count()-2);
-				p->count = 1;
-				p->fgcolor = nana::color {"#569"};
-				nana::API::refresh_window(tbpipe);
-				btndl.caption("Begin download");
-				btndl.fgcolor(btnbackto2.fgcolor());
-				btndl.scheme().activated = btnbackto2.scheme().activated;
-				working = false;
-			});
-		}
-		else
-		{
-			btndl.enabled(false);
-			working = false;
-			if(thr.joinable())
-				thr.join();
-			tbpipe.append("\n[GUI] yt-dlp.exe process was ended\n", false);
-			auto ca {tbpipe.colored_area_access()};
-			auto p {ca->get(tbpipe.text_line_count()-2)};
-			p->count = 1;
-			p->fgcolor = nana::color {"#832"};
-			nana::API::refresh_window(tbpipe);
-			btndl.enabled(true);
-			btndl.caption("Begin download");
-			btndl.fgcolor(btnbackto2.fgcolor());
-			btndl.scheme().activated = btnbackto2.scheme().activated;
-		}
-	}
-
-
-	void make_page1()
-	{
-		using namespace nana;
-		
-		plc1.div(R"(
-			vert <weight=25 <l_ytdlp weight=164> <weight=15> <l_path> <weight=15> <btn_path weight=25> >
-				<weight=20>
-				<weight=25 < l_ytlink weight=164> <weight=15> <tblink> >
-				<weight=20> <separator_a weight=1> <weight=1> <separator_b weight=1> <weight=20>
-				<weight=40 <> <btn_info weight=260> <> >
-		)");
-
-		plc1["l_ytdlp"] << l_ytdlp;
-		plc1["l_path"] << l_path;
-		plc1["btn_path"] << btn_path;
-		plc1["l_ytlink"] << l_ytlink;
-		plc1["tblink"] << tblink;
-		plc1["btn_info"] << btn_info;
-		plc1["separator_a"] << separator_a;
-		plc1["separator_b"] << separator_b;
-
-		l_path.bgcolor(color {"#eef6ee"});
-		l_path.fgcolor(color {"#354"});
-		l_path.typeface(paint::font_info {"Tahoma", 10});
-		l_path.text_align(align::center, align_v::center);
-		l_path.events().resized([this]
-		{
-			label_path_caption(l_path, conf.ytdlp_path);
-		});
-
-		btn_path.bgcolor(colors::white);
-		separator_a.bgcolor(color {"#d6d6d6"});
-		separator_b.bgcolor(color {"#d6d6d6"});
-
-		tblink.typeface(paint::font_info {"", 11, {800}});
-		tblink.fgcolor(color {"#789"});
-		tblink.text_align(align::center);
-		tblink.editable(false);
-		tblink.caption("Click to paste YT video link");
-		API::effects_edge_nimbus(tblink, effects::edge_nimbus::none);
-
-		tblink.set_accept([this](wchar_t c)
-		{
-			if(tblink.text().size() >= 43 && c != keyboard::backspace && c != keyboard::del)
-				return false;
-			return true;
-		});
-
-		tblink.events().mouse_up([this](const arg_mouse &arg)
-		{
-			if(OpenClipboard(NULL))
-			{
-				if(IsClipboardFormatAvailable(CF_TEXT))
-				{
-					auto h {GetClipboardData(CF_TEXT)};
-					if(h)
-					{
-						auto ptext {static_cast<char*>(GlobalLock(h))};
-						if(ptext)
-						{
-							std::string str {ptext};
-							if(str.size() > 43)
-								str.resize(43);
-							if(is_ytlink(str))
-								tblink.caption(str);
-							else
-							{
-								tblink.caption("Clipboard content is not a valid link!");
-								if(!working) std::thread {[this]
-								{
-									working = true;
-									tblink.bgcolor(colors::dark_red);
-									auto clr {tblink.fgcolor()};
-									tblink.fgcolor(colors::white);
-									std::this_thread::sleep_for(std::chrono::seconds {2});
-									tblink.bgcolor(colors::white);
-									tblink.fgcolor(clr);
-									working = false;
-								}}.detach();
-							}
-							GlobalUnlock(h);
-						}
-					}
-				}
-				CloseClipboard();
-			}
-		});
-
-		tblink.events().text_changed([this](const arg_textbox &arg)
-		{
-			btn_info.enabled(is_ytlink(tblink.caption()) && !l_path.caption().empty());
-		});
-
-		btn_info.typeface(paint::font_info {"", 15, {800}});
-		btn_info.fgcolor(color {"#67a"});
-		btn_info.bgcolor(colors::white);
-		btn_info.enable_focus_color(false);
-		btn_info.enabled(false);
-
-		plc1a.div("<l_wait>");
-		plc1a["l_wait"] << l_wait;
-		l_wait.format(true);
-		l_wait.text_align(align::center, align_v::center);
-		l_wait.bgcolor(colors::white);
-
-		auto find_ytdlp = [this]
-		{
-			nana::filebox fb {*this, true};
-			if(!conf.ytdlp_path.empty())
-				fb.init_file(conf.ytdlp_path);
-			fb.allow_multi_select(false);
-			fb.add_filter("", "yt-dlp.exe");
-			fb.title("Locate and select yt-dlp.exe");
-			auto res {fb()};
-			if(res.size())
-			{
-				auto path {res.front()};
-				if(path.u8string().find("yt-dlp.exe") != -1)
-				{
-					conf.ytdlp_path = res.front();
-					l_path.caption(conf.ytdlp_path.wstring());
-					btn_info.enabled(is_ytlink(tblink.caption()));
-					auto tmp {std::filesystem::path {conf.ytdlp_path}.replace_filename("ffmpeg.exe")};
-					if(std::filesystem::exists(tmp))
-						ffmpeg_loc = tmp;
-				}
-			}
-		};
-
-		btn_info.events().click([this] { on_btn_info(); });
-		btn_path.events().click(find_ytdlp);
-		l_path.events().click(find_ytdlp);
-	}
-
-
-	void make_page2()
-	{
-		using namespace nana;
-
-		plc2.div(R"(
-			vert <weight=180px 
-					<thumb weight=320px> <weight=20px>
-					<vert
-						<l_title weight=27px> <weight=10px>
-						<separator_1a weight=1px> <weight=1px> <separator_1b weight=1px> <weight=10px>
-						<weight=28px <l_dur weight=45%> <weight=10> <l_durtext> >
-						<weight=28px <l_chap weight=45%> <weight=10> <l_chaptext> >
-						<weight=28px <l_upl weight=45%> <weight=10> <l_upltext> >
-						<weight=28px <l_date weight=45%> <weight=10> <l_datetext> > <weight=15px>
-						<separator_2a weight=1px> <weight=1px> <separator_2b weight=1px>
-					>
-				 >
-				<weight=20> <lbformats> <weight=20>
-				<weight=35 <> <btnback weight=160> <weight=20> <btntodl weight=200> <>>
-		)");
-		plc2["l_title"] << l_title;
-		plc2["l_dur"] << l_dur;
-		plc2["l_durtext"] << l_durtext;
-		plc2["l_chap"] << l_chap;
-		plc2["l_chaptext"] << l_chaptext;
-		plc2["l_upl"] << l_upl;
-		plc2["l_upltext"] << l_upltext;
-		plc2["l_date"] << l_date;
-		plc2["l_datetext"] << l_datetext;
-		plc2["thumb"] << thumb;
-		plc2["separator_1a"] << separator_1a;
-		plc2["separator_1b"] << separator_1b;
-		plc2["separator_2a"] << separator_2a;
-		plc2["separator_2b"] << separator_2b;
-		plc2["lbformats"] << lbformats;
-		plc2["btnback"] << btnbackto1;
-		plc2["btntodl"] << btntodl;
-		
-		l_title.typeface(paint::font_info {"Arial", 15 - (double)(nana::API::screen_dpi(true) > 96)*3, {800}});
-		l_title.text_align(align::center, align_v::top);
-		l_title.fgcolor(color {"#789"});
-		l_title.bgcolor(colors::white);
-		
-		separator_1a.bgcolor(color {"#d6d6d6"});
-		separator_1b.bgcolor(color {"#d6d6d6"});
-		separator_2a.bgcolor(color {"#d6d6d6"});
-		separator_2b.bgcolor(color {"#d6d6d6"});
-		
-		lbformats.enable_single(true, true);
-		lbformats.scheme().item_selected = color {"#D7EEF4"};
-		lbformats.scheme().item_highlighted = color {"#ECFCFF"};
-		lbformats.scheme().item_height_ex;
-		lbformats.append_header("format", dpi_transform(240).width);
-		lbformats.append_header("acodec", dpi_transform(90).width );
-		lbformats.append_header("vcodec", dpi_transform(90).width );
-		lbformats.append_header("ext", dpi_transform(50).width );
-		lbformats.append_header("fps", dpi_transform(32).width );
-		lbformats.append_header("vbr", dpi_transform(40).width );
-		lbformats.append_header("abr", dpi_transform(40).width );
-		lbformats.append_header("asr", dpi_transform(50).width );
-		lbformats.append_header("filesize", dpi_transform(160).width );
-		lbformats.append({"Audio only", "Video only"});
-
-		lbformats.events().selected([this](const arg_listbox &arg)
-		{
-			if(arg.item.selected())
-			{
-				btntodl.enabled(true);
-				if(arg.item.pos().cat == 0)
-				{
-					lbformats.at(1).select(false);
-					lbformats.at(2).select(false);
-				}
-				else
-				{
-					lbformats.at(0).select(false);
-				}
-			}
-			else if(lbformats.selected().empty())
-				btntodl.enabled(false);
-		});
-
-		btnbackto1.events().click([this]
-		{
-			if(is_zoomed(true)) restore();
-			get_place().field_display("page1", true);
-			center(630, 193);
-		});
-
-		btntodl.events().click([this]
-		{
-			auto sel {lbformats.selected()};
-			strfmt = lbformats.at(sel.front()).value<std::wstring>();
-			conf.fmt1 = strfmt;
-			if(sel.size() > 1)
-			{
-				conf.fmt2 = lbformats.at(sel.back()).value<std::wstring>();
-				strfmt += L'+' + conf.fmt2;
-			}
-			else conf.fmt2.clear();
-			get_place().field_display("page3", true);
-			collocate();
-		});
-	}
-
-
-	void make_page3()
-	{
-		using namespace nana;
-
-		plc3.div(R"(
-			vert <tbpipe> <weight=20>
-			<prog weight=30> <weight=20>
-			<gpopt weight=175> <weight=20>
-			<weight=35 <> <btnbackto2 weight=160> <weight=20> <btndl weight=200> <>>
-		)");
-		plc3["tbpipe"] << tbpipe;
-		plc3["prog"] << prog;
-		plc3["gpopt"] << gpopt;
-		plc3["btnbackto2"] << btnbackto2;
-		plc3["btndl"] << btndl;
-
-		prog.amount(1000);
-		prog.caption("");
-		prog.bgcolor(colors::white);
-		prog.typeface(paint::font_info {"", 11, {800}});
-		prog.text_contrast_colors(colors::white, color {"#678"});
-		paint::image img;
-		img.open(arr_progbar_jpg, sizeof arr_progbar_jpg);
-		prog.image(img);
-
-		tbpipe.editable(false);
-		tbpipe.line_wrapped(true);
-		tbpipe.scheme().mouse_wheel.lines = 3;
-		API::effects_edge_nimbus(tbpipe, effects::edge_nimbus::none);
-
-		plcopt.bind(gpopt);
-		page3.bgcolor(colors::white);
-		gpopt.bgcolor(colors::white);
-		gpopt.enable_format_caption(true);
-		gpopt.caption("<bold color=0x61241F size=11 font=\"Tahoma\"> Options </>");
-		gpopt.caption_align(align::center);
-		gpopt.size({10, 10}); // workaround for weird caption display bug
-		gpopt.div(R"(vert margin=20
-			<weight=25 <l_out weight=122> <weight=15> <l_outpath> <weight=15> <btn_outpath weight=25> > <weight=20>
-			<weight=25 
-				<l_rate weight=144> <weight=15> <tbrate weight=45> <weight=15> <com_rate weight=55> 
-				<> <cbchaps weight=133> <> <cbsplit weight=116> <> <cbkeyframes weight=186>
-			> <weight=20>
-			<weight=25 <cbtime weight=296> <> <cbthumb weight=144> <> <cbsubs weight=132> <> <cbmp3 weight=173>>
-		)");
-		gpopt["l_out"] << l_out;
-		gpopt["l_outpath"] << l_outpath;
-		gpopt["btn_outpath"] << btn_outpath;
-		gpopt["l_rate"] << l_rate;
-		gpopt["tbrate"] << tbrate;
-		gpopt["com_rate"] << com_rate;
-		gpopt["cbsplit"] << cbsplit;
-		gpopt["cbkeyframes"] << cbkeyframes;
-		gpopt["cbmp3"] << cbmp3;
-		gpopt["cbchaps"] << cbchaps;
-		gpopt["cbsubs"] << cbsubs;
-		gpopt["cbthumb"] << cbthumb;
-		gpopt["cbtime"] << cbtime;
-
-		tbrate.multi_lines(false);
-		tbrate.padding(0, 5, 0, 5);
-		if(conf.ratelim)
-			tbrate.caption(format_float(conf.ratelim, 1));
-		tbrate.set_accept([this](wchar_t wc)->bool
-		{
-			return wc == keyboard::backspace || wc == keyboard::del || ((isdigit(wc) || wc == '.') && tbrate.text().size() < 5);
-		});
-
-		tbrate.events().focus([this](const arg_focus &arg)
-		{
-			if(!arg.getting)
-			{
-				auto str {tbrate.caption()};
-				if(str.back() == '.')
-				{
-					str.pop_back();
-					tbrate.caption(str);
-				}
-				conf.ratelim = tbrate.to_double();
-			}
-		});
-
-		com_rate.editable(false);
-		com_rate.push_back(" KB/s");
-		com_rate.push_back(" MB/s");
-		com_rate.option(conf.ratelim_unit);
-		com_rate.events().selected([&]
-		{
-			conf.ratelim_unit = com_rate.option();
-		});
-
-		l_outpath.bgcolor(color {"#eef6ee"});
-		l_outpath.fgcolor(color {"#354"});
-		l_outpath.typeface(paint::font_info {"Tahoma", 10});
-		l_outpath.text_align(align::center, align_v::center);
-		l_outpath.events().resized([this]
-		{
-			label_path_caption(l_outpath, conf.outpath);
-		});
-
-		btn_outpath.bgcolor(colors::white);
-		cbsplit.tooltip("Split into multiple files based on internal chapters. (--split-chapters)");
-		cbkeyframes.tooltip("Force keyframes around the chapters before\nremoving/splitting them. Requires a\n"
-			"reencode and thus is very slow, but the\nresulting video may have fewer artifacts\naround the cuts. (--force-keyframes-at-cuts)");
-		cbtime.tooltip("Do not use the Last-modified header to set the file modification time (--no-mtime)");
-		cbsubs.tooltip("Embed subtitles in the video (only for mp4, webm and mkv videos) (--embed-subs)");
-		cbchaps.tooltip("Add chapter markers to the video file (--embed-chapters)");
-		cbthumb.tooltip("Embed thumbnail in the video as cover art (--embed-thumbnail)");
-
-		btndl.events().click([this] { on_btn_dl(); });
-
-		btnbackto2.events().click([this]
-		{
-			if(is_zoomed(true)) restore();
-			get_place().field_display("page2", true);
-			collocate();
-		});
-
-		auto choose_outpath = [this]
-		{
-			std::wstring init {l_outpath.caption_wstring()};
-			if(init.empty())
-				init = get_sys_folder(FOLDERID_Downloads);
-			nana::folderbox fb {*this, init};
-			fb.allow_multi_select(false);
-			fb.title("Locate and select the desired download folder");
-			auto res {fb()};
-			if(res.size())
-			{
-				conf.outpath = res.front();
-				l_outpath.caption(conf.outpath.u8string());
-			}
-		};
-
-		btn_outpath.events().click(choose_outpath);
-		l_outpath.events().click(choose_outpath);
-
-		cbsplit.check(conf.cbsplit);
-		cbchaps.check(conf.cbchaps);
-		cbsubs.check(conf.cbsubs);
-		cbthumb.check(conf.cbthumb);
-		cbtime.check(conf.cbtime);
-		cbkeyframes.check(conf.cbkeyframes);
-		cbmp3.check(conf.cbmp3);
-
-		cbsplit.radio(true);
-		cbchaps.radio(true);
-
-		cbsplit.events().checked([this]
-		{
-			if(cbsplit.checked() && cbchaps.checked())
-				cbchaps.check(false);
-			conf.cbsplit = cbsplit.checked();
-		});
-
-		cbchaps.events().checked([this]
-		{
-			if(cbchaps.checked() && cbsplit.checked())
-				cbsplit.check(false);
-			conf.cbchaps = cbchaps.checked();
-		});
-
-		cbtime.events().checked([this]{ conf.cbtime = cbtime.checked(); });
-		cbthumb.events().checked([this] { conf.cbthumb = cbthumb.checked(); });
-		cbsubs.events().checked([this] { conf.cbsubs = cbsubs.checked(); });
-		cbkeyframes.events().checked([this] { conf.cbkeyframes = cbkeyframes.checked(); });
-		cbmp3.events().checked([this] { conf.cbmp3 = cbmp3.checked(); });
-
-		plc3.collocate();
-	}
+	void on_btn_next();
+	void on_btn_dl();
+	void settings_dlg();
+	void make_page1();
+	void make_page2();
+	void make_page3();
 
 
 	nana::size dpi_transform(double w, double h = 0)
@@ -939,6 +240,41 @@ private:
 				}
 				l.caption(L"..." + std::wstring {p.wstring()}.substr(offset));
 			}
+		}
+	}
+
+
+	template<class T>
+	void change_field_weight(T &obj, std::string field, unsigned new_weight)
+	{
+		std::string divtext {obj.div()};
+		auto pos {divtext.find(field)};
+		if(pos != -1)
+		{
+			pos = divtext.find("weight=", pos);
+			if(pos != -1)
+			{
+				pos += 7;
+				auto cut_pos {pos};
+				while(isdigit(divtext[pos]))
+					pos++;
+				obj.div(divtext.substr(0, cut_pos) + std::to_string(new_weight) + divtext.substr(pos));
+				obj.collocate();
+			}
+		}
+	}
+
+	void btn_next_morph()
+	{
+		if(link_yt && conf.vidinfo)
+		{
+			btn_next.caption(" Format selection >>>");
+			change_field_weight(plc1, "btn_next", 240);
+		}
+		else
+		{
+			btn_next.caption(" Download >>>");
+			change_field_weight(plc1, "btn_next", 180);
 		}
 	}
 };

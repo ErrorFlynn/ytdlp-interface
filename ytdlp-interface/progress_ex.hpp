@@ -77,8 +77,6 @@ namespace nana
 						if(img_h > img.size().height)
 							img_w += img_h - img.size().height;
 
-						//printf("g width: %d\nimg width: %d\n--------------\n", g.width(), img_w);
-
 						for(int x {0}; x < g.width(); x += img_w)
 						{
 							img.stretch(rectangle {img.size()}, g, rectangle {x, 0, img_w, img_h});
