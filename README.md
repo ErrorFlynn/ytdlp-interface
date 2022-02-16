@@ -4,7 +4,7 @@ This is a Windows graphical interface for [yt-dlp](https://github.com/yt-dlp/yt-
 Some third-party binaries are distributed with the program binary:
 - `yt-dlp.exe` : the command-line tool that downloads media from YouTube and other sites; from v1.1 forward, this is included for user convenience
 - `ffmpeg.exe`, `ffprobe.exe` : used by `yt-dlp.exe` for postprocessing (muxing formats, etc), downloaded from https://github.com/yt-dlp/FFmpeg-Builds
-- `7zxa.dll` : 7-Zip extraction plugin, used by the program to unpack the new version archive when self-updating (since v1.3)
+- `7zxa.dll` : 7-Zip extraction plugin, used by the program to unpack the archive of the new version when self-updating (since v1.3)
 
 To use, unpack the archive in a new folder at a location of your choice, and run `ytdlp-interface.exe`. To completely remove from your system, also delete the settings file `%AppData%\ytdlp-interface.json`.
 
@@ -21,12 +21,12 @@ The easiest way to build the project is to open the solution file with Visual St
 
 ---
 
-![ytdpl-interface 1](https://user-images.githubusercontent.com/20293505/148423527-1c6d828f-2006-46d4-ae61-e94e75864f71.png)
+![ytdlp-interface v1 3 - page 1](https://user-images.githubusercontent.com/20293505/154185711-f5b4c014-cec8-4f4b-a5c0-e44b18dac56f.png)
 
 ---
 
-![ytdpl-interface 2](https://user-images.githubusercontent.com/20293505/148423559-6887482d-f684-4a7d-a73c-808b624d8a02.png)
+![ytdlp-interface v1 3 - settings](https://user-images.githubusercontent.com/20293505/154186098-f0e83df1-a026-4869-8e80-ce6595d56aef.png)
 
 ---
 
-![ytdpl-interface 3](https://user-images.githubusercontent.com/20293505/148423581-b9a131cc-1d1b-46ea-a909-c6335d5bea76.png)
+![ytdlp-interface v1 3 - download page](https://user-images.githubusercontent.com/20293505/154185788-cadd2d0b-7915-45f2-9772-c5bf7f363afc.png)
