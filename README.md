@@ -4,10 +4,11 @@ This is a Windows graphical interface for [yt-dlp](https://github.com/yt-dlp/yt-
 Some third-party binaries are distributed with the program binary:
 - `yt-dlp.exe` : the command-line tool that downloads media from YouTube and other sites; from v1.1 forward, this is included for user convenience
 - `ffmpeg.exe`, `ffprobe.exe` : used by `yt-dlp.exe` for postprocessing (muxing formats, etc), downloaded from https://github.com/yt-dlp/FFmpeg-Builds
+- `7zxa.dll` : 7-Zip extraction plugin, used by the program to unpack the new version archive when self-updating (since v1.3)
 
 To use, unpack the archive in a new folder at a location of your choice, and run `ytdlp-interface.exe`. To completely remove from your system, also delete the settings file `%AppData%\ytdlp-interface.json`.
 
-Download link: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v1.2.0/ytdlp-interface.7z
+Download link: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v1.3.0/ytdlp-interface.7z
 
 ---
 
