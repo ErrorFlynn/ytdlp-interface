@@ -21,7 +21,7 @@ The easiest way to build the project is to open the solution file with Visual St
 
 ---
 
-![ytdlp-interface v1 3 - page 1](https://user-images.githubusercontent.com/20293505/154185711-f5b4c014-cec8-4f4b-a5c0-e44b18dac56f.png)
+![ytdlp-interface v1 3 - page 1](https://user-images.githubusercontent.com/20293505/154186548-e1b36f48-dfaf-4673-87f9-bc0678f5a88c.png)
 
 ---
 
