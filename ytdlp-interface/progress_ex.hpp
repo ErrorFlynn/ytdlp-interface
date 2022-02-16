@@ -78,10 +78,10 @@ namespace nana
 							img_w += img_h - img.size().height;
 
 						for(int x {0}; x < g.width(); x += img_w)
-						{
 							img.stretch(rectangle {img.size()}, g, rectangle {x, 0, img_w, img_h});
-						}
 						graph.bitblt({1, 1, pixels, g.height()}, g);
+						if(darkbg)
+							graph.frame_rectangle(rectangle{graph.size()}, color {"#777"}, 0);
 					}
 
 					switch(tmode)
@@ -132,12 +132,15 @@ namespace nana
 		// this color is used if text contrast is disabled
 		void text_color(color clr) { clr_normal = clr;  API::refresh_window(*this); }
 		color text_color() { return clr_normal; }
+		void outline_color(color clr) { clr_outline = clr; }
 		
 		void text_contrast_colors(color full, color empty) { clr_left = full; clr_right = empty; API::refresh_window(*this); }
 		std::pair<color, color> text_contrast_colors() { return std::make_pair(clr_left, clr_right); }
 
 		void text_contrast(bool enable) { contrast = enable; API::refresh_window(*this); }
 		bool text_contrast() { return contrast; }
+
+		void dark_bg(bool enable) { darkbg = enable; }
 
 		// shade: [-1.0] to [1.0] (negative = darker, zero = default, positive = lighter)
 		void color_preset(color_presets preset, double shade = 0)
@@ -160,8 +163,8 @@ namespace nana
 		paint::image img;
 		std::string text;
 		text_modes tmode{text_modes::caption};
-		color clr_left{"#ffffff"}, clr_right{"#333333"}, clr_normal{clr_right};
-		bool contrast{true};
+		color clr_left{"#ffffff"}, clr_right{"#333333"}, clr_normal{clr_right}, clr_outline;
+		bool contrast {true}, darkbg {false};
 
 		std::unordered_map<color_presets, std::array<color, 4>> presets
 		{
@@ -192,10 +195,10 @@ namespace nana
 					graph.string(pos, text, clr_right);
 				else if(pixels > pos.x + tsize.width)
 				{
-					graph.string({pos.x-1, pos.y-1}, text, clr_right);
-					graph.string({pos.x-1, pos.y+1}, text, clr_right);
-					graph.string({pos.x+1, pos.y-1}, text, clr_right);
-					graph.string({pos.x+1, pos.y+1}, text, clr_right);
+					graph.string({pos.x-1, pos.y-1}, text, clr_outline);
+					graph.string({pos.x-1, pos.y+1}, text, clr_outline);
+					graph.string({pos.x+1, pos.y-1}, text, clr_outline);
+					graph.string({pos.x+1, pos.y+1}, text, clr_outline);
 					graph.string(pos, text, clr_left);
 				}
 				else
@@ -207,10 +210,10 @@ namespace nana
 					left.typeface(typeface());
 					right.typeface(typeface());
 
-					left.string({pos.x-1, pos.y-1}, text, clr_right);
-					left.string({pos.x-1, pos.y+1}, text, clr_right);
-					left.string({pos.x+1, pos.y-1}, text, clr_right);
-					left.string({pos.x+1, pos.y+1}, text, clr_right);
+					left.string({pos.x-1, pos.y-1}, text, clr_outline);
+					left.string({pos.x-1, pos.y+1}, text, clr_outline);
+					left.string({pos.x+1, pos.y-1}, text, clr_outline);
+					left.string({pos.x+1, pos.y+1}, text, clr_outline);
 					left.string(pos, text, clr_left);
 					right.string(pos, text, clr_right);
 

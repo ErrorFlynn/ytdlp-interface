@@ -2,24 +2,54 @@
 
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
-//int main()
 {
+	//AllocConsole();
+	//freopen("conout$", "w", stdout);
 	using namespace nana;
 
-	nlohmann::json jconf;
+	int argc;
+	LPWSTR *argv {CommandLineToArgvW(GetCommandLineW(), &argc)};
+	fs::path modpath {argv[0]}, appdir {modpath.parent_path()};
+	if(argc > 1)
+	{
+		if(std::wstring {argv[1]} == L"update")
+		{
+			fs::path arc_path {argv[2]}, target_dir {argv[3]};
+			util::end_processes(modpath.filename());
+			auto res {util::extract_7z(arc_path, target_dir)};
+			fs::remove(arc_path);
+			fs::remove(fs::temp_directory_path() / "7zxa.dll");
+			if(!res.empty())
+			{
+				msgbox mbox {"ytdlp-interface - updating failed"};
+				mbox.icon(msgbox::icon_error);
+				(mbox << "failed to extract the downloaded 7z archive: " << res)();
+			}
+			else
+			{
+				auto newself {target_dir / "ytdlp-interface.exe"};
+				ShellExecuteW(NULL, L"open", newself.wstring().data(), L"cleanup", NULL, SW_SHOW);
+			}
+			LocalFree(argv);
+			return 0;
+		}
+		else if(std::wstring {argv[1]} == L"cleanup")
+		{
+			fs::remove(fs::temp_directory_path() / "ytdlp-interface.exe");
+		}
+	}
+	LocalFree(argv);
 
-	std::wstring modpath(4096, '\0');
-	modpath.resize(GetModuleFileNameW(0, &modpath.front(), modpath.size()));
+	nlohmann::json jconf;
 
 	paint::image img {modpath};
 	API::window_icon_default(img, img);
 
-	auto appdir {modpath.substr(0, modpath.rfind('\\'))};
-	if(std::filesystem::exists(appdir + L"\\yt-dlp.exe"))
-		GUI::conf.ytdlp_path = appdir + L"\\yt-dlp.exe";
+	if(fs::exists(appdir / "yt-dlp.exe"))
+		GUI::conf.ytdlp_path = appdir / "yt-dlp.exe";
 
-	std::filesystem::path confpath {get_sys_folder(FOLDERID_RoamingAppData) + L"\\ytdlp-interface.json"};
-	if(std::filesystem::exists(confpath))
+	fs::path confpath {util::get_sys_folder(FOLDERID_RoamingAppData) + L"\\ytdlp-interface.json"};
+	if(fs::exists(confpath))
 	{
 		std::ifstream f {confpath};
 		try { f >> jconf; }
@@ -56,13 +86,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				GUI::conf.pref_fps = jconf["pref_fps"];
 				GUI::conf.vidinfo = jconf["vidinfo"];
 			}
+			if(jconf.contains("cbtheme")) // v1.3
+				GUI::conf.cbtheme = jconf["cbtheme"];
 		}
 	}
 	else
 	{
-		if(GUI::conf.ytdlp_path.empty() && std::filesystem::exists(LR"(C:\Program Files\yt-dlp\yt-dlp.exe)"))
+		if(GUI::conf.ytdlp_path.empty() && fs::exists(LR"(C:\Program Files\yt-dlp\yt-dlp.exe)"))
 			GUI::conf.ytdlp_path = LR"(C:\Program Files\yt-dlp\yt-dlp.exe)";
-		GUI::conf.outpath = get_sys_folder(FOLDERID_Downloads);
+		GUI::conf.outpath = util::get_sys_folder(FOLDERID_Downloads);
 	}
 
 	GUI gui;
@@ -87,6 +119,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["pref_audio"] = GUI::conf.pref_audio;
 		jconf["pref_fps"] = GUI::conf.pref_fps;
 		jconf["vidinfo"] = GUI::conf.vidinfo;
+		jconf["cbtheme"] = GUI::conf.cbtheme;
 		std::ofstream f {confpath};
 		f << std::setw(4) << jconf;
 	});

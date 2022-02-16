@@ -1,9 +1,9 @@
 #pragma once
 
 #include "json.hpp"
+
 #include <Windows.h>
 #include <Shlobj.h>
-#include <WinInet.h>
 
 #include <string>
 #include <fstream>
@@ -12,21 +12,30 @@
 
 #include <nana/gui/widgets/textbox.hpp>
 
-using callback = std::function<void(ULONGLONG, ULONGLONG, std::string)>;
+namespace fs = std::filesystem;
 
-template<typename CharT>
-struct Sep : public std::numpunct<CharT>
+namespace util
 {
-	virtual std::string do_grouping() const { return "\003"; }
-};
+	template<typename CharT>
+	struct Sep : public std::numpunct<CharT>
+	{
+		virtual std::string do_grouping() const { return "\003"; }
+	};
 
-std::string format_int(unsigned i);
-std::string format_float(float f, unsigned precision = 2);
-std::string GetLastErrorStr();
-HWND hwnd_from_pid(DWORD pid);
-std::string run_piped_process(std::wstring cmd, bool *working = nullptr, nana::textbox *tb = nullptr, callback cb = nullptr);
-std::wstring get_sys_folder(REFKNOWNFOLDERID rfid);
-std::string get_inet_res(std::string res);
+	using callback = std::function<void(ULONGLONG, ULONGLONG, std::string)>;
+
+	std::string format_int(unsigned i);
+	std::string format_float(float f, unsigned precision = 2);
+	std::string int_to_filesize(unsigned i, bool with_bytes = true);
+	std::string GetLastErrorStr(bool inet = false);
+	HWND hwnd_from_pid(DWORD pid);
+	std::string run_piped_process(std::wstring cmd, bool *working = nullptr, nana::textbox *tb = nullptr, callback cb = nullptr);
+	void end_processes(std::wstring);
+	std::wstring get_sys_folder(REFKNOWNFOLDERID rfid);
+	std::string get_inet_res(std::string res, std::string *error = nullptr);
+	std::string dl_inet_res(std::string res, fs::path fname, bool *working = nullptr, std::function<void(unsigned)> cb = nullptr);
+	std::string extract_7z(std::filesystem::path arc_path, std::filesystem::path out_path);
+}
 
 // https://github.com/qPCR4vir/nana-demo/blob/master/Examples/windows-subclassing.cpp
 class subclass

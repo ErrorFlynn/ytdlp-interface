@@ -1,115 +1,27 @@
-#pragma once
-
-#include <nana/gui.hpp>
-#include <nana/gui/widgets/button.hpp>
-#include <nana/gui/widgets/panel.hpp>
-#include <nana/gui/widgets/label.hpp>
-#include <nana/gui/widgets/picture.hpp>
-#include <nana/gui/widgets/listbox.hpp>
-#include <nana/gui/widgets/group.hpp>
-#include <nana/gui/widgets/combox.hpp>
-#include <nana/gui/filebox.hpp>
-
 #include <thread>
 #include <sstream>
-
 #include <iostream>
 #include <atlbase.h> // CComPtr
 #include <Shobjidl.h> // ITaskbarList3
 
-#include "util.hpp"
-#include "progress_ex.hpp"
+#include "widgets.hpp"
+#include "themed_form.hpp"
 
-class Label : public nana::label
-{
-public:
-	Label(nana::window parent, std::string_view text, bool dpi_adjust = false) : nana::label(parent, text)
-	{
-		fgcolor(nana::color {"#458"});
-		bgcolor(nana::colors::white);
-		typeface(nana::paint::font_info {"", 12 - (double)(nana::API::screen_dpi(true) > 96)*2*dpi_adjust});
-		text_align(nana::align::right, nana::align_v::center);
-	}
-};
+namespace fs = std::filesystem;
 
-class Text : public nana::label
-{
-public:
-	Text(nana::window parent, std::string_view text = "") : nana::label(parent, text)
-	{
-		fgcolor(nana::color {"#575"});
-		bgcolor(nana::colors::white);
-		typeface(nana::paint::font_info {"", 12 - (double)(nana::API::screen_dpi(true) > 96)*2});
-		text_align(nana::align::left, nana::align_v::center);
-	}
-};
 
-class cbox : public nana::checkbox
-{
-public:
-	cbox(nana::window parent, std::string_view text) : nana::checkbox(parent, text)
-	{
-		fgcolor(nana::color {"#458"});
-		bgcolor(nana::colors::white);
-		typeface(nana::paint::font_info {"", 12});
-		scheme().square_border_color = fgcolor();
-	}
-};
-
-class Button : public nana::button
-{
-public:
-	Button(nana::window parent, std::string_view text = "") : nana::button(parent, text)
-	{
-		typeface(nana::paint::font_info {"", 14, {800}});
-		fgcolor(nana::color {"#67a"});
-		bgcolor(nana::colors::white);
-		enable_focus_color(false);
-	}
-};
-
-class Listbox : public nana::listbox
-{
-public:
-
-	Listbox(nana::window parent) : listbox(parent) {}
-
-	size_t item_count()
-	{
-		size_t count {0};
-		for(size_t cat_idx {0}; cat_idx < size_categ(); cat_idx++)
-			count += at(cat_idx).size();
-		return count;
-	}
-};
-
-class Progress : public nana::progress_ex
-{
-public:
-
-	Progress(nana::window parent) : progress_ex(parent)
-	{
-		bgcolor(nana::colors::white);
-		typeface(nana::paint::font_info {"", 11, {800}});
-		text_contrast_colors(nana::colors::white, nana::color {"#678"});
-		nana::paint::image img;
-		img.open(arr_progbar_jpg, sizeof arr_progbar_jpg);
-		image(img);
-	}
-};
-
-class GUI : public nana::form
-{
+class GUI : public themed_form
+{	
 public:
 
 	GUI();
 
 	static struct settings_t
 	{
-		std::filesystem::path ytdlp_path, outpath;
+		fs::path ytdlp_path, outpath;
 		std::wstring fmt1, fmt2;
 		double ratelim {0};
-		unsigned ratelim_unit {1}, pref_res {2}, pref_video {1}, pref_audio {1};
+		unsigned ratelim_unit {1}, pref_res {2}, pref_video {1}, pref_audio {1}, cbtheme {2};
 		bool cbsplit {false}, cbchaps {false}, cbsubs {false}, cbthumb {false}, cbtime {true}, cbkeyframes {false}, cbmp3 {false};
 		bool pref_fps {true}, vidinfo {false};
 	}
@@ -117,49 +29,49 @@ public:
 
 private:
 
-	nlohmann::json vidinfo;
-	std::filesystem::path appdir, ffmpeg_loc;
-	std::wstring strfmt;
+	widgets::theme_t theme;
+	nlohmann::json vidinfo, releases;
+	fs::path self_path, appdir, ffmpeg_loc;
+	std::wstring strfmt, url;
+	std::string inet_error;
 	bool working {false}, link_yt {false};
-	std::thread thr;
+	std::thread thr, thr_releases;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	subclass sc {*this};
-	HWND hwnd {nullptr};
-	const std::string ver_tag {"v1.2.0"};
+	const std::string ver_tag {"v1.3.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 4)};
 
 	nana::panel<false> page1 {*this}, page1a {*this}, page2 {*this}, page3 {*this};
 	nana::place plc1 {page1}, plc1a {page1a}, plc2 {page2}, plc3 {page3}, plcopt;
 
 	/*** page1 widgets ***/
-	Label l_ytdlp {page1, "Location of yt-dlp.exe:"}, l_ytlink {page1, "URL of video webpage:"};
-	Button btn_next {page1, " Download >>>"}, btn_settings {page1, " Settings"};
-	nana::button btn_path {page1, "..."};
-	nana::textbox tblink {page1};
-	nana::label separator_a {page1}, separator_b {page1}, l_path {page1};
-	nana::label l_wait {page1a, "<bold color=0xaa8888 size=20>DON'T MOVE\n\n</><bold color=0x556677 size=14>getting video info...\n</>"};
+	widgets::Label l_ytdlp {page1, &theme, "Location of yt-dlp.exe:"}, l_ytlink {page1, &theme, "URL of media webpage:"};
+	widgets::Button btn_next {page1, &theme, " Download >>>"}, btn_settings {page1, &theme, " Settings"};
+	widgets::separator separator_a {page1, &theme}, separator_b {page1, &theme};
+	widgets::path_label l_path {page1, &theme, &conf.ytdlp_path}, l_url {page1, &theme, &url};
+	nana::label l_wait {page1a};
 
 	/*** page2 widgets ***/
-	nana::label l_title {page2};
-	Label l_dur {page2, "Duration:", true}, l_chap {page2, "Chapters:", true}, l_upl {page2, "Uploader:", true}, l_date {page2, "Upload date:", true};
-	Text l_durtext {page2}, l_chaptext {page2}, l_upltext {page2}, l_datetext {page2};
+	widgets::Title l_title {page2, &theme};
+	widgets::Label l_dur {page2, &theme, "Duration:", true}, l_chap {page2, &theme, "Chapters:", true},
+		l_upl {page2, &theme, "Uploader:", true}, l_date {page2, &theme, "Upload date:", true};
+	widgets::Text l_durtext {page2, &theme}, l_chaptext {page2, &theme}, l_upltext {page2, &theme}, l_datetext {page2, &theme};
 	nana::picture thumb {page2};
-	nana::label separator_1a {page2}, separator_1b {page2}, separator_2a {page2}, separator_2b {page2};
-	Listbox lbformats {page2};
-	Button btntodl {page2, " Download >>>"}, btnbackto1 {page2, "<<< Back "};
+	widgets::separator separator_1a {page2, &theme}, separator_1b {page2, &theme}, separator_2a {page2, &theme}, separator_2b {page2, &theme};
+	widgets::Listbox lbformats {page2, &theme};
+	widgets::Button btntodl {page2, &theme, " Download >>>"}, btnbackto1 {page2, &theme, "<<< Back "};
 
 	/*** page3 widgets ***/
-	nana::group gpopt {page3, "Options"};
-	Progress prog {page3};
-	nana::textbox tbpipe {page3}, tbrate {gpopt};
-	Button btnbackto2 {page3, "<<< Back "}, btndl {page3, "Begin download"};
-	Label l_out {gpopt, "Download folder:"}, l_rate {gpopt, "Download rate limit:"};
-	nana::label l_outpath {gpopt};
-	nana::button btn_outpath {gpopt, "..."};
-	nana::combox com_rate {gpopt};
-	cbox cbsplit {gpopt, "Split chapters"}, cbkeyframes {gpopt, "Force keyframes at cuts"}, cbmp3 {gpopt, "Convert audio to MP3"}, 
-		cbchaps {gpopt, "Embed chapters"}, cbsubs {gpopt, "Embed subtitles"}, cbthumb {gpopt, "Embed thumbnail"}, 
-		cbtime {gpopt, "File modification time = time of writing"};
+	widgets::Group gpopt {page3, "Options", &theme};
+	widgets::Progress prog {page3, &theme};
+	widgets::Textbox tbpipe {page3, &theme}, tbrate {gpopt, &theme};
+	widgets::Button btnbackto2 {page3, &theme, "<<< Back "}, btndl {page3, &theme, "Begin download"};
+	widgets::Label l_out {gpopt, &theme, "Download folder:"}, l_rate {gpopt, &theme, "Download rate limit:"};
+	widgets::path_label l_outpath {gpopt, &theme, &conf.outpath};
+	widgets::Combox com_rate {gpopt, &theme};
+	widgets::cbox cbsplit {gpopt, &theme, "Split chapters"}, cbkeyframes {gpopt, &theme, "Force keyframes at cuts"},
+		cbmp3 {gpopt, &theme, "Convert audio to MP3"}, cbchaps {gpopt, &theme, "Embed chapters"}, 
+		cbsubs {gpopt, &theme, "Embed subtitles"}, cbthumb {gpopt, &theme, "Embed thumbnail"},
+		cbtime {gpopt, &theme, "File modification time = time of writing"};
 
 	const std::vector<std::wstring>
 		com_res_options {L"2160", L"1440", L"1080", L"720", L"480", L"360"},
@@ -169,10 +81,11 @@ private:
 	void on_btn_next();
 	void on_btn_dl();
 	void settings_dlg();
+	void changes_dlg(nana::window parent);
 	void make_page1();
 	void make_page2();
 	void make_page3();
-
+	void apply_theme(bool dark);
 
 	nana::size dpi_transform(double w, double h = 0)
 	{
@@ -217,30 +130,14 @@ private:
 		if(text.find(R"(https://www.youtube.com/watch?v=)") == 0)
 			if(text.size() == 43)
 				return true;
+			else if(text.size() > 43 && text[43] == '&')
+				return true;
 		if(text.find(R"(https://youtu.be/)") == 0)
 			if(text.size() == 28)
 				return true;
+			else if(text.size() > 28 && text[28] == '?')
+				return true;
 		return false;
-	}
-
-
-	void label_path_caption(nana::label &l, const std::filesystem::path &p)
-	{
-		if(!l.size().empty())
-		{
-			l.caption(p.wstring());
-			int offset {0};
-			while(l.measure(1234).width > l.size().width)
-			{
-				offset += 1;
-				if(p.wstring().size() - offset < 4)
-				{
-					l.caption("");
-					return;
-				}
-				l.caption(L"..." + std::wstring {p.wstring()}.substr(offset));
-			}
-		}
 	}
 
 
@@ -264,6 +161,7 @@ private:
 		}
 	}
 
+
 	void btn_next_morph()
 	{
 		if(link_yt && conf.vidinfo)
@@ -277,4 +175,13 @@ private:
 			change_field_weight(plc1, "btn_next", 180);
 		}
 	}
+
+
+	bool is_tag_a_new_version(std::string tag_name)
+	{
+		if(tag_name[1] > ver_tag[1]) return true;
+		if(tag_name[1] == ver_tag[1] && tag_name[3] > ver_tag[3]) return true;
+		if(tag_name[1] == ver_tag[1] && tag_name[3] == ver_tag[3] && tag_name[5] > ver_tag[5]) return true;
+		return false;
+	};
 };
