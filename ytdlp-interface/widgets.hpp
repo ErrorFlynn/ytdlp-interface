@@ -7,6 +7,7 @@
 #include <nana/gui/widgets/group.hpp>
 #include <nana/gui/widgets/combox.hpp>
 #include <nana/gui/widgets/textbox.hpp>
+#include <nana/gui/widgets/slider.hpp>
 
 #include <variant>
 
@@ -20,6 +21,7 @@ namespace widgets
 	{
 	private:
 		bool dark;
+		double shade {0};
 
 	public:
 		nana::color nimbus, fmbg, Label_fg, Text_fg, Text_fg_error, cbox_fg, btn_bg, btn_fg,
@@ -31,17 +33,17 @@ namespace widgets
 			dark = false;
 			using namespace nana;
 			nimbus = color {"#60c8fd"};
-			fmbg = btn_bg = tbbg = gpbg = colors::white;
+			fmbg = btn_bg = tbbg = gpbg = color {colors::white}.blend(colors::light_grey, .3 - shade);
 			tbfg = colors::black;
 			Label_fg = color {"#569"};
 			Text_fg = color {"#575"};
 			Text_fg_error = color {"#a55"};
 			cbox_fg = color {"#458"};
 			btn_fg = color {"#67a"};
-			path_bg = color {"#eef6ee"};
+			path_bg = color {"#eef6ee"}.blend(colors::light_grey, .3 - shade);
 			path_fg = color {"#354"};
 			path_link_fg = color {"#789"};
-			sep_bg = color {"#d6d6d6"};
+			sep_bg = color {"#cdcdcd"};
 			gpfg = "0x81544F";
 			title_fg = nana::color {"#789"};
 		}
@@ -51,24 +53,31 @@ namespace widgets
 			dark = true;
 			using namespace nana;
 			nimbus = color {"#cde"};
-			fmbg = color {"#2c2b2b"};
-			tbbg = fmbg.blend(colors::black, .04);
-			gpbg = fmbg.blend(colors::white, .04);
+			fmbg = color {"#2c2b2b"}.blend(colors::black, shade);
+			tbbg = fmbg.blend(colors::black, .035);
+			gpbg = fmbg.blend(colors::white, .035);
 			tbfg = color {"#f7f7f4"};
-			btn_bg = color {"#2e2d2d"};
+			btn_bg = color {"#2e2d2d"}.blend(colors::black, shade);
 			Label_fg = btn_fg = cbox_fg = color {"#e6e6e3"};
 			Text_fg = color {"#def"};
 			Text_fg_error = color {"#f99"};
-			path_bg = color {"#383737"};
+			path_bg = color {"#383737"}.blend(colors::black, shade);
 			path_fg = colors::white;
-			sep_bg = color {"#999"};
+			sep_bg = color {"#888"};
 			gpfg = "0xE4D6BA";
-			lb_headerbg = color {"#525658"};
+			lb_headerbg = color {"#525658"}.blend(colors::black, shade);
 			title_fg = nana::color {"#cde"};
 			path_link_fg = color {"#E4D6BA"};
 		}
 
 		bool is_dark() { return dark; }
+		void contrast(double factor)
+		{
+			shade = std::clamp(factor, .0, .3);
+			if(dark) make_dark();
+			else make_light();
+		}
+		double contrast() { return shade; }
 
 		theme_t() { make_light(); }
 	};
@@ -261,8 +270,8 @@ namespace widgets
 			{
 				if(theme->is_dark())
 				{
-					fgcolor(nana::color {"#fAbBaE"});
-					scheme().activated = nana::color {"#ffcBbE"};
+					fgcolor(nana::color {"#E4D6BA"});
+					scheme().activated = nana::color {"#E4D6BA"};
 				}
 				else
 				{
@@ -325,8 +334,8 @@ namespace widgets
 				scheme().header_bgcolor = nana::color {"#f1f2f4"};
 				scheme().header_fgcolor = nana::colors::black;
 				scheme().cat_fgcolor = nana::color {"#039"};
-				scheme().item_selected = nana::color {"#D7EEF4"};
-				scheme().item_selected_border = nana::color {"#b7dEe4"};
+				scheme().item_selected = nana::color {"#c7dEe4"}.blend(nana::colors::grey, .1 - theme->contrast());
+				scheme().item_selected_border = nana::color {"#a7cEd4"}.blend(nana::colors::grey, .1 - theme->contrast());
 				scheme().item_highlighted = nana::color {"#ECFCFF"};
 				dw.clear();
 			}
@@ -366,8 +375,8 @@ namespace widgets
 				dark_bg(false);
 				outline_color(nana::color {"#678"});
 				text_contrast_colors(nana::colors::white, nana::color {"#678"});
-				scheme().background = nana::colors::white;
-				scheme().lower_background = nana::color {"#f5f5f5"};
+				scheme().background = nana::color {nana::colors::white}.blend(nana::colors::light_grey, .3 - theme->contrast());
+				scheme().lower_background = nana::color {"#f5f5f5"}.blend(nana::colors::light_grey, .3 - theme->contrast());
 			}
 		}
 	};
@@ -498,12 +507,17 @@ namespace widgets
 			theme = ptheme;
 			refresh_theme();
 			events().expose([this] { refresh_theme(); });
+			nana::drawing {*this}.draw([](nana::paint::graphics &g)
+			{
+				g.rectangle(false, nana::color {"#999A9E"});
+			});
 		}
 
 		void refresh_theme()
 		{
 			scheme().activated = theme->nimbus;
-			bgcolor(theme->tbbg);
+			auto bgparent {nana::API::get_widget(parent())->bgcolor()};
+			bgcolor(theme->is_dark() ? bgparent.blend(nana::colors::black, .045) : theme->tbbg);
 			fgcolor(theme->tbfg);
 		}
 	};
@@ -522,6 +536,43 @@ namespace widgets
 			text_align(nana::align::center, nana::align_v::top);
 			nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
 			events().expose([this] { fgcolor(theme->title_fg); });
+		}
+	};
+
+	class Slider : public nana::slider
+	{
+		theme_t* theme {nullptr};
+
+	public:
+		Slider(nana::window parent, theme_t* ptheme) : nana::slider {parent}
+		{
+			theme = ptheme;
+			transparent(true);
+			refresh_theme();
+			events().expose([this] {refresh_theme(); });
+			vernier([&](unsigned max, unsigned val)
+			{
+				return std::to_string(val);
+			});
+		}
+
+		void refresh_theme()
+		{
+			if(theme->is_dark())
+			{
+				scheme().color_adorn = scheme().color_slider = nana::color {"#a8967a"};
+				scheme().color_slider_highlighted = nana::colors::dark_goldenrod;
+				scheme().color_vernier_text = nana::colors::white;
+				scheme().color_vernier = nana::colors::brown;
+			}
+			else
+			{
+				scheme().color_adorn = nana::color {"#3da3ce"};
+				scheme().color_slider = nana::color {"#287DA2"};
+				scheme().color_slider_highlighted = nana::color {"#287DA2"};
+				scheme().color_vernier_text = nana::colors::white;
+				scheme().color_vernier = nana::colors::dark_green;
+			}
 		}
 	};
 }

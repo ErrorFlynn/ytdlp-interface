@@ -16,6 +16,7 @@ public:
 	bool system_theme() { return use_system_setting; }
 	bool system_supports_darkmode() { return dark_mode_supported; }
 	void theme_callback(theme_cb cb) { callback = cb; }
+	void refresh_widgets();
 
 protected:
 	HWND hwnd {nullptr};
@@ -170,5 +171,4 @@ private:
 	}
 
 	void InitDarkMode();
-	void refresh_widgets();
 };

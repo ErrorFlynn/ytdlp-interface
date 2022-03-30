@@ -4,6 +4,7 @@
 
 #include <WinInet.h>
 #include <TlHelp32.h>
+#include <iostream>
 
 std::recursive_mutex subclass::mutex_;
 std::map<HWND, subclass*> subclass::table_;
@@ -71,7 +72,7 @@ HWND util::hwnd_from_pid(DWORD pid)
 	return lparam.hwnd;
 }
 
-std::string util::run_piped_process(std::wstring cmd, bool *working, nana::textbox *tb, callback cb)
+std::string util::run_piped_process(std::wstring cmd, bool *working, nana::textbox *tb, callback cb, bool *graceful_exit)
 {
 	std::string ret;
 	HANDLE hPipeRead, hPipeWrite;
@@ -91,7 +92,7 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, nana::textb
 
 	PROCESS_INFORMATION pi {0};
 
-	BOOL res {CreateProcessW(NULL, &cmd.front(), NULL, NULL, TRUE, CREATE_NEW_CONSOLE, NULL, NULL, &si, &pi)};
+	BOOL res {CreateProcessW(NULL, &cmd.front(), NULL, NULL, TRUE, CREATE_NEW_CONSOLE|CREATE_NEW_PROCESS_GROUP, NULL, NULL, &si, &pi)};
 	if(!res)
 	{
 		CloseHandle(hPipeWrite);
@@ -99,10 +100,23 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, nana::textb
 		return ret;
 	}
 
-	auto killproc = [&pi]
+	auto killproc = [&]
 	{
+		if(AttachConsole(pi.dwProcessId))
+		{
+			auto res {GenerateConsoleCtrlEvent(CTRL_C_EVENT, pi.dwProcessId)};
+			FreeConsole();
+			if(res && WaitForSingleObject(pi.hProcess, 6000) == WAIT_OBJECT_0)
+			{
+				if(graceful_exit)
+					*graceful_exit = true;
+				return;
+			}
+		}
 		auto hwnd {hwnd_from_pid(pi.dwProcessId)};
 		if(hwnd) SendMessageA(hwnd, WM_CLOSE, 0, 0);
+		if(graceful_exit)
+			*graceful_exit = false;
 	};
 
 	bool procexit {false};
@@ -132,43 +146,61 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, nana::textb
 			}
 
 			buf[dwRead] = 0;
-			std::string s {buf};
+			std::string s;
 			if(cb)
 			{
 				static bool subs {false};
-				if(s.find("Writing video subtitles") != -1)
+				if(std::string(buf).find("Writing video subtitles") != -1)
 					subs = true;
-				auto pos1 {s.find('%')};
-				if(pos1 != -1)
+				std::string line, strbuf {buf};
+				size_t lnstart {0}, lnend {0};
+				do
 				{
-					if(!subs)
+					line.clear();
+					if(lnend != -1)
 					{
-						auto pos2 {s.rfind('%')}, pos {s.rfind(' ', pos2)+1};
-						auto pct {s.substr(pos, pos2-pos)};
-						auto pos1a {s.rfind('\n', pos1)+1}, pos2a {s.find('\n', pos2)};
-						pos1 = s.rfind(' ', pos2)+1;
-						auto text {s.substr(pos1, pos2a-pos1)};
-						pos1 = text.rfind("  ");
-						if(pos1 != -1) text.erase(pos1, 1);
-						cb(static_cast<ULONGLONG>(stod(pct)*10), 1000, text);
-						s.erase(pos1a, pos2a == -1 ? pos2a : pos2a-pos1a);
-						if(s == "\n") s.clear();
-						if(!s.empty() && s.back() == '\n' && s[s.size()-2] == '\n')
-							s.pop_back();
+						lnend = strbuf.find_first_of("\r\n", lnstart);
+						if(lnend != 1)
+							line = strbuf.substr(lnstart, lnend - lnstart);
+						else line = strbuf.substr(lnstart);
+						if(line.size()) 
+							line += '\n';
+						if(lnend + 1 == strbuf.size())
+							lnend = -1;
+						else lnstart = lnend + 1;
 					}
-					else
+					if(!line.empty())
 					{
-						if(s.find("100%") != -1)
-							subs = false;
+						auto pos {line.find('%')};
+						if(pos != -1 && line.find("[download]") == 0)
+						{
+							if(subs)
+							{
+								s += line;
+								if(line.find("100%") != -1)
+									subs = false;
+							}
+							else
+							{
+								auto pos2 {line.rfind(' ', pos) + 1};
+								auto percent {std::stod(line.substr(pos2, pos - pos2))};
+								line.pop_back();
+								cb(static_cast<ULONGLONG>(percent * 10), 1000, line.substr(pos2));
+							}
+						}
+						else s += line;
 					}
-				}
+				} while(lnend != -1);
 			}
 			else ret += buf;
 			if(tb) tb->append(s, false);
 		}
 		if(working && !*working)
 		{
-			killproc();
+			DWORD exit_code {0};
+			GetExitCodeProcess(pi.hProcess, &exit_code);
+			if(exit_code == STILL_ACTIVE)
+				killproc();
 			break;
 		}
 	}

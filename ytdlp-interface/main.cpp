@@ -88,6 +88,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			}
 			if(jconf.contains("cbtheme")) // v1.3
 				GUI::conf.cbtheme = jconf["cbtheme"];
+			if(jconf.contains("args")) // v1.4
+			{
+				GUI::conf.args = to_wstring(std::string {jconf["args"]});
+				GUI::conf.contrast = jconf["contrast"];
+				GUI::conf.cbargs = jconf["cbargs"];
+			}
 		}
 	}
 	else
@@ -120,8 +126,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["pref_fps"] = GUI::conf.pref_fps;
 		jconf["vidinfo"] = GUI::conf.vidinfo;
 		jconf["cbtheme"] = GUI::conf.cbtheme;
-		std::ofstream f {confpath};
-		f << std::setw(4) << jconf;
+		jconf["args"] = to_utf8(GUI::conf.args);
+		jconf["contrast"] = GUI::conf.contrast;
+		jconf["cbargs"] = GUI::conf.cbargs;
+		std::ofstream {confpath} << std::setw(4) << jconf;
 	});
 	nana::exec();
 }

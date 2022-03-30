@@ -29,7 +29,8 @@ namespace util
 	std::string int_to_filesize(unsigned i, bool with_bytes = true);
 	std::string GetLastErrorStr(bool inet = false);
 	HWND hwnd_from_pid(DWORD pid);
-	std::string run_piped_process(std::wstring cmd, bool *working = nullptr, nana::textbox *tb = nullptr, callback cb = nullptr);
+	std::string run_piped_process(std::wstring cmd, bool *working = nullptr, nana::textbox *tb = nullptr, 
+								  callback cb = nullptr, bool *graceful_exit = nullptr);
 	void end_processes(std::wstring);
 	std::wstring get_sys_folder(REFKNOWNFOLDERID rfid);
 	std::string get_inet_res(std::string res, std::string *error = nullptr);

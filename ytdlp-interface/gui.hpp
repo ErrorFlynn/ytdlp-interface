@@ -19,10 +19,11 @@ public:
 	static struct settings_t
 	{
 		fs::path ytdlp_path, outpath;
-		std::wstring fmt1, fmt2;
-		double ratelim {0};
+		std::wstring fmt1, fmt2, args;
+		double ratelim {0}, contrast {.1};
 		unsigned ratelim_unit {1}, pref_res {2}, pref_video {1}, pref_audio {1}, cbtheme {2};
-		bool cbsplit {false}, cbchaps {false}, cbsubs {false}, cbthumb {false}, cbtime {true}, cbkeyframes {false}, cbmp3 {false};
+		bool cbsplit {false}, cbchaps {false}, cbsubs {false}, cbthumb {false}, cbtime {true}, cbkeyframes {false}, cbmp3 {false},
+			cbargs {true};
 		bool pref_fps {true}, vidinfo {false};
 	}
 	conf;
@@ -38,7 +39,7 @@ private:
 	std::thread thr, thr_releases;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v1.3.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 4)};
+	const std::string ver_tag {"v1.4.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 4)};
 
 	nana::panel<false> page1 {*this}, page1a {*this}, page2 {*this}, page3 {*this};
 	nana::place plc1 {page1}, plc1a {page1a}, plc2 {page2}, plc3 {page3}, plcopt;
@@ -63,7 +64,7 @@ private:
 	/*** page3 widgets ***/
 	widgets::Group gpopt {page3, "Options", &theme};
 	widgets::Progress prog {page3, &theme};
-	widgets::Textbox tbpipe {page3, &theme}, tbrate {gpopt, &theme};
+	widgets::Textbox tbpipe {page3, &theme}, tbrate {gpopt, &theme}, tbargs {gpopt, &theme};
 	widgets::Button btnbackto2 {page3, &theme, "<<< Back "}, btndl {page3, &theme, "Begin download"};
 	widgets::Label l_out {gpopt, &theme, "Download folder:"}, l_rate {gpopt, &theme, "Download rate limit:"};
 	widgets::path_label l_outpath {gpopt, &theme, &conf.outpath};
@@ -71,7 +72,8 @@ private:
 	widgets::cbox cbsplit {gpopt, &theme, "Split chapters"}, cbkeyframes {gpopt, &theme, "Force keyframes at cuts"},
 		cbmp3 {gpopt, &theme, "Convert audio to MP3"}, cbchaps {gpopt, &theme, "Embed chapters"}, 
 		cbsubs {gpopt, &theme, "Embed subtitles"}, cbthumb {gpopt, &theme, "Embed thumbnail"},
-		cbtime {gpopt, &theme, "File modification time = time of writing"};
+		cbtime {gpopt, &theme, "File modification time = time of writing"}, cbargs {gpopt, &theme, "Custom arguments:"};
+	nana::label tbpipe_overlay {page3, "output from yt-dlp.exe appears here\n\nclick to copy to clipboard"};
 
 	const std::vector<std::wstring>
 		com_res_options {L"2160", L"1440", L"1080", L"720", L"480", L"360"},

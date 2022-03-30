@@ -72,6 +72,8 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 	get_place()["page3"] << page3;
 	collocate();
 
+	theme.contrast(conf.contrast);
+
 	auto clr {btn_settings.scheme().activated};
 	if(conf.cbtheme == 2)
 	{
@@ -124,27 +126,37 @@ void GUI::on_btn_next()
 
 			auto jtext {util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + L" -j " + url)};
 			if(!working) return;
-			if(jtext.find("{\"id\":") != 0)
+			auto pos {jtext.find("{\"id\":")};
+			if(pos == -1)
 			{
-				form fm {*this, API::make_center(*this, 1000, 600)};
+				themed_form fm {nullptr, *this, API::make_center(*this, 1000, 600)};
 				fm.caption("yt-dlp.exe error");
-				fm.bgcolor(colors::white);
+				fm.bgcolor(theme.fmbg);
 				fm.div("vert margin=20 <label weight=30><weight=20><textbox>");
-				nana::label lbl {fm, "Received unexpected output from yt-dlp.exe after requesting video info!"};
+				fm.theme_callback([&, this](bool dark)
+				{
+					if(dark) theme.make_dark();
+					else theme.make_light();
+					fm.bgcolor(theme.fmbg);
+				});
+				::widgets::Label lbl {fm, &theme, "Received unexpected output from yt-dlp.exe after requesting video info!"};
 				fm["label"] << lbl;
 				lbl.text_align(align::center, align_v::center);
 				lbl.typeface(nana::paint::font_info {"", 13, {800}});
 				lbl.fgcolor(color {"#BA4B3E"});
-				nana::textbox tb {fm, jtext};
+				::widgets::Textbox tb {fm, &theme};
+				tb.caption(jtext);
 				fm["textbox"] << tb;
 				tb.line_wrapped(true);
 				fm.collocate();
 				fm.modality();
 				get_place().field_display("page1", true);
 				collocate();
+				bring_top(true);
 				working = false;
 				return;
 			}
+			if(pos) jtext.erase(0, pos);
 			fs::path tmp_fname {std::tmpnam(nullptr)};
 			vidinfo.clear();
 			std::ofstream {tmp_fname} << jtext;
@@ -162,22 +174,39 @@ void GUI::on_btn_next()
 			std::string title {vidinfo["title"]};
 			l_title.caption(title);
 
-			int dur {vidinfo["duration"]};
+			int dur {0};//{vidinfo["duration"]};
+			if(vidinfo["is_live"])
+			{
+				if(lbformats.size_categ() == 3)
+				{
+					lbformats.erase(1);
+					lbformats.erase(1);
+				}
+			}
+			else
+			{
+				dur = vidinfo["duration"];
+				if(lbformats.size_categ() == 1)
+					lbformats.append({"Audio only", "Video only"});
+			}
 			int hr {(dur/60)/60}, min {(dur/60)%60}, sec {dur%60};
 			if(dur < 60) sec = dur;
-			std::string durstr;
-			std::stringstream ss;
-			ss.width(2);
-			ss.fill('0');
-			if(hr)
+			std::string durstr {"live"};
+			if(dur)
 			{
-				ss << min;
-				durstr = std::to_string(hr) + ':' + ss.str();
-				ss.str("");
+				std::stringstream ss;
+				ss.width(2);
+				ss.fill('0');
+				if(hr)
+				{
+					ss << min;
+					durstr = std::to_string(hr) + ':' + ss.str();
+					ss.str("");
+				}
+				else durstr = std::to_string(min);
+				ss << sec;
+				durstr += ':' + ss.str();
 			}
-			else durstr = std::to_string(min);
-			ss << sec;
-			durstr += ':' + ss.str();
 			l_durtext.caption(durstr);
 
 			auto strchap {std::to_string(vidinfo["chapters"].size())};
@@ -230,7 +259,7 @@ void GUI::on_btn_next()
 			if(is_zoomed(true)) restore();
 			if(API::screen_dpi(true) > 96)
 				maximize_v(1000);
-			else center(1000, 384.0 + lbformats.item_count()*20.4);
+			else center(1000, max(384.0 + lbformats.item_count()*20.4, 800));
 			get_place().field_display("page2", true);
 			collocate();
 			working = false;
@@ -241,7 +270,7 @@ void GUI::on_btn_next()
 		if(is_zoomed(true)) restore();
 		if(API::screen_dpi(true) > 96)
 			maximize_v(1000);
-		else center(1000, 384.0 + lbformats.item_count()*20.4);
+		else center(1000, max(384.0 + lbformats.item_count() * 20.4, 800));
 		get_place().field_display("page2", true);
 		collocate();
 	}
@@ -250,10 +279,12 @@ void GUI::on_btn_next()
 
 void GUI::on_btn_dl()
 {
+	bool graceful_exit {false};
 	if(btndl.caption().find("Stop") == -1)
 	{
 		btndl.caption("Stop download");
 		btndl.cancel_mode(true);
+		tbpipe_overlay.hide();
 
 		std::wstring cmd {L'\"' + conf.ytdlp_path.wstring() + L'\"'};
 		if(link_yt && conf.vidinfo) cmd += L" -f " + strfmt;
@@ -261,9 +292,9 @@ void GUI::on_btn_dl()
 		{
 			cmd += L" -S \"res:" + com_res_options[conf.pref_res];
 			if(conf.pref_video)
-				cmd += L",vcodec:" + com_video_options[conf.pref_video];
+				cmd += L",vext:" + com_video_options[conf.pref_video];
 			if(conf.pref_audio)
-				cmd += L",acodec:" + com_audio_options[conf.pref_audio];
+				cmd += L",aext:" + com_audio_options[conf.pref_audio];
 			if(conf.pref_fps)
 				cmd += L",fps";
 			cmd += '\"';
@@ -295,20 +326,34 @@ void GUI::on_btn_dl()
 			cmd += L"--split-chapters -o chapter:\"" + conf.outpath.wstring() + L"\\%(title)s - %(section_number)s -%(section_title)s.%(ext)s\" ";
 		if(cbkeyframes.checked())
 			cmd += L"--force-keyframes-at-cuts ";
+		if(conf.cbargs && !conf.args.empty())
+			cmd += conf.args + L" ";
 		cmd += L"-o \"" + conf.outpath.wstring() + L"\\%(title)s.%(ext)s\" ";
 		cmd += url;
 		btnbackto1.enabled(false);
 		tbpipe.select(true);
 		tbpipe.del();
 		if(thr.joinable()) thr.join();
-		thr = std::thread([this, cmd]
+		thr = std::thread([this, cmd, &graceful_exit]
 		{
 			working = true;
 			auto ca {tbpipe.colored_area_access()};
 			ca->clear();
-			tbpipe.append(L"[GUI] executing command line: " + cmd + L"\n\n", false);
+			if(fs::exists(conf.ytdlp_path))
+				tbpipe.append(L"[GUI] executing command line: " + cmd + L"\n\n", false);
+			else tbpipe.append(L"ytdlp.exe not found: " + conf.ytdlp_path.wstring(), false);
 			auto p {ca->get(0)};
 			p->count = 1;
+			if(!fs::exists(conf.ytdlp_path))
+			{
+				p->fgcolor = theme.is_dark() ? nana::color {"#f99"} : nana::color {"#832"};
+				nana::API::refresh_window(tbpipe);
+				btndl.caption("Begin download");
+				btndl.cancel_mode(false);
+				btnbackto2.enabled(true);
+				working = false;
+				return;
+			}
 			p->fgcolor = theme.is_dark() ? theme.path_link_fg : nana::color {"#569"};
 			nana::API::refresh_window(tbpipe);
 			unsigned fmtnum {0};
@@ -331,9 +376,6 @@ void GUI::on_btn_dl()
 							prog.caption(text + " (format " + fmt + ")");
 						else prog.caption(text);
 					}
-					else if(link_yt && conf.vidinfo)
-						prog.caption("Format " + fmt + " has already been downloaded!");
-					else prog.caption("File has already been downloaded!");
 					fmtnum++;
 				}
 				prog.value(completed);
@@ -342,7 +384,7 @@ void GUI::on_btn_dl()
 			prog.value(0);
 			prog.caption("");
 			if(i_taskbar) i_taskbar->SetProgressState(hwnd, TBPF_NORMAL);
-			util::run_piped_process(cmd, &working, &tbpipe, cb_progress);
+			util::run_piped_process(cmd, &working, &tbpipe, cb_progress, &graceful_exit);
 			if(i_taskbar) i_taskbar->SetProgressState(hwnd, TBPF_NOPROGRESS);
 			if(!working) return;
 			btnbackto1.enabled(true);
@@ -364,11 +406,15 @@ void GUI::on_btn_dl()
 		working = false;
 		if(thr.joinable())
 			thr.join();
-		tbpipe.append("\n[GUI] yt-dlp.exe process was ended\n", false);
+		if(graceful_exit)
+			tbpipe.append("\n[GUI] yt-dlp.exe process was ended gracefully via Ctrl+C signal\n", false);
+		else tbpipe.append("\n[GUI] yt-dlp.exe process was ended forcefully via WM_CLOSE message\n", false);
 		auto ca {tbpipe.colored_area_access()};
 		auto p {ca->get(tbpipe.text_line_count()-2)};
 		p->count = 1;
-		p->fgcolor = theme.is_dark() ? nana::color {"#f99"} : nana::color {"#832"};
+		if(graceful_exit)
+			p->fgcolor = theme.is_dark() ? theme.path_link_fg : nana::color {"#569"};
+		else p->fgcolor = theme.is_dark() ? nana::color {"#f99"} : nana::color {"#832"};
 		nana::API::refresh_window(tbpipe);
 		btnbackto1.enabled(true);
 		btnbackto2.enabled(true);
@@ -531,7 +577,6 @@ void GUI::make_page2()
 	lbformats.append_header("abr", dpi_transform(40).width);
 	lbformats.append_header("asr", dpi_transform(50).width);
 	lbformats.append_header("filesize", dpi_transform(160).width);
-	lbformats.append({"Audio only", "Video only"});
 
 	lbformats.events().selected([this](const arg_listbox &arg)
 	{
@@ -540,8 +585,11 @@ void GUI::make_page2()
 			btntodl.enabled(true);
 			if(arg.item.pos().cat == 0)
 			{
-				lbformats.at(1).select(false);
-				lbformats.at(2).select(false);
+				if(lbformats.size_categ() == 3)
+				{
+					lbformats.at(1).select(false);
+					lbformats.at(2).select(false);
+				}
 			}
 			else
 			{
@@ -583,10 +631,10 @@ void GUI::make_page3()
 	plc3.div(R"(
 			vert <tbpipe> <weight=20>
 			<prog weight=30> <weight=20>
-			<gpopt weight=175> <weight=20>
+			<gpopt weight=220> <weight=20>
 			<weight=35 <> <btnbackto2 weight=160> <weight=20> <btndl weight=200> <>>
 		)");
-	plc3["tbpipe"] << tbpipe;
+	plc3["tbpipe"].fasten(tbpipe).fasten(tbpipe_overlay);
 	plc3["prog"] << prog;
 	plc3["gpopt"] << gpopt;
 	plc3["btnbackto2"] << btnbackto2;
@@ -600,6 +648,16 @@ void GUI::make_page3()
 	tbpipe.scheme().mouse_wheel.lines = 3;
 	tbpipe.typeface(paint::font_info {"Arial", 10});
 	API::effects_edge_nimbus(tbpipe, effects::edge_nimbus::none);
+	tbpipe.events().click([this]
+	{
+		tbpipe.select(true);
+		tbpipe.copy();
+		tbpipe.select(false);
+	});
+
+	API::effects_bground(tbpipe_overlay, effects::bground_transparent {0}, 0.0);
+	tbpipe_overlay.text_align(align::center, align_v::center);
+	tbpipe_overlay.typeface(nana::paint::font_info {"", 14, {700}});
 
 	plcopt.bind(gpopt);
 	page3.bgcolor(theme.fmbg);
@@ -612,6 +670,7 @@ void GUI::make_page3()
 				<> <cbchaps weight=133> <> <cbsplit weight=116> <> <cbkeyframes weight=186>
 			> <weight=20>
 			<weight=25 <cbtime weight=296> <> <cbthumb weight=144> <> <cbsubs weight=132> <> <cbmp3 weight=173>>
+			<weight=20> <weight=25 <cbargs weight=156> <weight=15> <tbargs>>
 		)");
 	gpopt["l_out"] << l_out;
 	gpopt["l_outpath"] << l_outpath;
@@ -625,9 +684,15 @@ void GUI::make_page3()
 	gpopt["cbsubs"] << cbsubs;
 	gpopt["cbthumb"] << cbthumb;
 	gpopt["cbtime"] << cbtime;
+	gpopt["cbargs"] << cbargs;
+	gpopt["tbargs"] << tbargs;
 
 	tbrate.multi_lines(false);
 	tbrate.padding(0, 5, 0, 5);
+	tbargs.multi_lines(false);
+	tbargs.padding(0, 5, 0, 5);
+	tbargs.caption(conf.args);
+
 	if(conf.ratelim)
 		tbrate.caption(util::format_float(conf.ratelim, 1));
 	tbrate.set_accept([this](wchar_t wc)->bool
@@ -647,6 +712,11 @@ void GUI::make_page3()
 			}
 			conf.ratelim = tbrate.to_double();
 		}
+	});
+
+	tbargs.events().text_changed([this]
+	{
+		conf.args = tbargs.caption_wstring();
 	});
 
 	com_rate.editable(false);
@@ -702,6 +772,7 @@ void GUI::make_page3()
 	cbtime.check(conf.cbtime);
 	cbkeyframes.check(conf.cbkeyframes);
 	cbmp3.check(conf.cbmp3);
+	cbargs.check(conf.cbargs);
 
 	cbsplit.radio(true);
 	cbchaps.radio(true);
@@ -725,6 +796,7 @@ void GUI::make_page3()
 	cbsubs.events().checked([this] { conf.cbsubs = cbsubs.checked(); });
 	cbkeyframes.events().checked([this] { conf.cbkeyframes = cbkeyframes.checked(); });
 	cbmp3.events().checked([this] { conf.cbmp3 = cbmp3.checked(); });
+	cbargs.events().checked([this] { conf.cbargs = cbargs.checked(); });
 
 	plc3.collocate();
 }
@@ -732,7 +804,7 @@ void GUI::make_page3()
 
 void GUI::settings_dlg()
 {
-	themed_form fm {nullptr, *this, nana::API::make_center(*this, dpi_transform(567, 432)), appear::decorate<appear::minimize>{}};
+	themed_form fm {nullptr, *this, nana::API::make_center(*this, dpi_transform(567, 500)), appear::decorate<appear::minimize>{}};
 	fm.caption(title + " - settings");
 	fm.bgcolor(theme.fmbg);
 	fm.div(R"(vert margin=20
@@ -742,25 +814,42 @@ void GUI::settings_dlg()
 			<l_audio weight=182> <weight=10> <com_audio weight=60>
 		>
 		<weight=20> <weight=25 <cbinfo weight=380> > <weight=20>
+		<separator_a weight=1> <weight=1> <separator_b weight=1> <weight=20>
 		<weight=25 <l_theme weight=92> <weight=20> <cbtheme_dark weight=57> <weight=20> 
 			<cbtheme_light weight=58> <weight=20> <cbtheme_system weight=152> > <weight=20>
-		<separator_a weight=1> <weight=1> <separator_b weight=1>
+		<weight=25 <l_contrast weight=64> <weight=20> <slider> > <weight=20>
+		<separator_c weight=1> <weight=1> <separator_d weight=1>
 		<weight=20> <gpupdate weight=133> <weight=20>
 		<weight=35 <> <btn_whatever weight=170> <>>
 	)");
 
 	widgets::Label l_res {fm, &theme, "Preferred resolution:"}, l_latest {fm, &theme, "Latest version:"},
 		l_video {fm, &theme, "Preferred video container:"}, l_audio {fm, &theme, "Preferred audio container:"},
-		l_theme {fm, &theme, "Color theme:"};
+		l_theme {fm, &theme, "Color theme:"}, l_contrast {fm, &theme, "Contrast:"};
 	widgets::Combox com_res {fm, &theme}, com_video {fm, &theme}, com_audio {fm, &theme};
 	widgets::cbox cbfps {fm, &theme, "Prefer a higher framerate"}, cbinfo {fm, &theme, "YouTube: show video info and list available formats"},
 		cbtheme_dark {fm, &theme, "Dark"}, cbtheme_light {fm, &theme, "Light"}, cbtheme_system {fm, &theme, "System preference"};
-	widgets::separator separator_a {fm, &theme}, separator_b {fm, &theme};
+	widgets::separator separator_a {fm, &theme}, separator_b {fm, &theme}, separator_c {fm, &theme}, separator_d {fm, &theme};
 	widgets::Button btn_whatever {fm, &theme, " Whatever"};
 	nana::paint::image img;
 	img.open(arr_whatever_ico, sizeof arr_whatever_ico);
 	btn_whatever.icon(img);
 	btn_whatever.events().click([&] {fm.close(); });
+	widgets::Slider slider {fm, &theme};
+	{
+		slider.maximum(30);
+		slider.value(conf.contrast*100);
+		slider.events().value_changed([&]
+		{
+			conf.contrast = static_cast<double>(slider.value()) / 100;
+			theme.contrast(conf.contrast);
+			fm.bgcolor(theme.fmbg);
+			fm.refresh_widgets();
+			gpopt.bgcolor(theme.gpbg);
+			apply_theme(theme.is_dark());
+			refresh_widgets();
+		});
+	}
 	nana::radio_group rg;
 	rg.add(cbtheme_dark);
 	rg.add(cbtheme_light);
@@ -802,14 +891,18 @@ void GUI::settings_dlg()
 	fm["com_video"] << com_video;
 	fm["l_audio"] << l_audio;
 	fm["com_audio"] << com_audio;
+	fm["separator_a"] << separator_a;
+	fm["separator_b"] << separator_b;
 	fm["l_theme"] << l_theme;
 	fm["cbtheme_dark"] << cbtheme_dark;
 	fm["cbtheme_light"] << cbtheme_light;
 	if(system_supports_darkmode())
 		fm["cbtheme_system"] << cbtheme_system;
+	fm["l_contrast"] << l_contrast;
+	fm["slider"] << slider;
 	fm["gpupdate"] << gpupdate;
-	fm["separator_a"] << separator_a;
-	fm["separator_b"] << separator_b;
+	fm["separator_c"] << separator_c;
+	fm["separator_d"] << separator_d;
 	fm["btn_whatever"] << btn_whatever;
 
 	cbinfo.tooltip("This allows manual selection of formats for YouTube videos.\n"
@@ -863,10 +956,6 @@ void GUI::settings_dlg()
 	com_audio.option(conf.pref_audio);
 	cbfps.check(conf.pref_fps);
 	cbinfo.check(conf.vidinfo);
-
-	/*btn_update.tooltip("Downloads the new release archive from GitHub (to a folder for\n"
-		"temporary files), and unpacks it to overwrite the current files\n"
-		"(the program will automatically restart if successful).");*/
 
 	bool working {false};
 	std::thread thr;
@@ -1006,12 +1095,7 @@ void GUI::settings_dlg()
 
 void GUI::changes_dlg(nana::window parent)
 {
-	using namespace nana;
-
-	std::string tag_name {releases[0]["tag_name"]}, body {releases[0]["body"]};
-	body.erase(0, body.find('-'));
-
-	themed_form fm {nullptr, parent, API::make_center(parent, dpi_transform(800, 400)), appear::decorate<appear::sizable, appear::minimize, appear::maximize>{}};
+	themed_form fm {nullptr, parent, nana::API::make_center(parent, dpi_transform(900, 445)), appear::decorate<appear::sizable>{}};
 	fm.theme_callback([&, this](bool dark)
 	{
 		if(dark) theme.make_dark();
@@ -1020,18 +1104,74 @@ void GUI::changes_dlg(nana::window parent)
 	});
 	if(conf.cbtheme == 2)
 		fm.system_theme(true);
-	else dark_theme(conf.cbtheme == 0);
+	else fm.dark_theme(conf.cbtheme == 0);
 
-	fm.caption("ytdlp-interface - " + tag_name + " changes");
+	fm.caption("ytdlp-interface - release notes");
 	fm.bgcolor(theme.fmbg);
-	fm.div(R"(vert margin=20 tb)");
-	::widgets::Textbox tb {fm, &theme};
-	API::effects_edge_nimbus(tb, effects::edge_nimbus::none);
-	tb.typeface(nana::paint::font_info {"", 12});
-	tb.line_wrapped(true);
-	tb.editable(false);
-	tb.caption(body);
-	fm["tb"] << tb;
+	fm.div(R"(vert margin=20 <tb> <weight=20> <weight=25 <> <l_history weight=164> <weight=10> <com_history weight=55> <> >)");
+
+	widgets::Textbox tb {fm, &theme};
+	{
+		fm["tb"] << tb;
+		nana::API::effects_edge_nimbus(tb, nana::effects::edge_nimbus::none);
+		tb.typeface(nana::paint::font_info {"Courier New", 12});
+		tb.line_wrapped(true);
+		tb.editable(false);
+	}
+
+	auto display_release_notes = [&](const unsigned ver)
+	{
+		std::string tag_name {releases[ver]["tag_name"]};
+		std::string body {releases[ver]["body"]};
+		body.erase(0, body.find('-'));
+		std::string date {releases[ver]["published_at"]};
+		date.erase(date.find('T'));
+		auto title {tag_name + " (" + date + ")\n"};
+		title += std::string(title.size()-1, '=') + "\n\n";
+		tb.caption(title + body);
+	};
+
+	display_release_notes(0);
+
+	widgets::Label l_history {fm, &theme, "Show release notes for:"};
+	fm["l_history"] << l_history;
+
+	widgets::Combox com_history {fm, &theme};
+	{
+		fm["com_history"] << com_history;
+		com_history.editable(false);
+		for(auto &release : releases)
+		{
+			std::string text {release["tag_name"]};
+			com_history.push_back(" " + text);
+		}
+		com_history.option(0);
+		com_history.events().selected([&]
+		{
+			display_release_notes(com_history.option());
+		});
+	}
+
+	tb.events().mouse_wheel([&](const nana::arg_wheel &arg)
+	{
+		if(!tb.scroll_operation()->visible(true) && arg.which == nana::arg_wheel::wheel::vertical)
+		{
+			const auto idx_sel {com_history.option()}, idx_last {com_history.the_number_of_options() - 1};
+			if(arg.upwards)
+			{
+				if(idx_sel == 0)
+					com_history.option(idx_last);
+				else com_history.option(idx_sel - 1);
+			}
+			else
+			{
+				if(idx_sel == idx_last)
+					com_history.option(0);
+				else com_history.option(idx_sel + 1);
+			}
+		}
+	});
+
 	fm.collocate();
 	fm.show();
 	fm.modality();
@@ -1043,13 +1183,14 @@ void GUI::apply_theme(bool dark)
 	if(dark)
 	{
 		theme.make_dark();
-		tbrate.bgcolor(theme.gpbg);
 		l_wait.caption("<bold color=0xcA9B8E size=20>DON'T MOVE\n\n</><bold color=0xddeeff size=14>getting video info...\n</>");
+		tbpipe_overlay.fgcolor(nana::color {"#666"});
 	}
 	else
 	{
 		theme.make_light();
 		l_wait.caption("<bold color=0xaa8888 size=20>DON'T MOVE\n\n</><bold color=0x556677 size=14>getting video info...\n</>");
+		tbpipe_overlay.fgcolor(nana::color {"#ccd0d3"});
 	}
 
 	if(tbpipe.text_line_count())
