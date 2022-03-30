@@ -8,7 +8,7 @@ Some third-party binaries are distributed with the program binary:
 
 To use, unpack the archive in a new folder at a location of your choice, and run `ytdlp-interface.exe`. To completely remove from your system, also delete the settings file `%AppData%\ytdlp-interface.json`.
 
-Download link: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v1.3.0/ytdlp-interface.7z
+Download link: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v1.4.0/ytdlp-interface.7z
 
 ---
 
