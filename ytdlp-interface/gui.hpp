@@ -39,7 +39,7 @@ private:
 	std::thread thr, thr_releases;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v1.4.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 4)};
+	const std::string ver_tag {"v1.4.1"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/};
 
 	nana::panel<false> page1 {*this}, page1a {*this}, page2 {*this}, page3 {*this};
 	nana::place plc1 {page1}, plc1a {page1a}, plc2 {page2}, plc3 {page3}, plcopt;

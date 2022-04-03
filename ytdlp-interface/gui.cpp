@@ -356,12 +356,10 @@ void GUI::on_btn_dl()
 			}
 			p->fgcolor = theme.is_dark() ? theme.path_link_fg : nana::color {"#569"};
 			nana::API::refresh_window(tbpipe);
-			unsigned fmtnum {0};
 			auto sel {lbformats.selected()};
 			ULONGLONG prev_val {0};
 			auto cb_progress = [&, this](ULONGLONG completed, ULONGLONG total, std::string text)
 			{
-				auto fmt {nana::to_utf8(fmtnum ? conf.fmt2 : conf.fmt1)};
 				if(i_taskbar) i_taskbar->SetProgressValue(hwnd, completed, total);
 				if(completed < 1000)
 					prog.caption(text);
@@ -372,11 +370,8 @@ void GUI::on_btn_dl()
 						auto pos {text.find_last_not_of(" \t")};
 						if(text.size() > pos)
 							text.erase(pos+1);
-						if(link_yt && conf.vidinfo)
-							prog.caption(text + " (format " + fmt + ")");
-						else prog.caption(text);
+						prog.caption(text);
 					}
-					fmtnum++;
 				}
 				prog.value(completed);
 				prev_val = completed;
@@ -924,6 +919,7 @@ void GUI::settings_dlg()
 
 	for(auto &opt : com_res_options)
 		com_res.push_back(" " + nana::to_utf8(opt));
+
 	com_res.option(conf.pref_res);
 	com_res.tooltip(res_tip);
 	l_res.tooltip(res_tip);
