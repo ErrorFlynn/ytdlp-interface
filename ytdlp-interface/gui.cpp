@@ -1514,7 +1514,7 @@ void GUI::updater_dlg(nana::window parent)
 		{
 			std::string tag_name {releases[0]["tag_name"]};
 			std::string vertext;
-			if(!is_tag_a_new_version(tag_name))
+			if(is_tag_a_new_version(tag_name))
 			{
 				vertext = tag_name + " (new version)";
 				btn_update.enabled(true);
