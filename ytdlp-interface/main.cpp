@@ -10,6 +10,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 	int argc;
 	LPWSTR *argv {CommandLineToArgvW(GetCommandLineW(), &argc)};
 	fs::path modpath {argv[0]}, appdir {modpath.parent_path()};
+	std::error_code ec;
+	if(fs::exists(appdir / "7zxa.dll"))
+		fs::remove(appdir / "7zxa.dll", ec);
+
 	if(argc > 1)
 	{
 		if(std::wstring {argv[1]} == L"update")
@@ -17,8 +21,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			fs::path arc_path {argv[2]}, target_dir {argv[3]};
 			util::end_processes(modpath.filename());
 			auto res {util::extract_7z(arc_path, target_dir)};
-			fs::remove(arc_path);
-			fs::remove(fs::temp_directory_path() / "7zxa.dll");
+			fs::remove(arc_path, ec);
+			fs::remove(fs::temp_directory_path() / "7z.dll", ec);
 			if(!res.empty())
 			{
 				msgbox mbox {"ytdlp-interface - updating failed"};
@@ -35,7 +39,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		}
 		else if(std::wstring {argv[1]} == L"cleanup")
 		{
-			fs::remove(fs::temp_directory_path() / "ytdlp-interface.exe");
+			fs::remove(fs::temp_directory_path() / "ytdlp-interface.exe", ec);
 		}
 	}
 	LocalFree(argv);
@@ -49,6 +53,19 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		GUI::conf.ytdlp_path = appdir / "yt-dlp.exe";
 
 	fs::path confpath {util::get_sys_folder(FOLDERID_RoamingAppData) + L"\\ytdlp-interface.json"};
+	auto appdir_confpath {appdir / "ytdlp-interface.json"};
+	if(util::is_dir_writable(appdir))
+	{
+		if(fs::exists(confpath) && !fs::exists(appdir_confpath))
+		{
+			fs::rename(confpath, appdir_confpath, ec);
+			if(ec) fs::copy_file(confpath, appdir_confpath, ec);
+		}
+		confpath = appdir_confpath;
+	}
+	else if(fs::exists(appdir_confpath) && !fs::exists(confpath))
+		fs::copy_file(appdir_confpath, confpath, ec);
+
 	if(fs::exists(confpath))
 	{
 		std::ifstream f {confpath};
@@ -88,11 +105,22 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			}
 			if(jconf.contains("cbtheme")) // v1.3
 				GUI::conf.cbtheme = jconf["cbtheme"];
-			if(jconf.contains("args")) // v1.4
+			if(jconf.contains("contrast")) // v1.4
 			{
-				GUI::conf.args = to_wstring(std::string {jconf["args"]});
 				GUI::conf.contrast = jconf["contrast"];
 				GUI::conf.cbargs = jconf["cbargs"];
+				if(jconf.contains("args"))
+				{
+					GUI::conf.argsets.push_back(jconf["args"]);
+					jconf.erase("args"); // no longer used since v1.5
+				}
+			}
+			if(jconf.contains("kwhilite")) // v1.5
+			{
+				GUI::conf.kwhilite = jconf["kwhilite"];
+				GUI::conf.com_args = jconf["com_args"];
+				for(auto &el : jconf["argsets"])
+					GUI::conf.argsets.push_back(el);
 			}
 		}
 	}
@@ -105,6 +133,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 
 	GUI gui;
 	gui.show();
+	gui.bring_top(true);
 	gui.events().unload([&]
 	{
 		jconf["ytdlp_path"] = GUI::conf.ytdlp_path;
@@ -126,9 +155,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["pref_fps"] = GUI::conf.pref_fps;
 		jconf["vidinfo"] = GUI::conf.vidinfo;
 		jconf["cbtheme"] = GUI::conf.cbtheme;
-		jconf["args"] = to_utf8(GUI::conf.args);
 		jconf["contrast"] = GUI::conf.contrast;
 		jconf["cbargs"] = GUI::conf.cbargs;
+		jconf["kwhilite"] = GUI::conf.kwhilite;
+		jconf["argsets"] = GUI::conf.argsets;
+		jconf["com_args"] = GUI::conf.com_args;
 		std::ofstream {confpath} << std::setw(4) << jconf;
 	});
 	nana::exec();

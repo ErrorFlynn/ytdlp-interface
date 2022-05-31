@@ -72,7 +72,7 @@ HWND util::hwnd_from_pid(DWORD pid)
 	return lparam.hwnd;
 }
 
-std::string util::run_piped_process(std::wstring cmd, bool *working, nana::textbox *tb, callback cb, bool *graceful_exit)
+std::string util::run_piped_process(std::wstring cmd, bool *working, widgets::Textbox *tb, callback cb, bool *graceful_exit)
 {
 	std::string ret;
 	HANDLE hPipeRead, hPipeWrite;
@@ -171,6 +171,16 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, nana::textb
 					}
 					if(!line.empty())
 					{
+						if(tb && line[0] == '[')
+						{
+							auto pos {line.find(']')};
+							if(line.find(']') != -1)
+							{
+								auto text {line.substr(0, pos + 1)};
+								if(text != "[download]" && text[1] != '#')
+									tb->set_keyword(text);
+							}
+						}
 						auto pos {line.find('%')};
 						if(pos != -1 && line.find("[download]") == 0)
 						{
@@ -187,6 +197,19 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, nana::textb
 								line.pop_back();
 								cb(static_cast<ULONGLONG>(percent * 10), 1000, line.substr(pos2));
 							}
+						}
+						else if(pos != -1 && line.find("[#") == 0 && line[line.size()-2] == ']')
+						{
+							auto pos2 {line.rfind('(', pos) + 1};
+							auto strpct {line.substr(pos2, pos - pos2)};
+							auto pos3 {line.find("ETA:")};
+							std::string eta;
+							if(pos3 != -1)
+								eta = line.substr(pos3, line.size() - 2 - pos3);
+							std::string text {strpct + '%'};
+							if(!eta.empty()) text += " " + eta;
+							cb(static_cast<ULONGLONG>(std::stod(strpct) * 10), 1000, text);
+							s += line;
 						}
 						else s += line;
 					}
@@ -309,54 +332,117 @@ std::string util::dl_inet_res(std::string res, fs::path fname, bool *working, st
 	std::string ret;
 	std::ofstream f {fname, std::ios::binary};
 	if(!f.good())
-		return "Failed to open file for writing: " + fname.u8string();
+		return "Failed to open file for writing: " + fname.string();
 
 	auto hinet {InternetOpenA("Smith", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0)};
-	auto hfile {InternetOpenUrlA(hinet, res.data(), NULL, 0, 0, 0)};
-	DWORD read {1};
-
-	while(read)
+	if(hinet)
 	{
-		if(working && !*working) break;
-		std::string buf(65535, '\0');
-		if(InternetReadFile(hfile, &buf.front(), buf.size(), &read))
+		auto hfile {InternetOpenUrlA(hinet, res.data(), NULL, 0, 0, 0)};
+		if(hfile)
 		{
-			if(read < buf.size())
-				buf.resize(read);
-			f.write(buf.data(), buf.size());
-			if(!f.good())
-			{
-				ret = "Failed writing to file: " + fname.u8string();
-				break;
-			}
-			if(cb) cb(buf.size());
-		}
-		else break;
-	}
+			DWORD read {1};
 
-	InternetCloseHandle(hinet);
-	InternetCloseHandle(hfile);
+			while(read)
+			{
+				if(working && !*working)
+				{
+					f.close();
+					fs::remove(fname);
+					break;
+				}
+				std::string buf(65535, '\0');
+				if(InternetReadFile(hfile, &buf.front(), buf.size(), &read))
+				{
+					if(read < buf.size())
+						buf.resize(read);
+					f.write(buf.data(), buf.size());
+					if(!f.good())
+					{
+						ret = "Failed writing to file: " + fname.string();
+						break;
+					}
+					if(cb)
+					{
+						if(working)
+						{
+							if(*working)
+								cb(buf.size());
+						}
+						else cb(buf.size());
+					}
+				}
+				else
+				{
+					ret = GetLastErrorStr(true);
+					break;
+				}
+			}
+			InternetCloseHandle(hfile);
+		}
+		else ret = GetLastErrorStr(true);
+		InternetCloseHandle(hinet);
+	}
+	else ret = GetLastErrorStr(true);
+
 	return ret;
 }
 
-std::string util::extract_7z(std::filesystem::path arc_path, std::filesystem::path out_path)
+std::string util::extract_7z(fs::path arc_path, fs::path out_path, bool ffmpeg)
 {
 	using namespace bit7z;
 
 	std::wstring modpath(4096, '\0');
 	modpath.resize(GetModuleFileNameW(0, &modpath.front(), modpath.size()));
-	std::filesystem::path lib_path {modpath};
-	lib_path.replace_filename("7zxa.dll");
+	fs::path lib_path {modpath};
+	lib_path.replace_filename("7z.dll");
 
 	try
 	{
 		Bit7zLibrary lib {lib_path};
-		BitExtractor extractor {lib, BitFormat::SevenZip};
-		extractor.extract(arc_path, out_path);
+		BitExtractor extractor {lib, ffmpeg ? BitFormat::Zip : BitFormat::SevenZip};
+		if(ffmpeg)
+		{
+			extractor.extractMatching(arc_path, L"*\\bin\\ffmpeg.exe", out_path);
+			extractor.extractMatching(arc_path, L"*\\bin\\ffprobe.exe", out_path);
+		}
+		else extractor.extract(arc_path, out_path);
 		return "";
 	}
 	catch(const BitException& ex)
 	{
 		return ex.what();
 	}
+}
+
+std::string util::get_clipboard_text()
+{
+	std::string text;
+	if(OpenClipboard(NULL))
+	{
+		if(IsClipboardFormatAvailable(CF_TEXT))
+		{
+			auto h {GetClipboardData(CF_TEXT)};
+			if(h)
+			{
+				auto ptext {static_cast<char *>(GlobalLock(h))};
+				if(ptext)
+				{
+					text = ptext;
+					GlobalUnlock(h);
+				}
+			}
+		}
+		CloseClipboard();
+	}
+	return text;
+}
+
+bool util::is_dir_writable(fs::path dir)
+{
+	if(std::ofstream {dir / "write_test.out"}.good())
+	{
+		fs::remove(dir / "write_test.out");
+		return true;
+	}
+	return false;
 }

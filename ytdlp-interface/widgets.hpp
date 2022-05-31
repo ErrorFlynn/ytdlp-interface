@@ -1,3 +1,5 @@
+#pragma once
+
 #include <nana/gui.hpp>
 #include <nana/gui/widgets/button.hpp>
 #include <nana/gui/widgets/panel.hpp>
@@ -12,6 +14,7 @@
 #include <variant>
 
 #include "progress_ex.hpp"
+#include "icons.hpp"
 
 namespace fs = std::filesystem;
 
@@ -25,7 +28,7 @@ namespace widgets
 
 	public:
 		nana::color nimbus, fmbg, Label_fg, Text_fg, Text_fg_error, cbox_fg, btn_bg, btn_fg,
-			path_bg, path_fg, path_link_fg, sep_bg, tbfg, tbbg, gpbg, lb_headerbg, title_fg;
+			path_bg, path_fg, path_link_fg, sep_bg, tbfg, tbbg, tbkw, tbkw_special, gpbg, lb_headerbg, title_fg;
 		std::string gpfg;
 
 		void make_light()
@@ -45,7 +48,9 @@ namespace widgets
 			path_link_fg = color {"#789"};
 			sep_bg = color {"#cdcdcd"};
 			gpfg = "0x81544F";
-			title_fg = nana::color {"#789"};
+			title_fg = color {"#789"};
+			tbkw = color {"#272"};
+			tbkw_special = color {"#722"};
 		}
 
 		void make_dark()
@@ -68,6 +73,8 @@ namespace widgets
 			lb_headerbg = color {"#525658"}.blend(colors::black, shade);
 			title_fg = nana::color {"#cde"};
 			path_link_fg = color {"#E4D6BA"};
+			tbkw = color {"#b5c5d5"};
+			tbkw_special = color {"#F0B0A0"};
 		}
 
 		bool is_dark() { return dark; }
@@ -113,7 +120,11 @@ namespace widgets
 			typeface(nana::paint::font_info {"", 12 - (double)(nana::API::screen_dpi(true) > 96) * 2});
 			text_align(nana::align::left, nana::align_v::center);
 			nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
-			events().expose([this] { fgcolor(error_mode_ ? theme->Text_fg_error : theme->Text_fg); });
+			events().expose([this]
+			{
+				fgcolor(error_mode_ ? theme->Text_fg_error : theme->Text_fg);
+				scheme().activated = theme->nimbus;
+			});
 		}
 		void error_mode(bool enable)
 		{
@@ -167,7 +178,7 @@ namespace widgets
 		{
 			const std::wstring wstr {is_path ? std::get<fs::path*>(v)->wstring() : *std::get<std::wstring*>(v)};
 			if(!is_path && wstr.empty())
-				caption("Click to paste media link");
+				caption("Press Ctrl+V or click here to paste media link");
 			else if(!size().empty())
 			{
 				caption(wstr);
@@ -229,6 +240,8 @@ namespace widgets
 	class Button : public nana::button
 	{
 		theme_t* theme {nullptr};
+		nana::paint::image img, img_disabled;
+
 		class btn_bg : public nana::element::element_interface
 		{
 		public:
@@ -283,6 +296,31 @@ namespace widgets
 			{
 				fgcolor(theme->btn_fg);
 				scheme().activated = theme->nimbus;
+			}
+		}
+
+		void image(const void *data)
+		{
+			img.open(data, sizeof data);
+			if(enabled()) icon(img);
+		}
+
+		void image_disabled(const void *data)
+		{
+			img_disabled.open(data, sizeof data);
+			if(!enabled()) icon(img_disabled);
+		}
+
+		void enable(bool state)
+		{
+			enabled(state);
+			if(state)
+			{
+				if(img) icon(img);
+			}
+			else
+			{
+				if(img_disabled) icon(img_disabled);
 			}
 		}
 	};
@@ -487,12 +525,27 @@ namespace widgets
 			{
 				fgcolor(theme->Label_fg);
 				renderer(&renderer_);
+				scheme().selection = nana::color {"#d8d4c8"};
+				scheme().selection_text = bgcolor();
 			}
 			else
 			{
 				fgcolor(nana::colors::black);
 				renderer(nullptr);
+				scheme().selection = nana::color {"#7D8393"};
+				scheme().selection_text = bgcolor();
 			}
+		}
+
+		int caption_index()
+		{
+			const auto cap {caption()};
+			size_t size {the_number_of_options()}, idx {0};
+			for(; idx < size; idx++)
+				if(cap == text(idx))
+					break;
+			if(idx == size) return -1;
+			return idx;
 		}
 	};
 
@@ -500,6 +553,7 @@ namespace widgets
 	class Textbox : public nana::textbox
 	{
 		theme_t* theme {nullptr};
+		bool highlighted {true};
 
 	public:
 		Textbox(nana::window parent, theme_t* ptheme) : nana::textbox {parent}
@@ -519,7 +573,31 @@ namespace widgets
 			auto bgparent {nana::API::get_widget(parent())->bgcolor()};
 			bgcolor(theme->is_dark() ? bgparent.blend(nana::colors::black, .045) : theme->tbbg);
 			fgcolor(theme->tbfg);
+			highlight(true);
+			set_keywords("special", true, true, {"[download]"});
 		}
+
+		void set_keyword(std::string name)
+		{
+			set_keywords("general", true, true, {name});
+		}
+
+		void highlight(bool enable)
+		{
+			highlighted = enable;
+			if(enable)
+			{
+				set_highlight("general", theme->tbkw, theme->tbbg);
+				set_highlight("special", theme->tbkw_special, theme->tbbg);
+			}
+			else
+			{
+				erase_highlight("general");
+				erase_highlight("special");
+			}
+		}
+
+		bool highlight() { return highlighted; }
 	};
 
 
