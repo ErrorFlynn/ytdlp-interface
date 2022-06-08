@@ -616,6 +616,7 @@ void GUI::make_page2()
 		if(is_zoomed(true)) restore();
 		get_place().field_display("page1", true);
 		center(630, 193);
+		page1.focus();
 	});
 
 	btntodl.events().click([this]
@@ -794,6 +795,19 @@ void GUI::make_page3()
 	cbthumb.tooltip("Embed thumbnail in the video as cover art (--embed-thumbnail)");
 	btnerase.tooltip("Remove this argument set from the list");
 	btndl.tooltip("Beginning a download after having stopped it, resumes it.");
+	std::string args_tip
+	{
+		"Custom options for yt-dlp, separated by space. Some useful examples:\n\n"
+		"-f ba : best audio (downloads just audio-only format, if available)\n"
+		"-f wa : worst audio\n"
+		"-f wv+wa : combines the worst video format with the worst audio format\n"
+		"--live-from-start : Downloads livestreams from the start. Currently \n"
+		"								only supported for YouTube (experimental).\n\n"
+		"For more, read the yt-dlp documentation:\n"
+		"https://github.com/yt-dlp/yt-dlp#usage-and-options"
+	};
+	cbargs.tooltip(args_tip);
+	com_args.tooltip(args_tip);
 
 	btndl.events().click([this] { on_btn_dl(); });
 
@@ -1042,7 +1056,8 @@ void GUI::changes_dlg(nana::window parent)
 
 	fm.caption("ytdlp-interface - release notes");
 	fm.bgcolor(theme.fmbg);
-	fm.div(R"(vert margin=20 <tb> <weight=20> <weight=25 <> <l_history weight=164> <weight=10> <com_history weight=55> <> >)");
+	fm.div(R"(vert margin=20 <tb> <weight=20>
+				<weight=25 <> <l_history weight=164> <weight=10> <com_history weight=55> <weight=20> <cblogview weight=132> <> >)");
 
 	widgets::Textbox tb {fm, &theme};
 	{
@@ -1052,6 +1067,9 @@ void GUI::changes_dlg(nana::window parent)
 		tb.line_wrapped(true);
 		tb.editable(false);
 	}
+
+	widgets::cbox cblogview {fm, &theme, "Changelog view"};
+	fm["cblogview"] << cblogview;
 
 	auto display_release_notes = [&](const unsigned ver)
 	{
@@ -1063,8 +1081,45 @@ void GUI::changes_dlg(nana::window parent)
 		auto title {tag_name + " (" + date + ")\n"};
 		title += std::string(title.size()-1, '=') + "\n\n";
 		tb.caption(title + body);
+		tb.colored_area_access()->clear();
+		nana::api::refresh_window(tb);
 	};
 
+	auto display_changelog = [&]
+	{
+		tb.caption("");
+		auto ca {tb.colored_area_access()};
+		ca->clear();
+		for(const auto &el : releases)
+		{
+			std::string 
+				tag_name {el["tag_name"]}, 
+				date     {el["published_at"]},
+				body     {el["body"]}, 
+				block;
+
+			if(!body.empty())
+			{
+				body.erase(0, body.find('-'));
+				body.erase(body.find_first_of("\r\n", body.rfind("- ")));
+			}
+			date.erase(date.find('T'));
+			auto title {tag_name + " (" + date + ")\n"};
+			title += std::string(title.size() - 1, '=') + "\n\n";
+			block += title + body + "\n\n";
+			if(tag_name != "v1.0.0")
+			{
+				block += "-----------------------------------------------------------------------------------\n\n";
+				tb.caption(tb.caption() + block);
+				auto p {ca->get(tb.text_line_count() - 3)};
+				p->count = 1;
+				p->fgcolor = theme.is_dark() ? nana::color {"#777"} : nana::color {"#bbb"};
+			}
+			else tb.caption(tb.caption() + block);
+		}
+	};
+
+	//display_changelog();
 	display_release_notes(0);
 
 	widgets::Label l_history {fm, &theme, "Show release notes for:"};
@@ -1086,9 +1141,17 @@ void GUI::changes_dlg(nana::window parent)
 		});
 	}
 
+	cblogview.events().click([&]
+	{
+		if(cblogview.checked())
+			display_changelog();
+		else display_release_notes(com_history.option());
+		com_history.enabled(!cblogview.checked());
+	});
+
 	tb.events().mouse_wheel([&](const nana::arg_wheel &arg)
 	{
-		if(!tb.scroll_operation()->visible(true) && arg.which == nana::arg_wheel::wheel::vertical)
+		if(!cblogview.checked() && !tb.scroll_operation()->visible(true) && arg.which == nana::arg_wheel::wheel::vertical)
 		{
 			const auto idx_sel {com_history.option()}, idx_last {com_history.the_number_of_options() - 1};
 			if(arg.upwards)
@@ -1103,6 +1166,7 @@ void GUI::changes_dlg(nana::window parent)
 					com_history.option(0);
 				else com_history.option(idx_sel + 1);
 			}
+			nana::api::refresh_window(com_history);
 		}
 	});
 

@@ -519,7 +519,8 @@ namespace widgets
 
 		void refresh_theme()
 		{
-			bgcolor(theme->fmbg);
+			auto parent {nana::API::get_widget(this->parent())};
+			bgcolor(parent->bgcolor());
 			scheme().activated = theme->nimbus;
 			if(theme->is_dark())
 			{
