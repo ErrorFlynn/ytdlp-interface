@@ -1,11 +1,9 @@
 #include "gui.hpp"
 #include "icons.hpp"
 
-#include <nana/gui/timer.hpp>
 #include <nana/gui/filebox.hpp>
 #include <nana/system/platform.hpp>
 
-#pragma warning(disable : 4267)
 
 GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::_1)}
 {
@@ -28,6 +26,120 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 		});
 	}
 
+	msg.make_after(WM_COPYDATA, [&](UINT, WPARAM, LPARAM lparam, LRESULT*)
+	{
+		auto pcds {reinterpret_cast<PCOPYDATASTRUCT>(lparam)};
+		std::wstring url {reinterpret_cast<LPCWSTR>(pcds->lpData), pcds->cbData / 2};
+		auto item {lbq.item_from_value(url)};
+		if(!item.empty())
+		{
+			switch(pcds->dwData)
+			{
+			case YTDLP_POSTPROCESS:
+				item.text(3, "processing");
+				if(conf.cb_lengthyproc && bottoms.contains(url))
+				{
+					auto &bottom {bottoms.at(url)};
+					if(!bottom.received_procmsg)
+					{
+						bottom.received_procmsg = true;
+						bottom.timer_proc.interval(conf.max_proc_dur);
+						bottom.timer_proc.elapse([&, url, this]
+						{
+							if(bottoms.contains(url))
+							{
+								bottom.timer_proc.stop();
+								auto next_url {next_startable_url(url)};
+								if(!next_url.empty())
+									on_btn_dl(next_url);
+							}
+						});
+						bottom.timer_proc.start();
+					}
+				}
+				break;
+
+			case YTDLP_DOWNLOAD:
+				item.text(3, "downloading");
+				break;
+			}
+		}
+		return true;
+	});
+
+	msg.make_after(WM_ENDSESSION, [&](UINT, WPARAM wparam, LPARAM, LRESULT *)
+	{
+		if(wparam) close();
+		return true;
+	});
+
+	msg.make_after(WM_POWERBROADCAST, [&](UINT, WPARAM wparam, LPARAM, LRESULT *)
+	{
+		if(wparam == PBT_APMSUSPEND) close();
+		return true;
+	});
+
+	msg.make_after(WM_KEYDOWN, [&](UINT, WPARAM wparam, LPARAM, LRESULT *)
+	{
+		if(wparam == 'V' && GetAsyncKeyState(VK_CONTROL) & 0xff00)
+		{
+			if(api::focus_window() != bottoms.current().com_args)
+			{
+				l_url.events().mouse_up.emit({}, l_url);
+				btnadd.focus();
+				if(!queue_panel.visible())
+					show_queue(true);
+			}
+		}
+		else if(wparam == VK_DELETE)
+		{
+			auto fwnd {api::focus_window()};
+			auto &bottom {bottoms.current()};
+			if(fwnd != bottom.com_args && fwnd != bottom.tbrate && !lbq.selected().empty())
+			{
+				remove_queue_item(bottom.url);
+			}
+		}
+		else if(wparam == VK_APPS)
+		{
+			auto curpos {api::cursor_position()};
+			api::calc_window_point(*this, curpos); 
+			auto pos {btn_qact.pos()};
+			pop_queue_menu(pos.x, pos.y);
+		}
+		return true;
+	});
+
+	msg.make_before(WM_KEYDOWN, [&](UINT, WPARAM wparam, LPARAM, LRESULT *)
+	{
+		if(wparam == VK_UP)
+		{
+			if(lbq.at(0).size() > 1)
+			{
+				lbq.move_select(true);
+				return false;
+			}
+		}
+		else if(wparam == VK_DOWN)
+		{
+			if(lbq.at(0).size() > 1)
+			{
+				lbq.move_select(false);
+				return false;
+			}
+		}
+		else if(wparam == VK_ESCAPE)
+		{
+			close();
+			return false;
+		}
+		return true;
+	});
+
+	SYSTEM_INFO sysinfo;
+	GetSystemInfo(&sysinfo);
+	number_of_processors = sysinfo.dwNumberOfProcessors;
+
 	std::wstring modpath(4096, '\0');
 	modpath.resize(GetModuleFileNameW(0, &modpath.front(), modpath.size()));
 	self_path = modpath;
@@ -43,23 +155,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 			ffmpeg_loc = tmp;
 	}
 
-	get_releases();
-	center(630, 193);
-	caption(title);
-
-	make_page1();
-	make_page2();
-	make_page3();
-
-	div("margin=20 <switchable <page1> <page1a> <page2> <page3>>");
-	get_place()["page1"] << page1;
-	get_place()["page1a"] << page1a;
-	get_place()["page2"] << page2;
-	get_place()["page3"] << page3;
-	collocate();
-
-	get_versions();
-	theme.contrast(conf.contrast);
+	::widgets::theme.contrast(conf.contrast);
 
 	if(conf.cbtheme == 2)
 	{
@@ -70,26 +166,21 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 	else if(conf.cbtheme == 0) dark_theme(true);
 	if(conf.cbtheme == 1) dark_theme(false);
 
-	auto keypress_fn = [this](const arg_keyboard &arg)
-	{
-		if(arg.ctrl && arg.key == 'V')
-		{
-			l_url.events().mouse_up.emit({}, l_url);
-			btn_next.focus();
-		}
-	};
+	get_releases();
+	caption(title);
+	make_form();
 
-	API::enum_widgets(page1, false, [&, this](nana::widget &wd)
-	{
-		wd.events().key_press(keypress_fn);
-	});
+	if(system_theme())
+		apply_theme(is_system_theme_dark());
+	else apply_theme(dark_theme());
 
-	page1.events().key_press(keypress_fn);
-	page1.focus();
+	get_versions();
 
 	events().unload([&]
 	{
-		working = false;
+		working = menu_working = false;
+		if(thr_menu.joinable())
+			thr_menu.join();
 		if(thr.joinable())
 			thr.join();
 		if(thr_releases.joinable())
@@ -98,199 +189,365 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 			thr_releases_misc.detach();
 		if(thr_versions.joinable())
 			thr_versions.detach();
+		for(auto &bottom : bottoms)
+		{
+			auto &bot {*bottom.second};
+			if(bot.info_thread.joinable())
+			{
+				bot.working_info = false;
+				bot.info_thread.detach();
+			}
+			if(bot.dl_thread.joinable())
+			{
+				bot.working = false;
+				bot.dl_thread.join();
+			}
+		}
 		if(i_taskbar)
 			i_taskbar.Release();
+
+		conf.unfinished_queue_items.clear();
+		for(auto item : lbq.at(0))
+		{
+			auto text {item.text(3)};
+			if(text != "done")
+				conf.unfinished_queue_items.push_back(to_utf8(item.value<std::wstring>()));
+		}			
 	});
+
+	for(auto &url : conf.unfinished_queue_items)
+		add_url(to_wstring(url));
+
+/*#ifdef _DEBUG
+	add_url(L"testing1");
+	add_url(L"testing2");
+	add_url(L"testing3");
+	add_url(L"testing4");
+	add_url(L"testing5");
+	add_url(L"testing6");
+	add_url(L"testing7");
+	add_url(L"testing8");
+	add_url(L"testing9");
+	add_url(L"testing10");
+	add_url(L"testing11");
+	add_url(L"testing12");
+	add_url(L"testing13");
+	add_url(L"testing14");
+	add_url(L"testing15");
+	add_url(L"testing16");
+#endif*/
+
+	/*add_url(L"https://www.youtube.com/watch?v=44k7cMj_kpY");
+	add_url(L"https://www.youtube.com/watch?v=LFGEW_pF7SE");
+	add_url(L"https://www.youtube.com/watch?v=72_3gmawPg0");*/
+
+	/*add_url(L"https://www.youtube.com/watch?v=Vj8P7vLnQas");
+	add_url(L"https://www.youtube.com/watch?v=4zAFXEvLLpI");
+	add_url(L"https://www.youtube.com/watch?v=bFhTH-UZfus");*/
+
+	if(is_zoomed(true)) restore();
+	center(1000, 800);
+	api::track_window_size(*this, size(), false);
+	collocate();
+	show_queue(false);
 }
 
 
-void GUI::on_btn_next()
+void GUI::formats_dlg()
 {
 	using namespace nana;
+	using ::widgets::theme;
+	auto url {bottoms.visible()};
 	auto id {to_utf8(url)};
 	if(id.find("youtu.be") != -1)
 		id = id.substr(id.rfind('/')+1, 11);
 	else id = id.substr(id.rfind("?v=")+3, 11);
-	if(vidinfo.empty() || vidinfo["id"] != id)
+	auto &bottom {bottoms.at(url)};
+	auto &vidinfo {bottom.vidinfo};
+
+	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize>{}};
+	fm.caption(title + " - YouTube video manual selection of formats");
+	fm.bgcolor(theme.fmbg);
+	fm.div(R"(
+			vert margin=20 <weight=180px 
+					<thumb weight=320px> <weight=20px>
+					<vert
+						<l_title weight=27px> <weight=10px>
+						<sep1 weight=3px> <weight=10px>
+						<weight=28px <l_dur weight=45%> <weight=10> <l_durtext> >
+						<weight=28px <l_chap weight=45%> <weight=10> <l_chaptext> >
+						<weight=28px <l_upl weight=45%> <weight=10> <l_upltext> >
+						<weight=28px <l_date weight=45%> <weight=10> <l_datetext> > <weight=15px>
+						<sep2 weight=3px>
+					>
+				 >
+				<weight=20> <lbformats> <weight=20>
+				<weight=35 <><btncancel weight=420> <weight=20> <btnok weight=420><>>
+		)");
+
+	::widgets::Title l_title {fm};
+	::widgets::Label l_dur {fm, "Duration:", true}, l_chap {fm, "Chapters:", true},
+		l_upl {fm, "Uploader:", true}, l_date {fm, "Upload date:", true};
+	::widgets::Text l_durtext {fm, "", true}, l_chaptext {fm, "", true}, l_upltext {fm, "", true}, l_datetext {fm, "", true};
+	nana::picture thumb {fm};
+	::widgets::Separator sep1 {fm}, sep2 {fm};
+	::widgets::Listbox lbformats {fm};
+	::widgets::Button btnok {fm, "Use the selected format(s)"}, btncancel {fm, "Let yt-dlp choose the best formats (default)"};
+
+	fm["l_title"] << l_title;
+	fm["l_dur"] << l_dur;
+	fm["l_durtext"] << l_durtext;
+	fm["l_chap"] << l_chap;
+	fm["l_chaptext"] << l_chaptext;
+	fm["l_upl"] << l_upl;
+	fm["l_upltext"] << l_upltext;
+	fm["l_date"] << l_date;
+	fm["l_datetext"] << l_datetext;
+	fm["thumb"] << thumb;
+	fm["sep1"] << sep1;
+	fm["sep2"] << sep2;
+	fm["lbformats"] << lbformats;
+	fm["btncancel"] << btncancel;
+	fm["btnok"] << btnok;
+
+	lbformats.enable_single(true, true);
+	lbformats.append_header("format", dpi_transform(240).width);
+	lbformats.append_header("acodec", dpi_transform(90).width);
+	lbformats.append_header("vcodec", dpi_transform(90).width);
+	lbformats.append_header("ext", dpi_transform(50).width);
+	lbformats.append_header("fps", dpi_transform(32).width);
+	lbformats.append_header("vbr", dpi_transform(40).width);
+	lbformats.append_header("abr", dpi_transform(40).width);
+	lbformats.append_header("asr", dpi_transform(50).width);
+	lbformats.append_header("filesize", dpi_transform(160).width);
+
+	lbformats.events().selected([&, this](const arg_listbox &arg)
 	{
-		if(!vidinfo.empty())
+		if(arg.item.selected())
 		{
-			tbpipe.select(true);
-			tbpipe.del();
-			prog.value(0);
-			prog.caption("");
-		}
-		if(thr.joinable()) thr.join();
-		thr = std::thread([this]
-		{
-			working = true;
-			btntodl.enabled(false);
-			get_place().field_display("page1a", true);
-			collocate();
-			thumb.focus();
-			cursor(cursor::wait);
-			l_wait.cursor(cursor::wait);
-
-			auto jtext {util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + L" -j " + url)};
-			if(!working) return;
-			auto pos {jtext.find("{\"id\":")};
-			if(pos == -1)
-			{
-				themed_form fm {nullptr, *this, API::make_center(*this, 1000, 600)};
-				fm.caption("yt-dlp.exe error");
-				fm.bgcolor(theme.fmbg);
-				fm.div("vert margin=20 <label weight=30><weight=20><textbox>");
-				fm.theme_callback([&, this](bool dark)
-				{
-					if(dark) theme.make_dark();
-					else theme.make_light();
-					fm.bgcolor(theme.fmbg);
-				});
-				::widgets::Label lbl {fm, &theme, "Received unexpected output from yt-dlp.exe after requesting video info!"};
-				fm["label"] << lbl;
-				lbl.text_align(align::center, align_v::center);
-				lbl.typeface(nana::paint::font_info {"", 13, {800}});
-				lbl.fgcolor(color {"#BA4B3E"});
-				::widgets::Textbox tb {fm, &theme};
-				tb.caption(jtext);
-				fm["textbox"] << tb;
-				tb.line_wrapped(true);
-				fm.collocate();
-				fm.modality();
-				get_place().field_display("page1", true);
-				collocate();
-				bring_top(true);
-				working = false;
-				return;
-			}
-			if(pos) jtext.erase(0, pos);
-			vidinfo = nlohmann::json::parse(jtext);
-
-			auto it {std::find_if(vidinfo["thumbnails"].begin(), vidinfo["thumbnails"].end(), [](const auto &el)
-			{
-				return std::string{el["url"]}.rfind("mqdefault.jpg") != -1;
-			})};
-			std::string thumb_url {(*it)["url"]};
-
-			l_wait.cursor(cursor::arrow);
-			cursor(cursor::arrow);
-			std::string title {vidinfo["title"]};
-			l_title.caption(title);
-
-			int dur {0};
-			if(vidinfo["is_live"])
+			btnok.enabled(true);
+			if(arg.item.pos().cat == 0)
 			{
 				if(lbformats.size_categ() == 3)
 				{
-					lbformats.erase(1);
-					lbformats.erase(1);
+					lbformats.at(1).select(false);
+					lbformats.at(2).select(false);
 				}
 			}
 			else
 			{
-				dur = vidinfo["duration"];
-				if(lbformats.size_categ() == 1)
-					lbformats.append({"Audio only", "Video only"});
+				lbformats.at(0).select(false);
 			}
-			int hr {(dur/60)/60}, min {(dur/60)%60}, sec {dur%60};
-			if(dur < 60) sec = dur;
-			std::string durstr {"live"};
-			if(dur)
-			{
-				std::stringstream ss;
-				ss.width(2);
-				ss.fill('0');
-				if(hr)
-				{
-					ss << min;
-					durstr = std::to_string(hr) + ':' + ss.str();
-					ss.str("");
-				}
-				else durstr = std::to_string(min);
-				ss << sec;
-				durstr += ':' + ss.str();
-			}
-			l_durtext.caption(durstr);
+		}
+		else if(lbformats.selected().empty())
+			btnok.enabled(false);
+	});
 
-			auto strchap {std::to_string(vidinfo["chapters"].size())};
-			if(strchap == "0") l_chaptext.caption("none");
-			else l_chaptext.caption(strchap);
+	btncancel.events().click([&, this]
+	{
+		auto &bottom {bottoms.current()};
+		bottom.use_strfmt = false;
+		fm.close();
+	});
 
-			l_upltext.caption(std::string {vidinfo["uploader"]});
+	btnok.events().click([&, this]
+	{
+		auto &bottom {bottoms.current()};
+		auto &strfmt {bottom.strfmt};
+		auto sel {lbformats.selected()};
+		strfmt = lbformats.at(sel.front()).value<std::wstring>();
+		bottom.fmt1 = conf.fmt1 = strfmt;
+		if(sel.size() > 1)
+		{
+			bottom.fmt2 = conf.fmt2 = lbformats.at(sel.back()).value<std::wstring>();
+			strfmt += L'+' + conf.fmt2;
+		}
+		else
+		{
+			bottom.fmt2.clear();
+			conf.fmt2.clear();
+		}
+		bottom.use_strfmt = true;
+		fm.close();
+	});
 
-			auto strdate {std::string {vidinfo["upload_date"]}};
-			l_datetext.caption(strdate.substr(0, 4) + '-' + strdate.substr(4, 2) + '-' + strdate.substr(6, 2));
+	btnok.enabled(false);
 
-			auto thumb_jpg {util::get_inet_res(thumb_url)};
-			if(!thumb_jpg.empty())
-			{
-				paint::image img;
-				img.open(thumb_jpg.data(), thumb_jpg.size());
-				thumb.load(img);
-			}
-			if(!working) return;
+	auto it {std::find_if(vidinfo["thumbnails"].begin(), vidinfo["thumbnails"].end(), [](const auto &el)
+	{
+		return std::string{el["url"]}.rfind("mqdefault.jpg") != -1;
+	})};
 
-			lbformats.clear();
-			for(auto &fmt : vidinfo["formats"])
-			{
-				std::string format {fmt["format"]}, acodec {fmt["acodec"]}, vcodec {fmt["vcodec"]}, ext {fmt["ext"]},
-					fps {"null"}, vbr {"none"}, abr {"none"}, asr {"null"}, filesize {"null"};
-				if(format.find("storyboard") == -1)
-				{
-					if(fmt.contains("abr"))
-						abr = std::to_string(unsigned(fmt["abr"]));
-					if(fmt.contains("vbr"))
-						vbr = std::to_string(unsigned(fmt["vbr"]));
-					if(fmt["asr"] != nullptr)
-						asr = std::to_string(unsigned(fmt["asr"]));
-					if(fmt["fps"] != nullptr)
-						fps = std::to_string(unsigned(fmt["fps"]));
-					if(fmt["filesize"] != nullptr)
-						filesize = util::int_to_filesize(fmt["filesize"]);
-					unsigned catidx {0};
-					if(acodec == "none")
-						catidx = 2; // video only
-					else if(vcodec == "none")
-						catidx = 1; // audio only
-					lbformats.at(catidx).append({format, acodec, vcodec, ext, fps, vbr, abr, asr, filesize});
-					auto idstr {to_wstring(std::string {fmt["format_id"]})};
-					lbformats.at(catidx).back().value(idstr);
-					if(idstr == conf.fmt1 || idstr == conf.fmt2)
-						lbformats.at(catidx).back().select(true);
-				}
-			}
-			if(is_zoomed(true)) restore();
-			if(API::screen_dpi(true) > 96)
-				maximize_v(1000);
-			else center(1000, max(384.0 + lbformats.item_count()*20.4, 800));
-			get_place().field_display("page2", true);
-			collocate();
-			working = false;
+	if(it == vidinfo["thumbnails"].end())
+		it = std::find_if(vidinfo["thumbnails"].begin(), vidinfo["thumbnails"].end(), [](const auto &el)
+		{
+			return std::string {el["url"]}.rfind("mqdefault_live.jpg") != -1;
 		});
+
+	std::string thumb_url, title {vidinfo["title"]};
+	if(it != vidinfo["thumbnails"].end())
+		thumb_url = (*it)["url"];
+	l_title.caption(title);
+
+	int dur {0};
+	if(bottom.vidinfo.contains("is_live") && bottom.vidinfo["is_live"] ||
+	   bottom.vidinfo.contains("live_status") && bottom.vidinfo["live_status"] == "is_live")
+	{
+		if(lbformats.size_categ() == 3)
+		{
+			lbformats.erase(1);
+			lbformats.erase(1);
+		}
 	}
 	else
 	{
-		if(is_zoomed(true)) restore();
-		if(API::screen_dpi(true) > 96)
-			maximize_v(1000);
-		else center(1000, max(384.0 + lbformats.item_count() * 20.4, 800));
-		get_place().field_display("page2", true);
-		collocate();
+		dur = vidinfo["duration"];
+		if(lbformats.size_categ() == 1)
+			lbformats.append({"Audio only", "Video only"});
 	}
+	int hr {(dur/60)/60}, min {(dur/60)%60}, sec {dur%60};
+	if(dur < 60) sec = dur;
+	std::string durstr {"live"};
+	if(dur)
+	{
+		std::stringstream ss;
+		ss.width(2);
+		ss.fill('0');
+		if(hr)
+		{
+			ss << min;
+			durstr = std::to_string(hr) + ':' + ss.str();
+			ss.str("");
+		}
+		else durstr = std::to_string(min);
+		ss << sec;
+		durstr += ':' + ss.str();
+	}
+	l_durtext.caption(durstr);
+
+	auto strchap {std::to_string(vidinfo["chapters"].size())};
+	if(strchap == "0") l_chaptext.caption("none");
+	else l_chaptext.caption(strchap);
+
+	l_upltext.caption(std::string {vidinfo["uploader"]});
+
+	auto strdate {std::string {vidinfo["upload_date"]}};
+	l_datetext.caption(strdate.substr(0, 4) + '-' + strdate.substr(4, 2) + '-' + strdate.substr(6, 2));
+
+	thr_thumb = std::thread([&]
+	{
+		thumbthr_working = true;
+		auto thumb_jpg {util::get_inet_res(thumb_url)};
+		if(!thumb_jpg.empty())
+		{
+			paint::image img;
+			img.open(thumb_jpg.data(), thumb_jpg.size());
+			if(thumbthr_working)
+				thumb.load(img);
+			thumbthr_working = false;
+			if(thr_thumb.joinable())
+				thr_thumb.detach();
+		}
+	});	
+
+	lbformats.clear();
+	for(auto &fmt : vidinfo["formats"])
+	{
+		std::string format {fmt["format"]}, acodec {fmt["acodec"]}, vcodec {fmt["vcodec"]}, ext {fmt["ext"]},
+			fps {"null"}, vbr {"none"}, abr {"none"}, asr {"null"}, filesize {"null"};
+		if(format.find("storyboard") == -1)
+		{
+			if(fmt.contains("abr"))
+				abr = std::to_string(unsigned(fmt["abr"]));
+			if(fmt.contains("vbr"))
+				vbr = std::to_string(unsigned(fmt["vbr"]));
+			if(fmt["asr"] != nullptr)
+				asr = std::to_string(unsigned(fmt["asr"]));
+			if(fmt["fps"] != nullptr)
+				fps = std::to_string(unsigned(fmt["fps"]));
+			if(fmt["filesize"] != nullptr)
+				filesize = util::int_to_filesize(fmt["filesize"]);
+			unsigned catidx {0};
+			if(acodec == "none")
+				catidx = 2; // video only
+			else if(vcodec == "none")
+				catidx = 1; // audio only
+			lbformats.at(catidx).append({format, acodec, vcodec, ext, fps, vbr, abr, asr, filesize});
+			auto idstr {to_wstring(std::string {fmt["format_id"]})};
+			lbformats.at(catidx).back().value(idstr);
+			if(!bottom.fmt1.empty() || !bottom.fmt2.empty())
+			{
+				if(idstr == bottom.fmt1 || idstr == bottom.fmt2)
+					lbformats.at(catidx).back().select(true);
+			}
+			else if(idstr == conf.fmt1 || idstr == conf.fmt2)
+				lbformats.at(catidx).back().select(true);
+		}
+	}
+
+	fm.events().unload([&]
+	{
+		if(thr_thumb.joinable())
+		{
+			thumbthr_working = false;
+			thr_thumb.detach();
+		}
+	});
+
+	fm.theme_callback([&, this](bool dark)
+	{
+		apply_theme(dark);
+		fm.bgcolor(theme.fmbg);
+		return false;
+	});
+
+	if(conf.cbtheme == 2)
+		fm.system_theme(true);
+	else fm.dark_theme(conf.cbtheme == 0);
+
+	fm.center(1000, max(384.0 + lbformats.item_count() * 20.4, 800));
+
+	fm.collocate();
+	fm.show();
+	fm.modality();
 }
 
 
-void GUI::on_btn_dl()
+bool GUI::process_queue_item(std::wstring url)
 {
-	bool graceful_exit {false};
-	if(btndl.caption().find("Stop") == -1)
+	using widgets::theme;
+	auto &bottom {bottoms.at(url)};
+	auto &tbpipe {outbox};
+	auto &tbpipe_overlay {overlay};
+	auto &com_args {bottom.com_args};
+	auto &com_rate {bottom.com_rate};
+	auto &tbrate {bottom.tbrate};
+	auto &btn_ytfmtlist {bottom.btn_ytfmtlist};
+	auto &cbmp3 {bottom.cbmp3};
+	auto &cbsplit {bottom.cbsplit};
+	auto &cbkeyframes {bottom.cbkeyframes};
+	auto &btndl {bottom.btndl};
+	auto &prog {bottom.prog};
+	auto &working {bottom.working};
+	auto &graceful_exit {bottom.graceful_exit};
+	const auto argset {com_args.caption_wstring()};
+
+	if(bottom.btndl.caption().find("Stop") == -1)
 	{
-		btndl.caption("Stop download");
-		btndl.cancel_mode(true);
-		tbpipe_overlay.hide();
+		bottom.btndl.caption("Stop download");
+		bottom.btndl.cancel_mode(true);
+		if(tbpipe.current() == url)
+		{
+			tbpipe.clear();
+			if(tbpipe_overlay.visible() && bottom.btnq.caption().find("queue") != -1)
+			{
+				tbpipe.show(url);
+			}
+		}
+		else tbpipe.clear(url);
 		if(conf.cbargs)
 		{
-			const auto args {com_args.caption()};
+			const auto args {bottom.com_args.caption()};
 			auto idx {com_args.caption_index()};
 			if(idx == -1)
 			{
@@ -307,126 +564,199 @@ void GUI::on_btn_dl()
 			}
 			else conf.com_args = idx;
 			com_args.option(idx);
+			if(conf.common_dl_options)
+				bottoms.propagate_args_options(bottom);
 		}
 
 		std::wstring cmd {L'\"' + conf.ytdlp_path.wstring() + L'\"'};
-		if(link_yt && conf.vidinfo) cmd += L" -f " + strfmt;
-		else
+		if(!conf.cbargs || com_args.caption_wstring().find(L"-f ") == -1)
 		{
-			cmd += L" -S \"res:" + com_res_options[conf.pref_res];
-			if(conf.pref_video)
-				cmd += L",vext:" + com_video_options[conf.pref_video];
-			if(conf.pref_audio)
-				cmd += L",aext:" + com_audio_options[conf.pref_audio];
-			if(conf.pref_fps)
-				cmd += L",fps";
-			cmd += '\"';
-			btnbackto2.enabled(false);
+			if(bottom.use_strfmt) cmd += L" -f " + bottom.strfmt;
+			else
+			{
+				cmd += L" -S \"res:" + com_res_options[conf.pref_res];
+				if(conf.pref_video)
+					cmd += L",vext:" + com_video_options[conf.pref_video];
+				if(conf.pref_audio)
+					cmd += L",aext:" + com_audio_options[conf.pref_audio];
+				if(conf.pref_fps)
+					cmd += L",fps";
+				cmd += '\"';
+			}
 		}
 		cmd += L" --windows-filenames ";
 
-		if(conf.cbchaps) cmd += L"--embed-chapters ";
-		if(conf.cbsubs) cmd += L"--embed-subs ";
-		if(conf.cbthumb) cmd += L"--embed-thumbnail ";
-		if(conf.cbtime) cmd += L"--no-mtime ";
-		if(conf.cbkeyframes) cmd += L"--force-keyframes-at-cuts ";
-		if(!ffmpeg_loc.empty())
-			cmd += L"--ffmpeg-location \"" + ffmpeg_loc.wstring() + L"\" ";
-		if(tbrate.to_double())
+		if(conf.cbchaps && argset.find(L"--embed-chapters") == -1)
+			cmd += L"--embed-chapters ";
+		if(conf.cbsubs && argset.find(L"--embed-subs") == -1)
+			cmd += L"--embed-subs ";
+		if(conf.cbthumb && argset.find(L"--embed-thumbnail") == -1)
+			cmd += L"--embed-thumbnail ";
+		if(conf.cbtime && argset.find(L"--no-mtime") == -1)
+			cmd += L"--no-mtime ";
+		if(conf.cbkeyframes && argset.find(L"--force-keyframes-at-cuts") == -1)
+			cmd += L"--force-keyframes-at-cuts ";
+		if(!ffmpeg_loc.empty() && ffmpeg_loc.parent_path() != self_path.parent_path())
+			if(argset.find(L"--ffmpeg-location") == -1)
+				cmd += L"--ffmpeg-location \"" + ffmpeg_loc.wstring() + L"\" ";
+		if(tbrate.to_double() && argset.find(L"-r ") == -1)
 			cmd += L"-r " + tbrate.caption_wstring() + (com_rate.option() ? L"M " : L"K ");
-		if(cbmp3.checked())
+		if(cbmp3.checked() && argset.find(L"--audio-format") == -1)
 		{
 			cmd += L"-x --audio-format mp3 ";
-			auto sel {lbformats.selected()};
-			for(auto sel : lbformats.selected())
-				if(sel.cat == 1)
-				{
-					std::wstring txt {nana::charset{lbformats.at(sel).text(6)}};
-					cmd += L"--audio-quality " + txt + L"K ";
-				}
+			if(argset.find(L"--audio-quality") == -1) 
+				L"--audio-quality 0 ";
 		}
-		if(cbsplit.checked())
-			cmd += L"--split-chapters -o chapter:\"" + conf.outpath.wstring() + L"\\%(title)s - %(section_number)s -%(section_title)s.%(ext)s\" ";
-		if(cbkeyframes.checked())
+		if(cbsplit.checked() && argset.find(L"--split-chapters") == -1)
+			cmd += L"--split-chapters -o chapter:\"" + bottom.outpath.wstring() + L"\\%(title)s - %(section_number)s -%(section_title)s.%(ext)s\" ";
+		if(cbkeyframes.checked() && argset.find(L"--force-keyframes-at-cuts") == -1)
 			cmd += L"--force-keyframes-at-cuts ";
-		if(conf.cbargs && !com_args.caption().empty())
-			cmd += com_args.caption_wstring() + L" ";
-		cmd += L"-o \"" + conf.outpath.wstring() + L"\\%(title)s.%(ext)s\" ";
-		cmd += url;
-		btnbackto1.enabled(false);
-		tbpipe.select(true);
-		tbpipe.del();
-		if(thr.joinable()) thr.join();
-		thr = std::thread([this, cmd, &graceful_exit]
+		if(conf.cbargs && !argset.empty())
+			cmd += argset + L" ";
+
+		auto display_cmd {cmd};
+
+		std::wstringstream ss;
+		ss << hwnd;
+		auto strhwnd {ss.str()};
+		strhwnd.erase(0, strhwnd.find_first_not_of('0'));
+		cmd += L"--exec \"after_video:\\\"" + self_path.wstring() + L"\\\" ytdlp_status " + std::to_wstring(YTDLP_POSTPROCESS)
+			+ L" " + strhwnd + L" \\\"" + url + L"\\\"\" ";
+		cmd += L"--exec \"before_dl:\\\"" + self_path.wstring() + L"\\\" ytdlp_status " + std::to_wstring(YTDLP_DOWNLOAD)
+			+ L" " + strhwnd + L" \\\"" + url + L"\\\"\" ";
+		std::wstring cmd2;
+		if(!conf.cbargs || argset.find(L"-P ") == -1)
+			cmd2 += L" -P \"" + bottom.outpath.wstring() + L"\"";
+		if((!conf.cbargs || argset.find(L"-o ") == -1) && !conf.output_template.empty())
+			cmd2 += L" -o " + conf.output_template;
+		cmd2 += L" " + url;
+		display_cmd += cmd2;
+		cmd += cmd2;
+
+		if(tbpipe.current() == url)
+			tbpipe.clear();
+
+		bottom.dl_thread = std::thread([&, this, display_cmd, cmd, url]
 		{
 			working = true;
 			auto ca {tbpipe.colored_area_access()};
-			ca->clear();
+			if(outbox.current() == url)
+				ca->clear();
 			if(fs::exists(conf.ytdlp_path))
-				tbpipe.append(L"[GUI] executing command line: " + cmd + L"\n\n", false);
-			else tbpipe.append(L"ytdlp.exe not found: " + conf.ytdlp_path.wstring(), false);
+				tbpipe.append(url, L"[GUI] executing command line: " + display_cmd + L"\n\n"/*, false*/);
+			else tbpipe.append(url, L"ytdlp.exe not found: " + conf.ytdlp_path.wstring()/*, false*/);
 			auto p {ca->get(0)};
 			p->count = 1;
 			if(!fs::exists(conf.ytdlp_path))
 			{
 				p->fgcolor = theme.is_dark() ? nana::color {"#f99"} : nana::color {"#832"};
 				nana::API::refresh_window(tbpipe);
-				btndl.caption("Begin download");
+				btndl.caption("Start download");
 				btndl.cancel_mode(false);
-				btnbackto2.enabled(true);
-				working = false;
+				if(bottom.dl_thread.joinable())
+					bottom.dl_thread.detach();
 				return;
 			}
 			p->fgcolor = theme.is_dark() ? theme.path_link_fg : nana::color {"#569"};
 			nana::API::refresh_window(tbpipe);
-			auto sel {lbformats.selected()};
 			ULONGLONG prev_val {0};
+
 			auto cb_progress = [&, this](ULONGLONG completed, ULONGLONG total, std::string text)
 			{
-				if(i_taskbar) i_taskbar->SetProgressValue(hwnd, completed, total);
+				lbq.item_from_value(url).text(3, (std::stringstream {} << static_cast<double>(completed) / 10).str() + '%');
+				if(i_taskbar && lbq.at(0).size() == 1)
+					i_taskbar->SetProgressValue(hwnd, completed, total);
 				if(completed < 1000)
+				{
 					prog.caption(text);
+				}
 				else
 				{
 					if(prev_val)
 					{
-						auto pos {text.find_last_not_of(" \t")};
-						if(text.size() > pos)
-							text.erase(pos+1);
-						prog.caption(text);
+						if(text == "[ExtractAudio]" || text == "[Merger]" || text == "[FixupM3u8]")
+						{
+							COPYDATASTRUCT cds;
+							cds.dwData = YTDLP_POSTPROCESS;
+							cds.cbData = url.size() * 2;
+							cds.lpData = const_cast<std::wstring&>(url).data();
+							SendMessageW(hwnd, WM_COPYDATA, NULL, reinterpret_cast<LPARAM>(&cds));
+						}
+						else
+						{
+							auto pos {text.find_last_not_of(" \t")};
+							if(text.size() > pos)
+								text.erase(pos + 1);
+							prog.caption(text);
+						}
 					}
 				}
 				prog.value(completed);
 				prev_val = completed;
 			};
+
+			auto item {lbq.item_from_value(url)};
 			prog.value(0);
 			prog.caption("");
-			if(i_taskbar) i_taskbar->SetProgressState(hwnd, TBPF_NORMAL);
-			util::run_piped_process(cmd, &working, &tbpipe, cb_progress, &graceful_exit);
-			if(i_taskbar) i_taskbar->SetProgressState(hwnd, TBPF_NOPROGRESS);
-			if(!working) return;
-			btnbackto1.enabled(true);
-			btndl.enabled(true);
-			tbpipe.append("\n[GUI] yt-dlp.exe process has exited\n", false);
-			p = ca->get(tbpipe.text_line_count()-2);
-			p->count = 1;
-			p->fgcolor = theme.is_dark() ? theme.path_link_fg : nana::color {"#569"};
-			nana::API::refresh_window(tbpipe);
-			btndl.caption("Begin download");
-			btndl.cancel_mode(false);
-			btnbackto2.enabled(true);
-			working = false;
+			if(i_taskbar && lbq.at(0).size() == 1) i_taskbar->SetProgressState(hwnd, TBPF_NORMAL);
+			item.text(3, "started");
+			auto cb_append = [url, this](std::string text, bool keyword)
+			{
+				if(keyword)
+					outbox.set_keyword(text);
+				else outbox.append(url, text);
+			};
+			util::run_piped_process(cmd, &working, cb_append, cb_progress, &graceful_exit);
+			bottom.received_procmsg = false;
+
+			if(working)
+			{
+				if(bottom.timer_proc.started())
+					bottom.timer_proc.stop();
+				item.text(3, "done");
+				taskbar_overall_progress();
+				if(i_taskbar && lbq.at(0).size() == 1)
+					i_taskbar->SetProgressState(hwnd, TBPF_NOPROGRESS);
+				btndl.enabled(true);
+				tbpipe.append(url, "\n[GUI] yt-dlp.exe process has exited\n"/*, false*/);
+				if(tbpipe.current() == url)
+				{
+					ca = tbpipe.colored_area_access();
+					p = ca->get(tbpipe.text_line_count() - 2);
+					p->count = 1;
+					p->fgcolor = theme.is_dark() ? theme.path_link_fg : nana::color {"#569"};
+					nana::API::refresh_window(tbpipe);
+				}
+				btndl.caption("Start download");
+				btndl.cancel_mode(false);
+				auto next_url {next_startable_url(url)};
+				if(!next_url.empty())
+					on_btn_dl(next_url);
+			}
+			if(working && bottom.dl_thread.joinable())
+				bottom.dl_thread.detach();
 		});
+		return true; // started
 	}
 	else
 	{
 		btndl.enabled(false);
-		working = false;
-		if(thr.joinable())
-			thr.join();
+		if(bottom.timer_proc.started())
+			bottom.timer_proc.stop();
+		if(bottom.dl_thread.joinable())
+		{
+			working = false;
+			bottom.dl_thread.join();
+		}
+		bottom.received_procmsg = false;
 		if(graceful_exit)
-			tbpipe.append("\n[GUI] yt-dlp.exe process was ended gracefully via Ctrl+C signal\n", false);
-		else tbpipe.append("\n[GUI] yt-dlp.exe process was ended forcefully via WM_CLOSE message\n", false);
+			tbpipe.append(url, "\n[GUI] yt-dlp.exe process was ended gracefully via Ctrl+C signal\n"/*, false*/);
+		else tbpipe.append(url, "\n[GUI] yt-dlp.exe process was ended forcefully via WM_CLOSE message\n"/*, false*/);
+		auto item {lbq.item_from_value(url)};
+		auto text {item.text(3)};
+		if(text.find('%') != -1)
+			item.text(3, "stopped (" + text + ")");
+		else item.text(3, "stopped");
 		auto ca {tbpipe.colored_area_access()};
 		auto p {ca->get(tbpipe.text_line_count()-2)};
 		p->count = 1;
@@ -434,483 +764,686 @@ void GUI::on_btn_dl()
 			p->fgcolor = theme.is_dark() ? theme.path_link_fg : nana::color {"#569"};
 		else p->fgcolor = theme.is_dark() ? nana::color {"#f99"} : nana::color {"#832"};
 		nana::API::refresh_window(tbpipe);
-		btnbackto1.enabled(true);
-		btnbackto2.enabled(true);
 		btndl.enabled(true);
-		btndl.caption("Begin download");
+		btndl.caption("Start download");
 		btndl.cancel_mode(false);
+		if(conf.cb_autostart)
+		{
+			auto next_url {next_startable_url(url)};
+			if(!next_url.empty())
+				on_btn_dl(next_url);
+		}
+		return false; // stopped
 	}
 }
 
 
-void GUI::make_page1()
+void GUI::add_url(std::wstring url)
+{
+	auto it {std::find_if(lbq.at(0).begin(), lbq.at(0).end(), [&, this](auto &el)
+	{
+		std::wstring val;
+		try { val = el->value<std::wstring>(); }
+		catch(std::runtime_error) { return false; }
+		return val == url;
+	})};
+
+	if(it == lbq.at(0).end())
+	{
+		auto stridx {std::to_string(lbq.at(0).size() + 1)};
+		lbq.at(0).append({stridx, "...", "...", "queued"});
+		lbq.at(0).back().value(url);
+		adjust_lbq_headers();
+
+		auto &bottom {bottoms.add(url)};
+		if(conf.common_dl_options)
+			bottom.gpopt.caption("Download options");
+		else bottom.gpopt.caption("Download options for queue item #" + stridx);
+		bottom.show_btncopy(!conf.common_dl_options);
+		if(lbq.at(0).size() == 1)
+			lbq.item_from_value(url).select(true);
+		else if(!conf.common_dl_options)
+			bottom.show_btncopy(true);
+
+		bottom.info_thread = std::thread([&, this, url]
+		{
+			bottom.working_info = true;
+			static std::atomic_int active_threads {0};
+			while(active_threads >= number_of_processors)
+			{
+				Sleep(50);
+				if(!bottom.working_info)
+				{
+					if(bottom.info_thread.joinable())
+						bottom.info_thread.detach();
+					return;
+				}
+			}
+			active_threads++;
+
+			std::string media_info, media_website, media_title;
+			bool is_ytplaylist {bottom.is_ytlink && (url.find(L"?list=") != -1 || url.find(L"&list=") != -1)};
+			if(bottom.is_ytlink)
+			{
+				if(is_ytplaylist)
+				{
+					media_info = util::run_piped_process(conf.ytdlp_path.wstring() +
+															L" --no-warnings --print :%(webpage_url_domain)s:%(playlist_title)s " + url,
+															&bottom.working_info);
+					media_info.erase(media_info.find('\n'));
+				}
+				else
+				{
+					media_info = util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + L" --no-warnings -j " + url,
+															&bottom.working_info);
+					if(bottom.working_info)
+					{
+						auto pos {media_info.find("{\"id\":")};
+						if(pos != -1)
+						{
+							media_info.erase(0, pos);
+							bottom.vidinfo = nlohmann::json::parse(media_info);
+						}
+					}
+				}
+			}
+			else media_info = util::run_piped_process(conf.ytdlp_path.wstring() + L" --no-warnings --print :%(webpage_url_domain)s:%(title)s "
+														+ url, &bottom.working_info);
+			if(!media_info.empty() && bottom.working_info)
+			{
+				if(media_info[0] == ':' || (bottom.is_ytlink && media_info.find("{\"id\":") == 0))
+				{
+					if(bottom.is_ytlink && !is_ytplaylist)
+					{
+						media_website = bottom.vidinfo["webpage_url_domain"];
+						media_title = bottom.vidinfo["title"];
+						if(bottom.vidinfo.contains("is_live") && bottom.vidinfo["is_live"] || 
+						   bottom.vidinfo.contains("live_status") && bottom.vidinfo["live_status"] == "is_live")
+							media_title = "[live] " + media_title;
+						bottom.show_btnytfmt(true);
+						get_place().collocate();
+						nana::api::update_window(*this);
+					}
+					else
+					{
+						auto pos {media_info.find(':', 1)};
+						media_website = media_info.substr(1, pos - 1);
+						media_title = media_info.substr(pos + 1);
+						if(is_ytplaylist)
+							media_title = "[playlist] " + media_title;
+					}
+					lbq.item_from_value(url).text(1, media_website);
+					lbq.item_from_value(url).text(2, media_title);
+				}
+				else
+				{
+					auto stridx {lbq.item_from_value(url).text(0)};
+					lbq.item_from_value(url).text(1, "error");
+					lbq.item_from_value(url).text(2, "yt-dlp failed to get info (see output)");
+					if(bottom.btndl.caption().find("Start") != -1)
+					{
+						outbox.caption("GUI: yt-dlp is unable to process queue item #" + stridx +
+													" (output below)\n\n" + media_info + "\n", url);
+						if(outbox.current() == url)
+						{
+							auto ca {outbox.colored_area_access()};
+							ca->clear();
+							auto p {ca->get(0)};
+							p->fgcolor = widgets::theme.is_dark() ? widgets::theme.path_link_fg : nana::color {"#569"};
+						}
+					}
+				}
+			}
+			active_threads--;
+			if(bottom.working_info)
+				bottom.info_thread.detach();
+		});
+	}
+}
+
+
+void GUI::pop_queue_menu(int x, int y)
 {
 	using namespace nana;
 
-	plc1.div(R"(
-			vert <weight=25 <l_ytdlp weight=164> <weight=15> <l_path> >
-				<weight=20>
-				<weight=25 < l_ytlink weight=164> <weight=15> <l_url> >
-				<weight=20> <separator_a weight=1> <weight=1> <separator_b weight=1> <weight=20>
-				<weight=35 <> <btn_settings weight=152> <weight=20> <btn_next weight=180> <> >
-		)");
+	auto sel {lbq.selected()};
+	if(!sel.empty() && !thr_menu.joinable())
+	{
+		auto item {lbq.at(sel.back())};
+		auto item_name {"item #" + item.text(0)};
+		auto url {item.value<std::wstring>()};
+		auto &bottom {bottoms.current()};
+		std::vector<drawerbase::listbox::item_proxy> stoppable, startable;
+		std::vector<std::wstring> completed;
+		for(auto &item : lbq.at(0))
+		{
+			const auto text {item.text(3)};
+			if(text == "done")
+				completed.push_back(item.value<std::wstring>());
+			else if(text.find("stopped") == -1 && text.find("queued") == -1)
+				stoppable.push_back(item);
+			else startable.push_back(item);
+		}
 
-	plc1["l_ytdlp"] << l_ytdlp;
-	plc1["l_path"] << l_path;
-	plc1["l_ytlink"] << l_ytlink;
-	plc1["l_url"] << l_url;
-	plc1["btn_settings"] << btn_settings;
-	plc1["btn_next"] << btn_next;
-	plc1["separator_a"] << separator_a;
-	plc1["separator_b"] << separator_b;
+		::widgets::Menu m;
+		m.item_pixels(dpi_transform(24).width);
+		auto verb {bottom.btndl.caption().substr(0, 5)};
+		if(verb.back() == ' ')
+			verb.pop_back();
+		if(item.text(3).find("stopped") != -1)
+			verb = "Resume";
+		m.append(verb + " " + item_name, [&, this](menu::item_proxy &)
+		{
+			on_btn_dl(url);
+			api::refresh_window(bottom.btndl);
+		});
+		m.append("Remove " + item_name, [&, this](menu::item_proxy &)
+		{
+			remove_queue_item(url);
+		});
+		if(lbq.at(0).size() > 1)
+		{
+			m.append_splitter();
+			if(!completed.empty())
+			{
+				m.append("Clear completed", [&, this](menu::item_proxy &)
+				{
+					lbq.auto_draw(false);
+					autostart_next_item = false;
+					for(auto &url : completed)
+					{
+						auto item {lbq.item_from_value(url)};
+						if(item != lbq.at(0).end())
+							remove_queue_item(url);
+					}
+					autostart_next_item = true;
+					lbq.auto_draw(true);
+				});
+			}
+			if(!startable.empty())
+			{
+				m.append("Start all", [&, this](menu::item_proxy &)
+				{
+					thr_menu = std::thread([startable, &bottom, this]
+					{
+						menu_working = true;
+						autostart_next_item = false;
+						for(auto item : startable)
+						{
+							if(!menu_working) break;
+							auto url {item.value<std::wstring>()};
+							process_queue_item(url);
+						}
+					});
+					if(menu_working)
+						api::refresh_window(bottom.btndl);
+					autostart_next_item = true;
+					if(thr_menu.joinable())
+						thr_menu.detach();
+				});
+			}
+			if(!stoppable.empty())
+			{
+				m.append("Stop all", [&, this](menu::item_proxy &)
+				{
+					thr_menu = std::thread([stoppable, &bottom, this]
+					{
+						menu_working = true;
+						autostart_next_item = false;
+						for(auto item : stoppable)
+						{
+							if(!menu_working) break;
+							auto url {item.value<std::wstring>()};
+							on_btn_dl(url);
+						}
+						if(menu_working)
+							api::refresh_window(bottom.btndl);
+						autostart_next_item = true;
+						if(thr_menu.joinable())
+							thr_menu.detach();
+					});					
+				});
+			}
+			if(completed.size() != lbq.at(0).size())
+			{
+				m.append("Remove all", [&, this](menu::item_proxy &)
+				{
+					menu_working = true;
+					bottoms.show(L"");
+					qurl = L"";
+					l_url.update_caption();
+					btnadd.enabled(false);
+					lbq.auto_draw(false);
+					auto item {lbq.at(0).begin()};
+					while(item != lbq.at(0).end() && menu_working)
+					{
+						auto url {item.value<std::wstring>()};
+						item = lbq.erase(item);
+						auto &bottom {bottoms.at(url)};
+						if(bottom.timer_proc.started())
+							bottom.timer_proc.stop();
+						if(bottom.info_thread.joinable())
+						{
+							bottom.working_info = false;
+							bottom.info_thread.join();
+						}
+						if(bottom.dl_thread.joinable())
+						{
+							bottom.working = false;
+							bottom.dl_thread.join();
+						}
+						bottoms.erase(url);
+						outbox.erase(url);
+					}
+					adjust_lbq_headers();
+					lbq.auto_draw(true);
+				});
+			}
+		}
+		if(m.size())
+			m.popup_await(lbq, x, y);
+	}
+}
 
-	btn_settings.image(arr_settings_ico);
+
+void GUI::make_queue_listbox()
+{
+	using namespace nana;
+
+	lbq.sortable(false);
+	lbq.enable_single(true, false);
+	lbq.typeface(nana::paint::font_info {"Calibri", 12});
+	lbq.scheme().item_height_ex = 8;
+	lbq.append_header("#", dpi_transform(30).width);
+	lbq.append_header("Website", dpi_transform(120).width);
+	lbq.append_header("Media title", dpi_transform(685).width);
+	lbq.append_header("Status", dpi_transform(116).width);
+	lbq.column_movable(false);
+	lbq.column_resizable(false);
+
+	lbq.events().resized([this] (const arg_resized &arg) { adjust_lbq_headers(); });
+
+	lbq.events().dbl_click([this](const arg_mouse &arg)
+	{
+		if(arg.is_left_button())
+		{
+			show_output();
+			lbq_can_drag = false;
+		}
+	});
+
+	lbq.events().mouse_down([this](const arg_mouse &arg)
+	{
+		auto hovered {lbq.cast(point(arg.pos.x, arg.pos.y))};
+		if(hovered.empty())
+		{
+			lbq_can_drag = false;
+			if(last_selected)
+			{
+				if(arg.pos.y > dpi_transform(21).width) // if below header
+					last_selected = nullptr;
+			}
+		}
+		else
+		{
+			lbq_can_drag = true;
+			auto hovitem {lbq.at(hovered)};
+			if(last_selected && last_selected->value<std::wstring>() == hovitem.value<std::wstring>())
+			{
+				if(!hovitem.selected())
+				{
+					lbq_no_action = true;
+					hovitem.select(true);
+				}
+			}
+		}
+	});
+
+	lbq.events().selected([this](const arg_listbox &arg)
+	{
+		static auto item {arg.item};
+		if(arg.item.selected())
+		{
+			item = arg.item;
+			last_selected = &item;
+			if(!lbq_no_action)
+			{
+				auto url {arg.item.value<std::wstring>()};
+				if(url != bottoms.visible())
+				{
+					bottoms.show(url);
+					outbox.current(url);
+					qurl = url;
+					l_url.update_caption();
+					btnadd.enable(false);
+				}
+			}
+			else lbq_no_action = false;
+		}
+		else
+		{
+			if(last_selected == nullptr)
+			{
+				lbq_no_action = true;
+				arg.item.select(true);
+			}
+		}
+	});
+
+	static color dragging_color {colors::green};
+	static timer scroll_down_timer, scroll_up_timer;
+
+	lbq.events().mouse_move([this](const arg_mouse &arg)
+	{
+		if(!arg.is_left_button() || !lbq_can_drag) return;
+
+		const auto lines {3};
+		bool autoscroll {true};
+		const auto delay {std::chrono::milliseconds{25}};
+
+		dragging_color = ::widgets::theme.is_dark() ? ::widgets::theme.path_link_fg : colors::green;
+		lbq.auto_draw(false);
+		auto lb = lbq.at(0);
+		auto selection = lbq.selected();
+		if(selection.empty())
+		{
+			auto hovered = lbq.cast(point(arg.pos.x, arg.pos.y));
+			if(hovered.item != npos)
+			{
+				lbq.at(hovered).select(true);
+				selection = lbq.selected();
+			}
+		}
+		if(selection.size() == 1)
+		{
+			auto hovered {lbq.cast({arg.pos.x, arg.pos.y})}, selected {selection[0]};
+			if(hovered.item != npos && hovered.item != selected.item)
+			{
+				std::string seltext0 {lb.at(selected.item).text(0)},
+					seltext1 {lb.at(selected.item).text(1)},
+					seltext2 {lb.at(selected.item).text(2)},
+					seltext3 {lb.at(selected.item).text(3)};
+
+				std::wstring selval {lb.at(selected.item).value<std::wstring>()};
+
+				auto hovitem {lb.at(hovered.item)};
+
+				// moving item upward, pushing list downward below insertion point
+				if(hovered.item < selected.item)
+				{
+					for(auto n {selected.item}; n > hovered.item; n--)
+					{
+						lb.at(n).text(1, lb.at(n - 1).text(1));
+						lb.at(n).text(2, lb.at(n - 1).text(2));
+						lb.at(n).text(3, lb.at(n - 1).text(3));
+						auto url {lb.at(n - 1).value<std::wstring>()};
+						lb.at(n).value(url);
+						if(!conf.common_dl_options)
+							bottoms.at(url).gpopt.caption("Download options for queue item #" + lb.at(n).text(0));
+						lb.at(n).fgcolor(lbq.fgcolor());
+					}
+					if(autoscroll)
+					{
+						if(arg.pos.y / lbq.scheme().item_height_ex <= 1)
+						{
+							if(!scroll_up_timer.started())
+							{
+								scroll_up_timer.elapse([&arg] {mouse_event(MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_WHEEL, arg.pos.x, arg.pos.y, WHEEL_DELTA, 0); });
+								scroll_up_timer.interval(delay);
+								if(scroll_down_timer.started()) scroll_down_timer.stop();
+								lbq.scheme().mouse_wheel.lines = lines;
+								scroll_up_timer.start();
+							}
+						}
+						else
+						{
+							if(scroll_up_timer.started()) scroll_up_timer.stop();
+							if(scroll_down_timer.started()) scroll_down_timer.stop();
+							lbq.scheme().mouse_wheel.lines = lines;
+						}
+					}
+				}
+
+				// moving item downward, pushing list upward above insertion point
+				else
+				{
+					for(auto n(selected.item); n < hovered.item; n++)
+					{
+						lb.at(n).text(1, lb.at(n + 1).text(1));
+						lb.at(n).text(2, lb.at(n + 1).text(2));
+						lb.at(n).text(3, lb.at(n + 1).text(3));
+						auto url {lb.at(n + 1).value<std::wstring>()};
+						lb.at(n).value(url);
+						if(!conf.common_dl_options)
+							bottoms.at(url).gpopt.caption("Download options for queue item #" + lb.at(n).text(0));
+						lb.at(n).fgcolor(lbq.fgcolor());
+					}
+					if(autoscroll)
+					{
+						if(arg.pos.y > lbq.size().height - 3 * lbq.scheme().item_height_ex)
+						{
+							if(!scroll_down_timer.started())
+							{
+								scroll_down_timer.elapse([&arg]
+								{
+									mouse_event(MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_WHEEL, arg.pos.x, arg.pos.y, -WHEEL_DELTA, 0);
+								});
+								scroll_down_timer.interval(delay);
+								if(scroll_up_timer.started()) scroll_up_timer.stop();
+								lbq.scheme().mouse_wheel.lines = lines;
+								scroll_down_timer.start();
+							}
+						}
+						else
+						{
+							if(scroll_up_timer.started()) scroll_up_timer.stop();
+							if(scroll_down_timer.started()) scroll_down_timer.stop();
+							lbq.scheme().mouse_wheel.lines = lines;
+						}
+					}
+				}
+				hovitem.text(1, seltext1);
+				hovitem.text(2, seltext2);
+				hovitem.text(3, seltext3);
+				hovitem.value(selval);
+				hovitem.select(true);
+				hovitem.fgcolor(dragging_color);
+				if(!conf.common_dl_options)
+					bottoms.at(to_wstring(selval)).gpopt.caption("Download options for queue item #" + lb.at(lbq.selected().front().item).text(0));
+				lbq.auto_draw(true);
+			}
+		}
+	});
+
+	static auto dragstop_fn = [this]
+	{
+		lbq_can_drag = false;
+		auto selection = lbq.selected();
+		if(selection.size()) lbq.at(0).at(selection[0].item).fgcolor(lbq.fgcolor());
+		lbq.auto_draw(true);
+		if(scroll_up_timer.started()) scroll_up_timer.stop();
+		if(scroll_down_timer.started()) scroll_down_timer.stop();
+		lbq.scheme().mouse_wheel.lines = 3;
+	};
+
+	lbq.events().mouse_up([this](const arg_mouse &arg)
+	{
+		if(arg.is_left_button())
+			dragstop_fn();
+		else if(arg.button == mouse::right_button)
+			pop_queue_menu(arg.pos.x, arg.pos.y);
+	});
+
+	lbq.events().mouse_leave([this]
+	{
+		if(GetAsyncKeyState(GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON) & 0xff00)
+			dragstop_fn();
+	});
+}
+
+
+void GUI::make_form()
+{
+	using namespace nana;
+	make_queue_listbox();
+
+	div("vert margin=20 <Top> <weight=20> <Bottom weight=325>");
+	auto &plc {get_place()};
+	plc["Top"].fasten(queue_panel).fasten(outbox).fasten(overlay);
+	auto &bottom {bottoms.add(L"", true)};
+	bottom.btndl.enabled(false);
+	auto &tbpipe {outbox};
+	auto &tbpipe_overlay {overlay};
+	overlay.events().dbl_click([&, this] { show_queue(); queue_panel.focus(); });
+
+	plc_queue.div(R"(
+		vert <lbq> <weight=20> 
+		<weight=25 <btn_settings weight=106> <weight=15> <l_url> <weight=15> <btnadd weight=90> <weight=15> <btn_qact weight=126>>
+	)");
+	plc_queue["lbq"] << lbq;
+	plc_queue["l_url"] << l_url;
+	plc_queue["btnadd"] << btnadd;
+	plc_queue["btn_qact"] << btn_qact;
+	plc_queue["btn_settings"] << btn_settings;
+
+	apply_theme(::widgets::theme.is_dark());
+
+	btn_settings.image(arr_config16_ico);
+	btn_settings.typeface(paint::font_info {"", 11, {800}});
+	btn_settings.events().click([this] { settings_dlg(); });
+
+	btnadd.enable(false);
+	btnadd.typeface(paint::font_info {"", 11, {800}});
+	btn_qact.typeface(paint::font_info {"", 11, {800}});
+	btn_qact.tooltip("Pops up a menu with actions that can be performed on\nthe queue items (same as right-clicking on the queue).");
 
 	l_url.events().mouse_up([this]
 	{
 		auto text {util::get_clipboard_text()};
-		if(!text.empty() && isalpha(text.front()))
+		if(text.find('\n') != -1)
 		{
-			url = to_wstring(text);
+			qurl = L"* multiple lines of text, make sure they're URLs *";
 			l_url.update_caption();
-			btn_next.enabled(!conf.ytdlp_path.empty());
-			link_yt = is_ytlink(text);
-			btn_next_morph();
+			multiple_url_text.str(text);
+			btnadd.enable(true);
 		}
-	});
-
-	btn_next.enabled(false);
-
-	plc1a.div("<l_wait>");
-	plc1a["l_wait"] << l_wait;
-	l_wait.format(true);
-	l_wait.text_align(align::center, align_v::center);
-	nana::API::effects_bground(l_wait, nana::effects::bground_transparent(0), 0);
-
-	l_path.events().click([this]
-	{
-		nana::filebox fb {*this, true};
-		if(!conf.ytdlp_path.empty())
-			fb.init_file(conf.ytdlp_path);
-		fb.allow_multi_select(false);
-		fb.add_filter("", "yt-dlp.exe");
-		fb.title("Locate and select yt-dlp.exe");
-		auto res {fb()};
-		if(res.size())
+		else if(!text.empty())
 		{
-			auto path {res.front()};
-			if(path.string().find("yt-dlp.exe") != -1)
+			if(text.find(LR"(https://www.youtube.com/watch?v=)") == 0)
+				if(text.find(L"&list=") == 43)
+					text.erase(43);
+			auto item {lbq.item_from_value(text)};
+			if(item == lbq.at(0).end())
 			{
-				conf.ytdlp_path = res.front();
-				get_versions();
-				l_path.update_caption();
-				btn_next.enabled(!url.empty());
-				auto tmp {fs::path {conf.ytdlp_path}.replace_filename("ffmpeg.exe")};
-				if(fs::exists(tmp))
-					ffmpeg_loc = tmp;
-			}
-		}
-	});
-
-	btn_next.events().click([this]
-	{
-		tbpipe.highlight(conf.kwhilite);
-		if(link_yt && conf.vidinfo) on_btn_next();
-		else
-		{
-			if(is_zoomed(true)) restore();
-			center(1000, 800);
-			btndl.focus();
-			get_place().field_display("page3", true);
-			collocate();
-		}
-	});
-
-	btn_next.events().key_press([this] (const arg_keyboard &arg)
-	{
-		if(arg.key == '\r' && btn_next.enabled())
-			btn_next.events().click.emit({}, btn_next);
-	});
-
-	btn_settings.events().click([this]
-	{
-		settings_dlg();
-		btn_next_morph();
-	});
-}
-
-
-void GUI::make_page2()
-{
-	using namespace nana;
-
-	plc2.div(R"(
-			vert <weight=180px 
-					<thumb weight=320px> <weight=20px>
-					<vert
-						<l_title weight=27px> <weight=10px>
-						<separator_1a weight=1px> <weight=1px> <separator_1b weight=1px> <weight=10px>
-						<weight=28px <l_dur weight=45%> <weight=10> <l_durtext> >
-						<weight=28px <l_chap weight=45%> <weight=10> <l_chaptext> >
-						<weight=28px <l_upl weight=45%> <weight=10> <l_upltext> >
-						<weight=28px <l_date weight=45%> <weight=10> <l_datetext> > <weight=15px>
-						<separator_2a weight=1px> <weight=1px> <separator_2b weight=1px>
-					>
-				 >
-				<weight=20> <lbformats> <weight=20>
-				<weight=35 <> <btnback weight=160> <weight=20> <btntodl weight=200> <>>
-		)");
-	plc2["l_title"] << l_title;
-	plc2["l_dur"] << l_dur;
-	plc2["l_durtext"] << l_durtext;
-	plc2["l_chap"] << l_chap;
-	plc2["l_chaptext"] << l_chaptext;
-	plc2["l_upl"] << l_upl;
-	plc2["l_upltext"] << l_upltext;
-	plc2["l_date"] << l_date;
-	plc2["l_datetext"] << l_datetext;
-	plc2["thumb"] << thumb;
-	plc2["separator_1a"] << separator_1a;
-	plc2["separator_1b"] << separator_1b;
-	plc2["separator_2a"] << separator_2a;
-	plc2["separator_2b"] << separator_2b;
-	plc2["lbformats"] << lbformats;
-	plc2["btnback"] << btnbackto1;
-	plc2["btntodl"] << btntodl;
-
-	lbformats.enable_single(true, true);
-	lbformats.append_header("format", dpi_transform(240).width);
-	lbformats.append_header("acodec", dpi_transform(90).width);
-	lbformats.append_header("vcodec", dpi_transform(90).width);
-	lbformats.append_header("ext", dpi_transform(50).width);
-	lbformats.append_header("fps", dpi_transform(32).width);
-	lbformats.append_header("vbr", dpi_transform(40).width);
-	lbformats.append_header("abr", dpi_transform(40).width);
-	lbformats.append_header("asr", dpi_transform(50).width);
-	lbformats.append_header("filesize", dpi_transform(160).width);
-
-	lbformats.events().selected([this](const arg_listbox &arg)
-	{
-		if(arg.item.selected())
-		{
-			btntodl.enabled(true);
-			if(arg.item.pos().cat == 0)
-			{
-				if(lbformats.size_categ() == 3)
-				{
-					lbformats.at(1).select(false);
-					lbformats.at(2).select(false);
-				}
+				qurl = text;
+				l_url.update_caption();
+				btnadd.enable(true);
+				multiple_url_text.clear();
 			}
 			else
 			{
-				lbformats.at(0).select(false);
+				l_url.caption("The URL in the clipboard is already added (queue item #" + item.text(0) + ").");
 			}
 		}
-		else if(lbformats.selected().empty())
-			btntodl.enabled(false);
 	});
 
-	btnbackto1.events().click([this]
+	btnadd.events().click([this]
 	{
-		if(is_zoomed(true)) restore();
-		get_place().field_display("page1", true);
-		center(630, 193);
-		page1.focus();
-	});
-
-	btntodl.events().click([this]
-	{
-		auto sel {lbformats.selected()};
-		strfmt = lbformats.at(sel.front()).value<std::wstring>();
-		conf.fmt1 = strfmt;
-		if(sel.size() > 1)
+		if(multiple_url_text.view().empty())
+			add_url(qurl);
+		else
 		{
-			conf.fmt2 = lbformats.at(sel.back()).value<std::wstring>();
-			strfmt += L'+' + conf.fmt2;
-		}
-		else conf.fmt2.clear();
-		get_place().field_display("page3", true);
-		collocate();
-	});
-}
-
-
-void GUI::make_page3()
-{
-	using namespace nana;
-
-	plc3.div(R"(
-			vert <tbpipe> <weight=20>
-			<prog weight=30> <weight=20>
-			<gpopt weight=220> <weight=20>
-			<weight=35 <> <btnbackto2 weight=160> <weight=20> <btndl weight=200> <>>
-		)");
-	plc3["tbpipe"].fasten(tbpipe).fasten(tbpipe_overlay);
-	plc3["prog"] << prog;
-	plc3["gpopt"] << gpopt;
-	plc3["btnbackto2"] << btnbackto2;
-	plc3["btndl"] << btndl;
-
-	prog.amount(1000);
-	prog.caption("");
-
-	tbpipe.editable(false);
-	tbpipe.line_wrapped(true);
-	tbpipe.scheme().mouse_wheel.lines = 3;
-	tbpipe.typeface(paint::font_info {"Arial", 10});
-	API::effects_edge_nimbus(tbpipe, effects::edge_nimbus::none);
-
-	tbpipe.events().click([this]
-	{
-		tbpipe.select(true);
-		tbpipe.copy();
-		tbpipe.select(false);
-	});
-
-	tbpipe.events().mouse_up([this](const arg_mouse &arg)
-	{
-		if(arg.button == mouse::right_button)
-		{
-			conf.kwhilite = !conf.kwhilite;
-			tbpipe.highlight(conf.kwhilite);
-		}
-	});
-
-	API::effects_bground(tbpipe_overlay, effects::bground_transparent {0}, 0.0);
-	tbpipe_overlay.text_align(align::center, align_v::center);
-	tbpipe_overlay.typeface(nana::paint::font_info {"", 14, {700}});
-
-	plcopt.bind(gpopt);
-	page3.bgcolor(theme.fmbg);
-	gpopt.size({10, 10}); // workaround for weird caption display bug
-
-	gpopt.div(R"(vert margin=20
-			<weight=25 <l_out weight=122> <weight=15> <l_outpath> > <weight=20>
-			<weight=25 
-				<l_rate weight=144> <weight=15> <tbrate weight=45> <weight=15> <com_rate weight=55> 
-				<> <cbchaps weight=133> <> <cbsplit weight=116> <> <cbkeyframes weight=186>
-			> <weight=20>
-			<weight=25 <cbtime weight=296> <> <cbthumb weight=144> <> <cbsubs weight=132> <> <cbmp3 weight=173>>
-			<weight=20> <weight=24 <cbargs weight=156> <weight=15> <com_args> <weight=10> <btnerase weight=24>>
-		)");
-	gpopt["l_out"] << l_out;
-	gpopt["l_outpath"] << l_outpath;
-	gpopt["l_rate"] << l_rate;
-	gpopt["tbrate"] << tbrate;
-	gpopt["com_rate"] << com_rate;
-	gpopt["cbsplit"] << cbsplit;
-	gpopt["cbkeyframes"] << cbkeyframes;
-	gpopt["cbmp3"] << cbmp3;
-	gpopt["cbchaps"] << cbchaps;
-	gpopt["cbsubs"] << cbsubs;
-	gpopt["cbthumb"] << cbthumb;
-	gpopt["cbtime"] << cbtime;
-	gpopt["cbargs"] << cbargs;
-	gpopt["com_args"] << com_args;
-	gpopt["btnerase"] << btnerase;
-
-	if(API::screen_dpi(true) > 96)
-	{
-		btnerase.image(arr_erase22_ico);
-		btnerase.image_disabled(arr_erase22_disabled_ico);
-	}
-	else
-	{
-		btnerase.image(arr_erase16_ico);
-		btnerase.image_disabled(arr_erase16_disabled_ico);
-	}
-
-	tbrate.multi_lines(false);
-	tbrate.padding(0, 5, 0, 5);
-
-	for(auto &str : conf.argsets)
-		com_args.push_back(to_utf8(str));
-	com_args.option(conf.com_args);
-	com_args.editable(true);
-
-	com_args.events().selected([this]
-	{
-		GUI::conf.com_args = com_args.option();
-	});
-
-	com_args.events().text_changed([this]
-	{
-		auto idx {com_args.caption_index()};
-		if(idx != -1) btnerase.enable(true);
-		else btnerase.enable(false);
-	});
-
-	btnerase.events().click([this]
-	{
-		auto idx {com_args.caption_index()};
-		if(idx != -1)
-		{
-			com_args.erase(idx);
-			com_args.caption("");
-			conf.argsets.erase(conf.argsets.begin() + idx);
-			auto size {conf.argsets.size()};
-			if(size && idx == size) idx--;
-			com_args.option(idx);
-		}
-	});
-
-	if(conf.ratelim)
-		tbrate.caption(util::format_float(conf.ratelim, 1));
-
-	tbrate.set_accept([this](wchar_t wc)->bool
-	{
-		return wc == keyboard::backspace || wc == keyboard::del || ((isdigit(wc) || wc == '.') && tbrate.text().size() < 5);
-	});
-
-	tbrate.events().focus([this](const arg_focus &arg)
-	{
-		if(!arg.getting)
-		{
-			auto str {tbrate.caption()};
-			if(str.back() == '.')
+			std::wstring line;
+			while(std::getline(multiple_url_text, line))
 			{
-				str.pop_back();
-				tbrate.caption(str);
+				if(line.back() == '\r')
+					line.pop_back();
+				if(!line.empty()) add_url(line);
 			}
-			conf.ratelim = tbrate.to_double();
+			multiple_url_text.clear();
 		}
+		btnadd.enable(false);
 	});
 
-	com_rate.editable(false);
-	com_rate.push_back(" KB/s");
-	com_rate.push_back(" MB/s");
-	com_rate.option(conf.ratelim_unit);
-	com_rate.events().selected([&]
+	btnadd.events().key_press([&, this](const arg_keyboard &arg)
 	{
-		conf.ratelim_unit = com_rate.option();
-	});
-
-	cbsplit.tooltip("Split into multiple files based on internal chapters. (--split-chapters)");
-	cbkeyframes.tooltip("Force keyframes around the chapters before\nremoving/splitting them. Requires a\n"
-		"reencode and thus is very slow, but the\nresulting video may have fewer artifacts\naround the cuts. (--force-keyframes-at-cuts)");
-	cbtime.tooltip("Do not use the Last-modified header to set the file modification time (--no-mtime)");
-	cbsubs.tooltip("Embed subtitles in the video (only for mp4, webm and mkv videos) (--embed-subs)");
-	cbchaps.tooltip("Add chapter markers to the video file (--embed-chapters)");
-	cbthumb.tooltip("Embed thumbnail in the video as cover art (--embed-thumbnail)");
-	btnerase.tooltip("Remove this argument set from the list");
-	btndl.tooltip("Beginning a download after having stopped it, resumes it.");
-	std::string args_tip
-	{
-		"Custom options for yt-dlp, separated by space. Some useful examples:\n\n"
-		"-f ba : best audio (downloads just audio-only format, if available)\n"
-		"-f wa : worst audio\n"
-		"-f wv+wa : combines the worst video format with the worst audio format\n"
-		"--live-from-start : Downloads livestreams from the start. Currently \n"
-		"								only supported for YouTube (experimental).\n\n"
-		"For more, read the yt-dlp documentation:\n"
-		"https://github.com/yt-dlp/yt-dlp#usage-and-options"
-	};
-	cbargs.tooltip(args_tip);
-	com_args.tooltip(args_tip);
-
-	btndl.events().click([this] { on_btn_dl(); });
-
-	btndl.events().key_press([this](const arg_keyboard &arg)
-	{
-		if(arg.key == '\r')
-			on_btn_dl();
-	});
-
-	btnbackto2.events().click([this]
-	{
-		if(link_yt && conf.vidinfo)
+		if(arg.key == keyboard::enter)
 		{
-			if(is_zoomed(true)) restore();
-			get_place().field_display("page2", true);
-			collocate();
-		}
-		else btnbackto1.events().click.emit({}, btnbackto1);
-	});
-
-	l_outpath.events().click([this]
-	{
-		nana::folderbox fb {*this, appdir};
-		fb.allow_multi_select(false);
-		fb.title("Locate and select the desired download folder");
-		auto res {fb()};
-		if(res.size())
-		{
-			conf.outpath = res.front();
-			l_outpath.caption(conf.outpath.u8string());
+			btnadd.events().click.emit({}, btnadd);
 		}
 	});
 
-	cbsplit.check(conf.cbsplit);
-	cbchaps.check(conf.cbchaps);
-	cbsubs.check(conf.cbsubs);
-	cbthumb.check(conf.cbthumb);
-	cbtime.check(conf.cbtime);
-	cbkeyframes.check(conf.cbkeyframes);
-	cbmp3.check(conf.cbmp3);
-	cbargs.check(conf.cbargs);
-
-	cbsplit.radio(true);
-	cbchaps.radio(true);
-
-	cbsplit.events().checked([this]
+	btn_qact.events().click([this]
 	{
-		if(cbsplit.checked() && cbchaps.checked())
-			cbchaps.check(false);
-		conf.cbsplit = cbsplit.checked();
+		pop_queue_menu(btn_qact.pos().x, btn_qact.pos().y + btn_qact.size().height);
 	});
 
-	cbchaps.events().checked([this]
-	{
-		if(cbchaps.checked() && cbsplit.checked())
-			cbsplit.check(false);
-		conf.cbchaps = cbchaps.checked();
-	});
-
-	cbtime.events().checked([this] { conf.cbtime = cbtime.checked(); });
-	cbthumb.events().checked([this] { conf.cbthumb = cbthumb.checked(); });
-	cbsubs.events().checked([this] { conf.cbsubs = cbsubs.checked(); });
-	cbkeyframes.events().checked([this] { conf.cbkeyframes = cbkeyframes.checked(); });
-	cbmp3.events().checked([this] { conf.cbmp3 = cbmp3.checked(); });
-	cbargs.events().checked([this] { conf.cbargs = cbargs.checked(); });
-
-	plc3.collocate();
+	plc.collocate();
 }
 
 
 void GUI::settings_dlg()
 {
-	themed_form fm {nullptr, *this, nana::API::make_center(*this, dpi_transform(567, 347)), appear::decorate<appear::minimize>{}};
+	using widgets::theme;
+
+	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize>{}};
+	fm.center(585, 574);
 	fm.caption(title + " - settings");
 	fm.bgcolor(theme.fmbg);
 	fm.div(R"(vert margin=20
-		<weight=25 <l_res weight=145> <weight=10> <com_res weight=52> <> <cbfps weight=196> <weight=54> > <weight=20>
+		<weight=25 <l_res weight=148> <weight=10> <com_res weight=52> <> <cbfps weight=196> <weight=54> > <weight=20>
 		<weight=25
-			<l_video weight=182> <weight=10> <com_video weight=60> <>
-			<l_audio weight=182> <weight=10> <com_audio weight=60>
+			<l_video weight=184> <weight=10> <com_video weight=60> <>
+			<l_audio weight=185> <weight=10> <com_audio weight=60>
 		>
-		<weight=20> <weight=25 <cbinfo weight=380> > <weight=20>
-		<separator_a weight=1> <weight=1> <separator_b weight=1> <weight=20>
+		<weight=20> <sep1 weight=3px> <weight=20>
+		<weight=25 <l_ytdlp weight=158> <weight=10> <l_path> > <weight=20>
+		<weight=25 <l_template weight=122> <weight=10> <tb_template> <weight=15> <btn_default weight=140>> <weight=20>
+		<sep2 weight=3px> <weight=20>
+		<weight=25 <l_maxdl weight=196> <weight=10> <sb_maxdl weight=40> <> <cb_lengthyproc weight=282>> <weight=20>
+		<weight=25 <cb_autostart weight=460>> <weight=20>
+		<weight=25 <cb_common weight=400>> <weight=20>
+		<sep3 weight=3px> <weight=20>
 		<weight=25 <l_theme weight=92> <weight=20> <cbtheme_dark weight=57> <weight=20> 
 			<cbtheme_light weight=58> <weight=20> <cbtheme_system weight=152> > <weight=20>
 		<weight=25 <l_contrast weight=64> <weight=20> <slider> > <weight=20>
-		<separator_c weight=1> <weight=1> <separator_d weight=1> <weight=20>
+		<sep4 weight=3px> <weight=21>
 		<weight=35 <> <btn_close weight=100> <weight=20> <btn_updater weight=150> <>>
 	)");
 
-	widgets::Label l_res {fm, &theme, "Preferred resolution:"}, l_latest {fm, &theme, "Latest version:"},
-		l_video {fm, &theme, "Preferred video container:"}, l_audio {fm, &theme, "Preferred audio container:"},
-		l_theme {fm, &theme, "Color theme:"}, l_contrast {fm, &theme, "Contrast:"};
-	widgets::Combox com_res {fm, &theme}, com_video {fm, &theme}, com_audio {fm, &theme};
-	widgets::cbox cbfps {fm, &theme, "Prefer a higher framerate"}, cbinfo {fm, &theme, "YouTube: show video info and list available formats"},
-		cbtheme_dark {fm, &theme, "Dark"}, cbtheme_light {fm, &theme, "Light"}, cbtheme_system {fm, &theme, "System preference"};
-	widgets::separator separator_a {fm, &theme}, separator_b {fm, &theme}, separator_c {fm, &theme}, separator_d {fm, &theme};
-	widgets::Button btn_close {fm, &theme, " Close"}, btn_updater {fm, &theme, " Updater"};
+	widgets::Label l_res {fm, "Preferred resolution:"}, l_latest {fm, "Latest version:"},
+		l_video {fm, "Preferred video container:"}, l_audio {fm, "Preferred audio container:"},
+		l_theme {fm, "Color theme:"}, l_contrast {fm, "Contrast:"}, l_ytdlp {fm, "Location of yt-dlp.exe:"},
+		l_template {fm, "Output template:"}, l_maxdl {fm, "Max concurrent downloads:"};
+	widgets::path_label l_path {fm, &conf.ytdlp_path};
+	widgets::Textbox tb_template {fm};
+	widgets::Combox com_res {fm}, com_video {fm}, com_audio {fm};
+	widgets::cbox cbfps {fm, "Prefer a higher framerate"}, cbtheme_dark {fm, "Dark"}, cbtheme_light {fm, "Light"},
+		cbtheme_system {fm, "System preference"}, cb_lengthyproc {fm, "Start next item on lenghty processing"},
+		cb_common {fm, "Each queue item has its own download options"}, 
+		cb_autostart {fm, "When stopping a queue item, automatically start the next one"};
+	widgets::Separator sep1 {fm}, sep2 {fm}, sep3 {fm}, sep4 {fm};
+	widgets::Button btn_close {fm, " Close"}, btn_updater {fm, " Updater"}, btn_default {fm, "Reset to default"};
 	btn_updater.image(arr_updater_ico);
 	btn_close.events().click([&] {fm.close(); });
-	btn_updater.events().click([&fm, this] {updater_dlg(fm); });
+	btn_updater.events().click([&, this] {updater_dlg(fm); l_path.update_caption(); });
+	btn_default.typeface(nana::paint::font_info {"", 11, {800}});
+	btn_default.tooltip(nana::to_utf8(conf.output_template_default));
+	tb_template.multi_lines(false);
+	tb_template.padding(0, 5, 0, 5);
+	tb_template.caption(conf.output_template);
+	tb_template.typeface(nana::paint::font_info {"Tahoma", 10});
+	btn_default.events().click([&, this]
+	{
+		tb_template.caption(conf.output_template_default);
+		conf.output_template = conf.output_template_default;
+	});
 
-	widgets::Slider slider {fm, &theme};
+	widgets::Spinbox sb_maxdl {fm};
+	sb_maxdl.range(1, 10, 1);
+	sb_maxdl.value(std::to_string(conf.max_concurrent_downloads));
+
+	widgets::Slider slider {fm};
 	{
 		slider.maximum(30);
 		slider.value(conf.contrast*100);
@@ -919,10 +1452,7 @@ void GUI::settings_dlg()
 			conf.contrast = static_cast<double>(slider.value()) / 100;
 			theme.contrast(conf.contrast);
 			fm.bgcolor(theme.fmbg);
-			fm.refresh_widgets();
-			gpopt.bgcolor(theme.gpbg);
 			apply_theme(theme.is_dark());
-			refresh_widgets();
 		});
 	}
 	nana::radio_group rg;
@@ -956,18 +1486,23 @@ void GUI::settings_dlg()
 	if(conf.cbtheme == 0) cbtheme_dark.check(true);
 	if(conf.cbtheme == 1)  cbtheme_light.check(true);
 
-	widgets::Group gpupdate {fm, "Updater", &theme};
+	widgets::Group gpupdate {fm, "Updater"};
 
 	fm["l_res"] << l_res;
 	fm["com_res"] << com_res;
 	fm["cbfps"] << cbfps;
-	fm["cbinfo"] << cbinfo;
+	fm["l_ytdlp"] << l_ytdlp;
+	fm["l_path"] << l_path;
 	fm["l_video"] << l_video;
 	fm["com_video"] << com_video;
 	fm["l_audio"] << l_audio;
 	fm["com_audio"] << com_audio;
-	fm["separator_a"] << separator_a;
-	fm["separator_b"] << separator_b;
+	fm["sep1"] << sep1;
+	fm["l_template"] << l_template;
+	fm["tb_template"] << tb_template;
+	fm["btn_default"] << btn_default;
+	fm["sep2"] << sep2;
+	fm["sep4"] << sep4;
 	fm["l_theme"] << l_theme;
 	fm["cbtheme_dark"] << cbtheme_dark;
 	fm["cbtheme_light"] << cbtheme_light;
@@ -976,23 +1511,33 @@ void GUI::settings_dlg()
 	fm["l_contrast"] << l_contrast;
 	fm["slider"] << slider;
 	fm["gpupdate"] << gpupdate;
-	fm["separator_c"] << separator_c;
-	fm["separator_d"] << separator_d;
+	fm["sep3"] << sep3;
 	fm["btn_close"] << btn_close;
 	fm["btn_updater"] << btn_updater;
+	fm["l_maxdl"] << l_maxdl;
+	fm["sb_maxdl"] << sb_maxdl;
+	fm["cb_lengthyproc"] << cb_lengthyproc;
+	fm["cb_autostart"] << cb_autostart;
+	fm["cb_common"] << cb_common;
 
-	cbinfo.tooltip("This allows manual selection of formats for YouTube videos.\n"
-		"If unchecked, the formats are selected automatically, using\n"
-		"the preferences defined above.");
 	cbfps.tooltip("If several different formats have the same resolution,\ndownload the one with the highest framerate.");
+	cb_lengthyproc.tooltip("When yt-dlp finishes downloading all the files associated with a queue item,\n"
+	"it performs actions on the files referred to as \"post-processing\". These actions\ncan be a number of things, depending "
+	"on the context, and on the options used.\n\nSometimes this post-processing phase can take a long time, so this setting\n"
+	"makes the program automatically start the next queue item when processing\ntakes longer that 3 seconds.");
 
-	auto res_tip {"Download the best video with the largest resolution available that is\n"
+	const auto res_tip {"Download the best video with the largest resolution available that is\n"
 		"not higher than the selected value. Resolution is determined using the\n"
-		"smallest dimension, so this works correctly for vertical videos as well."};
+		"smallest dimension, so this works correctly for vertical videos as well."},
+
+		maxdl_tip {"When a queue item finishes, the program automatically starts the next one.\nThis setting lets you make it "
+		"start the next two or more items (up to 10).\n\nDoes not limit the number of manually started queue items "
+		"(you can have\nmore than 10 concurrent downloads if you want, but you have to start\nthe ones after the 10th manually)."};
+
 
 	for(auto &opt : com_video_options)
 		com_video.push_back(" " + nana::to_utf8(opt));
-	com_video.option(conf.vidinfo);
+	com_video.option(conf.pref_video);
 
 	for(auto &opt : com_audio_options)
 		com_audio.push_back(" " + nana::to_utf8(opt));
@@ -1004,15 +1549,40 @@ void GUI::settings_dlg()
 	com_res.option(conf.pref_res);
 	com_res.tooltip(res_tip);
 	l_res.tooltip(res_tip);
+	l_maxdl.tooltip(maxdl_tip);
+	sb_maxdl.tooltip(maxdl_tip);
 
 	com_res.option(conf.pref_res);
 	com_video.option(conf.pref_video);
 	com_audio.option(conf.pref_audio);
 	cbfps.check(conf.pref_fps);
-	cbinfo.check(conf.vidinfo);
+	cb_lengthyproc.check(conf.cb_lengthyproc);
+	cb_autostart.check(conf.cb_autostart);
+	cb_common.check(!conf.common_dl_options);
 
-	bool working {false};
-	std::thread thr;
+	l_path.events().click([&, this]
+	{
+		nana::filebox fb {fm, true};
+		if(!conf.ytdlp_path.empty())
+			fb.init_file(conf.ytdlp_path);
+		fb.allow_multi_select(false);
+		fb.add_filter("", "yt-dlp.exe");
+		fb.title("Locate and select yt-dlp.exe");
+		auto res {fb()};
+		if(res.size())
+		{
+			auto path {res.front()};
+			if(path.string().find("yt-dlp.exe") != -1)
+			{
+				conf.ytdlp_path = res.front();
+				get_versions();
+				l_path.update_caption();
+				auto tmp {fs::path {conf.ytdlp_path}.replace_filename("ffmpeg.exe")};
+				if(fs::exists(tmp))
+					ffmpeg_loc = tmp;
+			}
+		}
+	});
 
 	fm.events().unload([&, this]
 	{
@@ -1020,35 +1590,67 @@ void GUI::settings_dlg()
 		conf.pref_video = com_video.option();
 		conf.pref_audio = com_audio.option();
 		conf.pref_fps = cbfps.checked();
-		conf.vidinfo = cbinfo.checked();
-		working = false;
-		if(thr.joinable())
-			thr.detach();
+		conf.output_template = tb_template.caption_wstring();
+		conf.max_concurrent_downloads = sb_maxdl.to_int();
+		conf.cb_lengthyproc = cb_lengthyproc.checked();
+		conf.cb_autostart = cb_autostart.checked();
+		if(conf.common_dl_options == cb_common.checked())
+		{
+			if(conf.common_dl_options = !conf.common_dl_options)
+			{
+				auto &curbot {bottoms.current()};
+				bottoms.propagate_cb_options(curbot);
+				bottoms.propagate_args_options(curbot);
+				bottoms.propagate_misc_options(curbot);
+			}
+			std::string cap {"Download options"};
+			for(auto &pbot : bottoms)
+			{
+				if(pbot.second->index)
+				{
+					pbot.second->gpopt.caption(conf.common_dl_options ? cap : cap + " for queue item #" + std::to_string(pbot.second->index));
+					pbot.second->show_btncopy(!conf.common_dl_options);
+					nana::api::refresh_window(pbot.second->gpopt);
+				}
+			}
+		}
 	});
 
 	fm.theme_callback([&, this](bool dark)
 	{
-		if(dark) theme.make_dark();
-		else theme.make_light();
+		apply_theme(dark);
 		fm.bgcolor(theme.fmbg);
+		return false;
 	});
 
+	if(conf.cbtheme == 2)
+		fm.system_theme(true);
+	else fm.dark_theme(conf.cbtheme == 0);
+
 	fm.collocate();
+
+	if(conf.ytdlp_path.empty())
+		l_path.caption("!!!  YT-DLP.EXE NOT FOUND IN PROGRAM FOLDER  !!!");
+	else if(!fs::exists(conf.ytdlp_path))
+	{
+		conf.ytdlp_path.clear();
+		l_path.caption("!!!  YT-DLP.EXE NOT FOUND AT ITS SAVED LOCATION  !!!");
+	}
 	fm.show();
-	hide();
 	fm.modality();
-	show();
 }
 
 
 void GUI::changes_dlg(nana::window parent)
 {
+	using widgets::theme;
+
 	themed_form fm {nullptr, parent, nana::API::make_center(parent, dpi_transform(900, 445)), appear::decorate<appear::sizable>{}};
 	fm.theme_callback([&, this](bool dark)
 	{
-		if(dark) theme.make_dark();
-		else theme.make_light();
+		apply_theme(dark);
 		fm.bgcolor(theme.fmbg);
+		return false;
 	});
 	if(conf.cbtheme == 2)
 		fm.system_theme(true);
@@ -1059,7 +1661,7 @@ void GUI::changes_dlg(nana::window parent)
 	fm.div(R"(vert margin=20 <tb> <weight=20>
 				<weight=25 <> <l_history weight=164> <weight=10> <com_history weight=55> <weight=20> <cblogview weight=132> <> >)");
 
-	widgets::Textbox tb {fm, &theme};
+	widgets::Textbox tb {fm};
 	{
 		fm["tb"] << tb;
 		nana::API::effects_edge_nimbus(tb, nana::effects::edge_nimbus::none);
@@ -1068,7 +1670,7 @@ void GUI::changes_dlg(nana::window parent)
 		tb.editable(false);
 	}
 
-	widgets::cbox cblogview {fm, &theme, "Changelog view"};
+	widgets::cbox cblogview {fm, "Changelog view"};
 	fm["cblogview"] << cblogview;
 
 	auto display_release_notes = [&](const unsigned ver)
@@ -1119,13 +1721,12 @@ void GUI::changes_dlg(nana::window parent)
 		}
 	};
 
-	//display_changelog();
 	display_release_notes(0);
 
-	widgets::Label l_history {fm, &theme, "Show release notes for:"};
+	widgets::Label l_history {fm, "Show release notes for:"};
 	fm["l_history"] << l_history;
 
-	widgets::Combox com_history {fm, &theme};
+	widgets::Combox com_history {fm};
 	{
 		fm["com_history"] << com_history;
 		com_history.editable(false);
@@ -1176,42 +1777,80 @@ void GUI::changes_dlg(nana::window parent)
 }
 
 
-void GUI::apply_theme(bool dark)
+bool GUI::apply_theme(bool dark)
 {
-	if(dark)
-	{
-		theme.make_dark();
-		l_wait.caption("<bold color=0xcA9B8E size=20>DON'T MOVE\n\n</><bold color=0xddeeff size=14>getting video info...\n</>");
-		tbpipe_overlay.fgcolor(nana::color {"#666"});
-	}
-	else
-	{
-		theme.make_light();
-		l_wait.caption("<bold color=0xaa8888 size=20>DON'T MOVE\n\n</><bold color=0x556677 size=14>getting video info...\n</>");
-		tbpipe_overlay.fgcolor(nana::color {"#bcc0c3"});
-	}
+	using widgets::theme;
 
-	if(tbpipe.text_line_count())
+	if(dark) theme.make_dark();
+	else theme.make_light();
+
+	if(!outbox.current_buffer().empty())
 	{
-		auto ca {tbpipe.colored_area_access()};
+		auto ca {outbox.colored_area_access()};
 		ca->clear();
 		auto p {ca->get(0)};
 		p->count = 1;
 		p->fgcolor = theme.is_dark() ? theme.path_link_fg : nana::color {"#569"};
-		if(!working)
+		auto &text {outbox.current_buffer()};
+		if(text.find("[GUI] ") != text.rfind("[GUI] "))
 		{
-			p = ca->get(tbpipe.text_line_count() - 2);
+			p = ca->get(outbox.text_line_count() - 2);
 			p->count = 1;
-			p->fgcolor = theme.is_dark() ? theme.path_link_fg : nana::color {"#569"};
+			if(text.rfind("WM_CLOSE") == -1)
+				p->fgcolor = widgets::theme.is_dark() ? widgets::theme.path_link_fg : nana::color {"#569"};
+			else p->fgcolor = widgets::theme.is_dark() ? nana::color {"#f99"} : nana::color {"#832"};
 		}
-		nana::API::refresh_window(tbpipe);
+		nana::API::refresh_window(outbox);
 	}
 
 	bgcolor(theme.fmbg);
-	page1.bgcolor(theme.fmbg);
-	page1a.bgcolor(theme.fmbg);
-	page2.bgcolor(theme.fmbg);
-	page3.bgcolor(theme.fmbg);
+	refresh_widgets();
+
+	for(auto &bot : bottoms)
+		bot.second->bgcolor(theme.fmbg);
+
+	return false; // don't refresh widgets a second time, already done once in this function
+}
+
+
+void GUI::show_queue(bool freeze_redraw)
+{
+	if(freeze_redraw)
+		SendMessageA(hwnd, WM_SETREDRAW, FALSE, 0);
+	change_field_weight(get_place(), "Bottom", 298);
+	for(auto &bot : bottoms)
+	{
+		auto &plc {bot.second->plc};
+		bot.second->btnq.caption("Show output");
+		plc.field_display("prog", false);
+		plc.field_display("separator", true);
+		plc.collocate();
+	}
+	outbox.hide();
+	overlay.hide();
+	queue_panel.show();
+	if(freeze_redraw)
+		SendMessageA(hwnd, WM_SETREDRAW, TRUE, 0);
+	nana::api::refresh_window(*this);
+}
+
+
+void GUI::show_output()
+{
+	SendMessageA(hwnd, WM_SETREDRAW, FALSE, 0);
+	change_field_weight(get_place(), "Bottom", 325);
+	for(auto &bot : bottoms)
+	{		
+		bot.second->btnq.caption("Show queue");
+	}
+	auto &curbot {bottoms.current()};
+	auto &plc {curbot.plc};
+	plc.field_display("prog", true);
+	plc.field_display("separator", false);
+	plc.collocate();
+	queue_panel.hide();
+	outbox.show(curbot.url);
+	SendMessageA(hwnd, WM_SETREDRAW, TRUE, 0);
 }
 
 
@@ -1231,6 +1870,7 @@ void GUI::get_releases()
 		thr_releases.detach();
 	}};
 }
+
 
 void GUI::get_releases_misc()
 {
@@ -1283,7 +1923,8 @@ void GUI::get_releases_misc()
 				}
 			}
 		}
-		thr_releases_misc.detach();
+		if(thr_releases_misc.joinable())
+			thr_releases_misc.detach();
 	}};
 }
 
@@ -1329,56 +1970,13 @@ void GUI::get_versions()
 					ver_ytdlp.day = stoi(rawver.substr(8, 2));
 				}
 			}
-			else
-			{
-				conf.ytdlp_path.clear();
-				l_path.caption("!!!  YT-DLP.EXE NOT FOUND AT ITS SAVED LOCATION  !!!");
-				btn_next.enabled(false);
-			}
+			else conf.ytdlp_path.clear();
 		}
 		if(thr_ffmpeg.joinable())
 			thr_ffmpeg.join();
 		if(thr_versions.joinable())
 			thr_versions.detach();
 	}};
-}
-
-
-nana::size GUI::dpi_transform(double w, double h)
-{
-	double dpi_horz {static_cast<double>(nana::API::screen_dpi(true))},
-		dpi_vert {static_cast<double>(nana::API::screen_dpi(false))};
-
-	if(dpi_horz > 96)
-	{
-		w = round(w * dpi_horz / 96.0);
-		h = round(h * dpi_vert / 96.0);
-	}
-	return nana::size {static_cast<unsigned>(w), static_cast<unsigned>(h)};
-}
-
-
-void GUI::maximize_v(unsigned w)
-{
-	auto sz {nana::screen {}.from_window(*this).area().dimension()};
-	sz.width = w ? dpi_transform(w).width : size().width;
-	move(nana::API::make_center(sz).position().x, 0);
-	nana::API::window_outline_size(*this, sz);
-}
-
-
-void GUI::center(double w, double h)
-{
-	auto r {nana::API::make_center(dpi_transform(w, h))};
-	if(r.y >= 20) r.y -= 20;
-	move(r);
-	auto sz {nana::API::window_outline_size(*this)};
-	auto maxh {nana::screen {}.from_window(*this).area().dimension().height};
-	if(sz.height > maxh)
-	{
-		nana::API::window_outline_size(*this, {sz.width, maxh});
-		move(r.x, 0);
-	}
 }
 
 
@@ -1394,22 +1992,9 @@ bool GUI::is_ytlink(std::string_view text)
 			return true;
 		else if(text.size() > 28 && text[28] == '?')
 			return true;
+	if(text.find(R"(https://www.youtube.com/playlist?list=)") == 0)
+		return true;
 	return false;
-}
-
-
-void GUI::btn_next_morph()
-{
-	if(link_yt && conf.vidinfo)
-	{
-		btn_next.caption(" Format selection >>>");
-		change_field_weight(plc1, "btn_next", 240);
-	}
-	else
-	{
-		btn_next.caption(" Download >>>");
-		change_field_weight(plc1, "btn_next", 180);
-	}
 }
 
 
@@ -1424,6 +2009,7 @@ bool GUI::is_tag_a_new_version(std::string tag_name)
 
 void GUI::updater_dlg(nana::window parent)
 {
+	using widgets::theme;
 	themed_form fm {nullptr, parent, nana::API::make_center(parent, dpi_transform(575, 347)), appear::decorate<appear::minimize>{}};
 
 	fm.caption(title + " - updater");
@@ -1433,7 +2019,7 @@ void GUI::updater_dlg(nana::window parent)
 		<weight=30 <l_ver weight=101> <weight=10> <l_vertext> <weight=20> <btn_changes weight=150> >
 		<weight=20>
 		<weight=30 <btn_update weight=100> <weight=20> <prog> > <weight=25>
-		<separator_a weight=1> <weight=1> <separator_b weight=1> <weight=20>
+		<separator weight=3px> <weight=20>
 		<weight=30 <l_ver_ytdlp weight=158> <weight=10> <l_ytdlp_text> > <weight=10>
 		<weight=30 <l_ver_ffmpeg weight=158> <weight=10> <l_ffmpeg_text> > <weight=20>
 		<weight=30 <prog_misc> > <weight=25>
@@ -1441,20 +2027,20 @@ void GUI::updater_dlg(nana::window parent)
 	)");
 
 	widgets::Label
-		l_ver {fm, &theme, "Latest version:"},
-		l_ver_ytdlp {fm, &theme, "Latest yt-dlp version:"},
-		l_ver_ffmpeg {fm, &theme, "Latest ffmpeg version:"};
+		l_ver {fm, "Latest version:"},
+		l_ver_ytdlp {fm, "Latest yt-dlp version:"},
+		l_ver_ffmpeg {fm, "Latest ffmpeg version:"};
 
 	widgets::Text
-		l_vertext {fm, &theme, "checking..."},
-		l_ytdlp_text {fm, &theme, "checking..."},
-		l_ffmpeg_text {fm, &theme, "checking..."};
+		l_vertext {fm, "checking..."},
+		l_ytdlp_text {fm, "checking..."},
+		l_ffmpeg_text {fm, "checking..."};
 
 	widgets::Button
-		btn_changes {fm, &theme, "Release notes"},
-		btn_update {fm, &theme, "Update"},
-		btn_update_ytdlp {fm, &theme, "Update yt-dlp"},
-		btn_update_ffmpeg {fm, &theme, "Update ffmpeg"};
+		btn_changes {fm, "Release notes"},
+		btn_update {fm, "Update"},
+		btn_update_ytdlp {fm, "Update yt-dlp"},
+		btn_update_ffmpeg {fm, "Update FFmpeg"};
 
 	btn_changes.typeface(nana::paint::font_info {"", 12, {800}});
 	btn_changes.enabled(false);
@@ -1465,16 +2051,17 @@ void GUI::updater_dlg(nana::window parent)
 	btn_update_ytdlp.enabled(false);
 	btn_update_ffmpeg.typeface(nana::paint::font_info {"", 12, {800}});
 	btn_update_ffmpeg.enabled(false);
-	widgets::Progress prog {fm, &theme}, prog_misc {fm, &theme};
-	widgets::separator separator_a {fm, &theme}, separator_b {fm, &theme};
+	l_ver_ytdlp.text_align(nana::align::right, nana::align_v::center);
+
+	widgets::Progress prog {fm}, prog_misc {fm};
+	widgets::Separator separator {fm};
 
 	fm["l_ver"] << l_ver;
 	fm["l_vertext"] << l_vertext;
 	fm["btn_changes"] << btn_changes;
 	fm["btn_update"] << btn_update;
 	fm["prog"] << prog;
-	fm["separator_a"] << separator_a;
-	fm["separator_b"] << separator_b;
+	fm["separator"] << separator;
 	fm["l_ver_ytdlp"] << l_ver_ytdlp;
 	fm["l_ver_ffmpeg"] << l_ver_ffmpeg;
 	fm["l_ytdlp_text"] << l_ytdlp_text;
@@ -1605,6 +2192,7 @@ void GUI::updater_dlg(nana::window parent)
 				l_ffmpeg_text.caption(ver_ffmpeg_latest.string() + "  (current = " + 
 									  (ffmpeg_loc.empty() && !fs::exists(appdir / "ffmpeg.exe") ? "not present)" : ver_ffmpeg.string() + ")"));
 				btn_update_ffmpeg.enabled(true);
+				btn_update_ffmpeg.tooltip(url_latest_ffmpeg);
 			}
 			else l_ffmpeg_text.caption(ver_ffmpeg_latest.string() + "  (current)");
 		}
@@ -1624,6 +2212,7 @@ void GUI::updater_dlg(nana::window parent)
 				l_ytdlp_text.caption(ver_ytdlp_latest.string() + "  (current = " + 
 					(not_present ? "not present)  [click 4 changes]" : ver_ytdlp.string() + ")  [click 4 changes]"));
 				btn_update_ytdlp.enabled(true);
+				btn_update_ytdlp.tooltip(url_latest_ytdlp);
 			}
 			else l_ytdlp_text.caption(ver_ytdlp_latest.string() + "  (current)  [click to see changelog]");
 		}
@@ -1713,8 +2302,9 @@ void GUI::updater_dlg(nana::window parent)
 										ffmpeg_loc = target / "ffmpeg.exe";
 										get_versions();
 										btnffmpeg_state = false;
-										prog_misc.caption("FFmpeg update complete!");
+										prog_misc.caption("FFmpeg update complete");
 										l_ffmpeg_text.caption(ver_ffmpeg_latest.string() + "  (current)");
+										btn_update_ffmpeg.tooltip("");
 									}
 								}
 								else prog_misc.caption("Error: " + error);
@@ -1727,12 +2317,11 @@ void GUI::updater_dlg(nana::window parent)
 						else // yt-dlp downloaded
 						{
 							conf.ytdlp_path = target / "yt-dlp.exe";
-							l_path.update_caption();
-							btn_next.enabled(!url.empty());
 							get_versions();
 							btnytdlp_state = false;
-							prog_misc.caption("yt-dlp update complete!");
+							prog_misc.caption("yt-dlp update complete");
 							l_ytdlp_text.caption(ver_ytdlp_latest.string() + "  (current)  [click to see changelog]");
+							btn_update_ytdlp.tooltip("");
 						}
 					}
 					else prog_misc.caption(download_result);
@@ -1888,9 +2477,9 @@ void GUI::updater_dlg(nana::window parent)
 
 	fm.theme_callback([&, this](bool dark)
 	{
-		if(dark) theme.make_dark();
-		else theme.make_light();
+		apply_theme(dark);
 		fm.bgcolor(theme.fmbg);
+		return false;
 	});
 	if(conf.cbtheme == 2)
 		fm.system_theme(true);
@@ -1918,10 +2507,9 @@ void GUI::updater_dlg(nana::window parent)
 }
 
 
-template<class T>
-void GUI::change_field_weight(T &obj, std::string field, unsigned new_weight)
+void GUI::change_field_weight(nana::place &plc, std::string field, unsigned new_weight)
 {
-	std::string divtext {obj.div()};
+	std::string divtext {plc.div()};
 	auto pos {divtext.find(field)};
 	if(pos != -1)
 	{
@@ -1932,11 +2520,578 @@ void GUI::change_field_weight(T &obj, std::string field, unsigned new_weight)
 			auto cut_pos {pos};
 			while(isdigit(divtext[pos]))
 				pos++;
-			obj.div(divtext.substr(0, cut_pos) + std::to_string(new_weight) + divtext.substr(pos));
-			obj.collocate();
+			plc.div(divtext.substr(0, cut_pos) + std::to_string(new_weight) + divtext.substr(pos));
+			plc.collocate();
 		}
 	}
 }
 
 
 GUI::settings_t GUI::conf;
+
+
+void GUI::gui_bottom::show_btncopy(bool show)
+{
+	plc.field_display("btncopy", show);
+	plc.field_display("btncopy_spacer", show);
+	plc.collocate();
+}
+
+
+void GUI::gui_bottom::show_btnytfmt(bool show)
+{
+	plc.field_display("btn_ytfmtlist", show);
+	plc.field_display("ytfm_spacer", show);
+	plc.collocate();
+}
+
+
+GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
+{
+	using namespace nana;
+
+	pgui = &gui;
+	create(gui, visible);
+	bgcolor(::widgets::theme.fmbg);
+
+	auto prevbot {gui.bottoms.back()};
+	if(prevbot)
+		outpath = prevbot->outpath;
+	else outpath = conf.outpath;
+
+	plc.bind(*this);
+	gpopt.create(*this, "Download options");
+	gpopt.enabled(false);
+	plcopt.bind(gpopt);
+	tbrate.create(gpopt);
+	prog.create(*this);
+	separator.create(*this);
+	separator.refresh_theme();
+	btn_ytfmtlist.create(*this, "Select formats");
+	btndl.create(*this, "Start download");
+	btncopy.create(*this, "Apply options to all queue items");
+	btnerase.create(gpopt);
+	btnq.create(*this, gui.queue_panel.visible() ? "Show output" : "Show queue");
+	l_out.create(gpopt, "Download folder:");
+	l_rate.create(gpopt, "Download rate limit:");
+	l_outpath.create(gpopt, &outpath);
+	com_rate.create(gpopt);
+	com_args.create(gpopt);
+	cbsplit.create(gpopt, "Split chapters");
+	cbkeyframes.create(gpopt, "Force keyframes at cuts");
+	cbmp3.create(gpopt, "Convert audio to MP3");
+	cbchaps.create(gpopt, "Embed chapters");
+	cbsubs.create(gpopt, "Embed subtitles");
+	cbthumb.create(gpopt, "Embed thumbnail");
+	cbsubs.create(gpopt, "Embed subtitles");
+	cbthumb.create(gpopt, "Embed thumbnail");
+	cbtime.create(gpopt, "File modification time = time of writing");
+	cbargs.create(gpopt, "Custom arguments:");
+
+	btnq.events().click([&, this]
+	{
+		if(btnq.caption().find("queue") != -1)
+			gui.show_queue();
+		else gui.show_output();
+	});
+
+	btncopy.events().click([&, this]
+	{
+		gui.bottoms.propagate_cb_options(*this);
+		gui.bottoms.propagate_args_options(*this);
+		gui.bottoms.propagate_misc_options(*this);
+	});
+
+	plc.div(R"(vert
+			<prog weight=30> 
+			<separator weight=3px>
+			<weight=20>
+			<gpopt weight=220> <weight=20>
+			<weight=35 <> <btn_ytfmtlist weight=190> <ytfmt_spacer weight=20> <btncopy weight=328> <btncopy_spacer weight=20> 
+				<btnq weight=180> <weight=20> <btndl weight=200> <>>
+		)");
+	plc["prog"] << prog;
+	plc["separator"] << separator;
+	plc["gpopt"] << gpopt;
+	plc["btncopy"] << btncopy;
+	plc["btn_ytfmtlist"] << btn_ytfmtlist;
+	plc["btndl"] << btndl;
+	plc["btnq"] << btnq;
+
+	plc.field_display("prog", false);
+	plc.field_display("separator", true);
+	plc.field_display("btncopy", false);
+	plc.field_display("btncopy_spacer", false);
+	show_btnytfmt(false);
+
+	prog.amount(1000);
+	prog.caption("");
+
+	gpopt.size({10, 10}); // workaround for weird caption display bug
+
+	gpopt.div(R"(vert margin=20
+			<weight=25 <l_out weight=122> <weight=15> <l_outpath> > <weight=20>
+			<weight=25 
+				<l_rate weight=144> <weight=15> <tbrate weight=45> <weight=15> <com_rate weight=55> 
+				<> <cbchaps weight=133> <> <cbsplit weight=116> <> <cbkeyframes weight=186>
+			> <weight=20>
+			<weight=25 <cbtime weight=296> <> <cbthumb weight=144> <> <cbsubs weight=132> <> <cbmp3 weight=173>>
+			<weight=20> <weight=24 <cbargs weight=156> <weight=15> <com_args> <weight=10> <btnerase weight=24>>
+		)");
+	gpopt["l_out"] << l_out;
+	gpopt["l_outpath"] << l_outpath;
+	gpopt["l_rate"] << l_rate;
+	gpopt["tbrate"] << tbrate;
+	gpopt["com_rate"] << com_rate;
+	gpopt["cbsplit"] << cbsplit;
+	gpopt["cbkeyframes"] << cbkeyframes;
+	gpopt["cbmp3"] << cbmp3;
+	gpopt["cbchaps"] << cbchaps;
+	gpopt["cbsubs"] << cbsubs;
+	gpopt["cbthumb"] << cbthumb;
+	gpopt["cbtime"] << cbtime;
+	gpopt["cbargs"] << cbargs;
+	gpopt["com_args"] << com_args;
+	gpopt["btnerase"] << btnerase;
+
+	if(API::screen_dpi(true) > 96)
+	{
+		btnerase.image(arr_erase22_ico);
+		btnerase.image_disabled(arr_erase22_disabled_ico);
+	}
+	else
+	{
+		btnerase.image(arr_erase16_ico);
+		btnerase.image_disabled(arr_erase16_disabled_ico);
+	}
+
+	tbrate.multi_lines(false);
+	tbrate.padding(0, 5, 0, 5);
+
+	for(auto &str : conf.argsets)
+		com_args.push_back(to_utf8(str));
+	com_args.option(conf.com_args);
+	com_args.editable(true);
+
+	com_args.events().selected([&, this]
+	{
+		conf.com_args = com_args.option();
+		if(conf.common_dl_options && api::focus_window() == com_args)
+			gui.bottoms.propagate_args_options(*this);
+	});
+
+	com_args.events().text_changed([&, this]
+	{
+		auto idx {com_args.caption_index()};
+		if(idx != -1) btnerase.enable(true);
+		else btnerase.enable(false);
+		if(api::focus_window() == com_args)
+		{
+			for(auto &pbot : gui.bottoms)
+			{
+				auto &bot {*pbot.second};
+				if(bot.handle() != handle())
+					bot.com_args.caption(com_args.caption());
+			}
+		}
+	});
+
+	btnerase.events().click([&, this]
+	{
+		auto idx {com_args.caption_index()};
+		if(idx != -1)
+		{
+			com_args.erase(idx);
+			com_args.caption("");
+			conf.argsets.erase(conf.argsets.begin() + idx);
+			auto size {conf.argsets.size()};
+			if(size && idx == size) idx--;
+			com_args.option(idx);
+			if(conf.common_dl_options)
+				gui.bottoms.propagate_args_options(*this);
+		}
+	});
+
+	if(prevbot)
+		tbrate.caption(prevbot->tbrate.caption());
+	else if(conf.ratelim)
+		tbrate.caption(util::format_float(conf.ratelim, 1));
+
+	tbrate.set_accept([this](wchar_t wc)->bool
+	{
+		return wc == keyboard::backspace || wc == keyboard::del || ((isdigit(wc) || wc == '.') && tbrate.text().size() < 5);
+	});
+
+	tbrate.events().focus([this](const arg_focus &arg)
+	{
+		if(!arg.getting)
+		{
+			auto str {tbrate.caption()};
+			if(str.back() == '.')
+			{
+				str.pop_back();
+				tbrate.caption(str);
+			}
+			conf.ratelim = tbrate.to_double();
+		}
+	});
+
+	tbrate.events().text_changed([&, this]
+	{
+		if(conf.common_dl_options && tbrate == api::focus_window())
+			gui.bottoms.propagate_misc_options(*this);
+	});
+
+	com_rate.editable(false);
+	com_rate.push_back(" KB/s");
+	com_rate.push_back(" MB/s");
+	if(prevbot)
+		com_rate.option(prevbot->com_rate.option());
+	else com_rate.option(conf.ratelim_unit);
+	com_rate.events().selected([&]
+	{
+		conf.ratelim_unit = com_rate.option();
+		if(conf.common_dl_options && com_rate == api::focus_window())
+			gui.bottoms.propagate_misc_options(*this);
+	});
+
+	cbsplit.tooltip("Split into multiple files based on internal chapters. (<bold>--split-chapters)</>");
+	cbkeyframes.tooltip("Force keyframes around the chapters before\nremoving/splitting them. Requires a\n"
+						"reencode and thus is very slow, but the\nresulting video may have fewer artifacts\n"
+						"around the cuts. (<bold>--force-keyframes-at-cuts</>)");
+	cbtime.tooltip("Do not use the Last-modified header to set the file modification time (<bold>--no-mtime</>)");
+	cbsubs.tooltip("Embed subtitles in the video (only for mp4, webm and mkv videos) (<bold>--embed-subs</>)");
+	cbchaps.tooltip("Add chapter markers to the video file (<bold>--embed-chapters</>)");
+	cbthumb.tooltip("Embed thumbnail in the video as cover art (<bold>--embed-thumbnail</>)");
+	btnerase.tooltip("Remove this argument set from the list");
+	btndl.tooltip("Starting a download after having stopped it, resumes it.");
+	btncopy.tooltip("Copy the options for this queue item to all the other queue items.");
+	btn_ytfmtlist.tooltip("Choose formats manually, instead of letting yt-dlp\nchoose automatically. "
+		"By default, yt-dlp chooses the\nbest formats, according to the preferences you set\n"
+		"(if you press the \"Settings\" button, you can set\nthe preferred resolution, container, and framerate).");
+	std::string args_tip
+	{
+		"Custom options for yt-dlp, separated by space. Some useful examples:\n\n"
+		"<bold>-f ba</> : best audio (downloads just audio-only format, if available)\n"
+		"<bold>-f wa</> : worst audio\n"
+		"<bold>-f wv+wa</> : combines the worst video format with the worst audio format\n"
+		"<bold>--live-from-start</> : Downloads livestreams from the start. Currently \n"
+		"								  only supported for YouTube (experimental).\n\n"
+		"For more, read the yt-dlp documentation:\n"
+		"https://github.com/yt-dlp/yt-dlp#usage-and-options"
+	};
+	cbargs.tooltip(args_tip);
+	com_args.tooltip(args_tip);
+
+	btndl.events().click([&gui, this] { gui.on_btn_dl(url); });
+
+	btndl.events().key_press([&gui, this](const arg_keyboard &arg)
+	{
+		if(arg.key == '\r')
+			gui.on_btn_dl(url);
+	});
+
+	btn_ytfmtlist.events().click([&gui, this]
+	{
+		gui.formats_dlg();
+	});
+
+	l_outpath.events().click([&gui, this]
+	{
+		auto clip_text = [this](const std::wstring &str, int max_pixels) -> std::wstring
+		{
+			nana::label l {*this, str};
+			l.typeface(l_outpath.typeface());
+			int offset {0};
+			const auto strsize {str.size()};
+			while(l.measure(1234).width > max_pixels)
+			{
+				offset += 1;
+				if(strsize - offset < 4)
+					return L"";
+				l.caption(L"..." + str.substr(offset));
+			}
+			return l.caption_wstring();
+		};
+
+		auto pop_folder_selection_box = [&gui, this]
+		{
+			nana::folderbox fb {*this, gui.appdir};
+			fb.allow_multi_select(false);
+			fb.title("Locate and select the desired download folder");
+			auto res {fb()};
+			if(res.size())
+			{
+				conf.outpaths.insert(outpath);
+				outpath = conf.outpath = res.front();
+				l_outpath.caption(outpath.u8string());
+				if(conf.common_dl_options)
+					gui.bottoms.propagate_misc_options(*this);
+			}
+		};
+
+		if(conf.outpaths.empty() || conf.outpaths.size() == 1 && *conf.outpaths.begin() == outpath)
+		{
+			pop_folder_selection_box();
+			conf.outpaths.insert(outpath);
+		}
+		else
+		{
+			::widgets::Menu m;
+			m.append("Choose folder...", [&, this](menu::item_proxy &)
+			{
+				pop_folder_selection_box();
+				if(conf.outpaths.size() >= 11 && conf.outpaths.find(outpath) == conf.outpaths.end())
+					conf.outpaths.erase(conf.outpaths.begin());
+				conf.outpaths.insert(outpath);
+			});
+			m.append("Clear folder history", [&, this](menu::item_proxy &)
+			{
+				conf.outpaths.clear();
+				conf.outpaths.insert(outpath);
+			});
+			m.append_splitter();
+			for(auto &path : conf.outpaths)
+			{
+				if(path != outpath)
+				{
+					m.append(to_utf8(clip_text(path, 250)), [&, this](menu::item_proxy &)
+					{
+						outpath = conf.outpath = path;
+						l_outpath.update_caption();
+						conf.outpaths.insert(outpath);
+						if(conf.common_dl_options)
+							gui.bottoms.propagate_misc_options(*this);
+					});
+				}
+			}
+			m.max_pixels(280);
+			m.item_pixels(gui.dpi_transform(24).width);
+			auto curpos {api::cursor_position()};
+			m.popup_await(nullptr, curpos.x - 142, curpos.y);
+			gui.queue_panel.focus();
+		}
+		
+	});
+
+	if(prevbot)
+	{
+		cbsplit.check(prevbot->cbsplit.checked());
+		cbchaps.check(prevbot->cbchaps.checked());
+		cbsubs.check(prevbot->cbsubs.checked());
+		cbthumb.check(prevbot->cbthumb.checked());
+		cbtime.check(prevbot->cbtime.checked());
+		cbkeyframes.check(prevbot->cbkeyframes.checked());
+		cbmp3.check(prevbot->cbmp3.checked());
+		cbargs.check(prevbot->cbargs.checked());
+	}
+	else
+	{
+		cbsplit.check(conf.cbsplit);
+		cbchaps.check(conf.cbchaps);
+		cbsubs.check(conf.cbsubs);
+		cbthumb.check(conf.cbthumb);
+		cbtime.check(conf.cbtime);
+		cbkeyframes.check(conf.cbkeyframes);
+		cbmp3.check(conf.cbmp3);
+		cbargs.check(conf.cbargs);
+	}
+
+	cbsplit.radio(true);
+	cbchaps.radio(true);
+
+	cbsplit.events().checked([&, this]
+	{
+		if(cbsplit.checked() && cbchaps.checked())
+			cbchaps.check(false);
+		conf.cbsplit = cbsplit.checked();
+		if(conf.common_dl_options && cbsplit == api::focus_window())
+			gui.bottoms.propagate_cb_options(*this);
+	});
+
+	cbchaps.events().checked([&, this]
+	{
+		if(cbchaps.checked() && cbsplit.checked())
+			cbsplit.check(false);
+		conf.cbchaps = cbchaps.checked();
+		if(conf.common_dl_options && cbchaps == api::focus_window())
+			gui.bottoms.propagate_cb_options(*this);
+	});
+
+	cbtime.events().checked([&, this]
+	{
+		conf.cbtime = cbtime.checked();
+		if(conf.common_dl_options && cbtime == api::focus_window())
+			gui.bottoms.propagate_cb_options(*this);
+	});
+	cbthumb.events().checked([&, this]
+	{
+		conf.cbthumb = cbthumb.checked();
+		if(conf.common_dl_options && cbthumb == api::focus_window())
+			gui.bottoms.propagate_cb_options(*this);
+	});
+	cbsubs.events().checked([&, this]
+	{
+		conf.cbsubs = cbsubs.checked();
+		if(conf.common_dl_options && cbsubs == api::focus_window())
+			gui.bottoms.propagate_cb_options(*this);
+	});
+	cbkeyframes.events().checked([&, this]
+	{
+		conf.cbkeyframes = cbkeyframes.checked();
+		if(conf.common_dl_options && cbkeyframes == api::focus_window())
+			gui.bottoms.propagate_cb_options(*this);
+	});
+	cbmp3.events().checked([&, this]
+	{
+		conf.cbmp3 = cbmp3.checked();
+		if(conf.common_dl_options && cbmp3 == api::focus_window())
+			gui.bottoms.propagate_cb_options(*this);
+	});
+	cbargs.events().checked([&, this]
+	{
+		conf.cbargs = cbargs.checked();
+		if(conf.common_dl_options && cbargs == api::focus_window())
+			gui.bottoms.propagate_cb_options(*this);
+	});
+
+	gui.queue_panel.focus();
+	plc.collocate();
+}
+
+
+void GUI::taskbar_overall_progress()
+{
+	if(i_taskbar && lbq.at(0).size() > 1)
+	{
+		ULONGLONG completed {0}, total {lbq.at(0).size()};
+		for(auto &item : lbq.at(0))
+			if(item.text(3) == "done")
+				completed++;
+		if(completed == total)
+			i_taskbar->SetProgressState(hwnd, TBPF_NOPROGRESS);
+		else i_taskbar->SetProgressValue(hwnd, completed, total);
+	}
+}
+
+
+void GUI::on_btn_dl(std::wstring url)
+{
+	taskbar_overall_progress();
+	if(!process_queue_item(url))
+		return; // the queue item was stopped, not started
+
+	auto items_currently_downloading {0};
+	
+	for(auto &bottom : bottoms)
+		if(bottom.second->btndl.caption().find("Stop") == 0)
+			items_currently_downloading++;
+
+	auto item_total {lbq.at(0).size()};
+	if(item_total > 1)
+	{
+		auto pos {std::stoi(lbq.item_from_value(url).text(0)) - 1};
+		while(++pos < item_total && items_currently_downloading < conf.max_concurrent_downloads)
+		{
+			auto next_item {lbq.at(0).at(pos)};
+			auto next_url {next_item.value<std::wstring>()};
+			auto text {next_item.text(3)};
+			if(text == "queued" || text.find("stopped") == 0)
+			{
+				process_queue_item(next_url);
+				items_currently_downloading++;
+			}
+		}
+	}
+}
+
+
+void GUI::remove_queue_item(std::wstring url)
+{
+	auto item {lbq.item_from_value(url)};
+	auto next_url {next_startable_url()};
+	if(item != lbq.at(0).end())
+	{
+		auto &bottom {bottoms.at(url)};
+		if(lbq.at(0).size() > 1)
+			for(auto it {item}; it != lbq.at(0).end(); it++)
+			{
+				const auto stridx {std::to_string(std::stoi(it.text(0)) - 1)};
+				it.text(0, stridx);
+				if(!conf.common_dl_options)
+					bottoms.at(it.value<std::wstring>()).gpopt.caption("Download options for queue item #" + stridx);
+			}
+
+		auto prev_idx {std::stoi(item.text(0)) - 1};
+		auto next_item {lbq.erase(item)};
+		taskbar_overall_progress();
+		adjust_lbq_headers();
+		if(next_item != lbq.at(0).end())
+			next_item.select(true);
+		else if(lbq.at(0).size() != 0)
+			lbq.at(0).at(prev_idx > -1 ? prev_idx : 0).select(true);
+		else
+		{
+			bottoms.show(L"");
+			qurl = L"";
+			l_url.update_caption();
+		}
+		if(bottom.timer_proc.started())
+			bottom.timer_proc.stop();
+		if(bottom.info_thread.joinable())
+		{
+			bottom.working_info = false;
+			bottom.info_thread.join();
+		}
+		if(bottom.dl_thread.joinable())
+		{
+			bottom.working = false;
+			bottom.dl_thread.join();
+			if(!next_url.empty())
+				on_btn_dl(next_url);
+		}
+		bottoms.erase(url);
+		outbox.erase(url);
+		if(bottoms.size() == 2)
+		{
+			SendMessageA(hwnd, WM_SETREDRAW, FALSE, 0);
+			if(bottoms.at(1).plc.field_display("btncopy"))
+				bottoms.at(1).show_btncopy(false);
+			SendMessageA(hwnd, WM_SETREDRAW, TRUE, 0);
+			nana::api::refresh_window(*this);
+		}
+	}
+}
+
+
+std::wstring GUI::next_startable_url(std::wstring current_url)
+{
+	if(autostart_next_item)
+	{
+		auto item_total {lbq.at(0).size()};
+		if(item_total > 1)
+		{
+			auto items_currently_downloading {0};
+			auto &curbot {current_url.empty() ? bottoms.current() : bottoms.at(current_url)};
+			for(auto item : lbq.at(0))
+			{
+				const auto text {item.text(3)};
+				if(text == "downloading" || (text.find('%') != -1 && text.find("stopped") == -1) || text == "started")
+					items_currently_downloading++;
+			}
+
+			auto pos {std::stoi(lbq.item_from_value(curbot.url).text(0)) - 1};
+			if(pos == item_total - 1)
+				pos = -1;
+			while(++pos < item_total && items_currently_downloading < conf.max_concurrent_downloads)
+			{
+				auto next_item {lbq.at(0).at(pos)};
+				auto next_url {next_item.value<std::wstring>()};
+				auto text {next_item.text(3)};
+				if(text == "queued" || text.find("stopped") != -1)
+					return next_url;
+			}
+		}
+	}
+	return L"";
+}

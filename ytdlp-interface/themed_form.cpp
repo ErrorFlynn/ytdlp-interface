@@ -25,10 +25,20 @@ themed_form::themed_form(theme_cb theme_change_callback, nana::window owner, nan
 			{
 				_AllowDarkModeForWindow(hwnd, _ShouldAppsUseDarkMode());
 				RefreshTitleBarThemeColor(hwnd);
-				if(callback) callback(_ShouldAppsUseDarkMode());
-				refresh_widgets();
+				if(callback) if(callback(_ShouldAppsUseDarkMode())) refresh_widgets();
+				else refresh_widgets();
 			}
 			return false;
+		});
+
+		msg.make_before(WM_KEYDOWN, [this](UINT, WPARAM wparam, LPARAM, LRESULT *)
+		{
+			if(wparam == VK_ESCAPE)
+			{
+				close();
+				return false;
+			}
+			return true;
 		});
 	}
 }
@@ -42,8 +52,8 @@ void themed_form::dark_theme(bool enable)
 		AllowDarkModeForWindow(hwnd, enable);
 		RefreshTitleBarThemeColor(hwnd);
 	}
-	if(callback) callback(enable);
-	refresh_widgets();
+	if(callback) if(callback(enable)) refresh_widgets();
+	else refresh_widgets();
 }
 
 void themed_form::system_theme(bool enable)
@@ -55,8 +65,10 @@ void themed_form::system_theme(bool enable)
 			use_system_setting = true;
 			_AllowDarkModeForWindow(hwnd, _ShouldAppsUseDarkMode());
 			RefreshTitleBarThemeColor(hwnd);
-			if(callback) callback(_ShouldAppsUseDarkMode());
-			refresh_widgets();
+			if(callback)
+				if(callback(_ShouldAppsUseDarkMode()))
+					refresh_widgets();
+			else refresh_widgets();
 		}
 		else if(use_system_setting)
 			dark_theme(false);
@@ -117,4 +129,33 @@ void themed_form::refresh_widgets()
 		wdg.events().expose.emit({}, wdg);
 		nana::API::refresh_window(wdg);
 	});
+}
+
+
+nana::size themed_form::dpi_transform(double w, double h)
+{
+	double dpi_horz {static_cast<double>(nana::API::screen_dpi(true))},
+		dpi_vert {static_cast<double>(nana::API::screen_dpi(false))};
+
+	if(dpi_horz > 96)
+	{
+		w = round(w * dpi_horz / 96.0);
+		h = round(h * dpi_vert / 96.0);
+	}
+	return nana::size {static_cast<unsigned>(w), static_cast<unsigned>(h)};
+}
+
+
+void themed_form::center(double w, double h)
+{
+	using namespace nana;
+	const auto maxh {screen {}.from_window(*this).area().dimension().height};
+	const auto maxw {screen {}.from_window(*this).area().dimension().width};
+	auto r {API::make_center(dpi_transform(w, h))};
+	move(r);
+	auto sz {API::window_outline_size(*this)};
+	if(sz.height > maxh)
+		MoveWindow(hwnd, (maxw - sz.width) / 2, 0, sz.width, maxh, TRUE);
+	else
+		MoveWindow(hwnd, (maxw - sz.width) / 2, (maxh - sz.height) / 2, sz.width, sz.height, TRUE);
 }

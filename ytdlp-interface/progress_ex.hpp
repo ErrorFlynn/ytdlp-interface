@@ -15,7 +15,7 @@ namespace nana
 
 		bool create(window parent, bool visible = true)
 		{
-			return create(parent, rectangle{}, visible);
+			return create(parent, {}, visible);
 		}
 
 		bool create(window parent, const rectangle &r = {}, bool visible = true)

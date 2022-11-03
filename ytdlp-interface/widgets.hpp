@@ -10,25 +10,33 @@
 #include <nana/gui/widgets/combox.hpp>
 #include <nana/gui/widgets/textbox.hpp>
 #include <nana/gui/widgets/slider.hpp>
+#include <nana/gui/widgets/menu.hpp>
+#include <nana/gui/widgets/spinbox.hpp>
 
 #include <variant>
+#include <iostream>
+#include <map>
+#include <Windows.h>
 
 #include "progress_ex.hpp"
 #include "icons.hpp"
+
+#pragma warning(disable : 4267)
 
 namespace fs = std::filesystem;
 
 namespace widgets
 {
-	struct theme_t
+	static struct theme_t
 	{
 	private:
 		bool dark;
 		double shade {0};
 
 	public:
-		nana::color nimbus, fmbg, Label_fg, Text_fg, Text_fg_error, cbox_fg, btn_bg, btn_fg,
-			path_bg, path_fg, path_link_fg, sep_bg, tbfg, tbbg, tbkw, tbkw_special, gpbg, lb_headerbg, title_fg;
+		nana::color nimbus, fmbg, Label_fg, Text_fg, Text_fg_error, cbox_fg, btn_bg, btn_fg, path_bg, path_fg, path_link_fg, 
+			sep_bg, tbfg, tbbg, tbkw, tbkw_special, tbkw_warning, tbkw_error, gpbg, lb_headerbg, title_fg, overlay_fg, border,
+			tb_selbg, tb_selbg_unfocused;
 		std::string gpfg;
 
 		void make_light()
@@ -36,7 +44,8 @@ namespace widgets
 			dark = false;
 			using namespace nana;
 			nimbus = color {"#60c8fd"};
-			fmbg = btn_bg = tbbg = gpbg = color {colors::white}.blend(colors::light_grey, .3 - shade);
+			fmbg = btn_bg = tbbg = color {colors::white}.blend(colors::light_grey, .3 - shade);
+			gpbg = fmbg.blend(colors::black, .025);
 			tbfg = colors::black;
 			Label_fg = color {"#569"};
 			Text_fg = color {"#575"};
@@ -51,6 +60,12 @@ namespace widgets
 			title_fg = color {"#789"};
 			tbkw = color {"#272"};
 			tbkw_special = color {"#722"};
+			tbkw_warning = color {"#B96C00"};
+			tbkw_error = color {"#aa2222"};;
+			overlay_fg = color {"#bcc0c3"};
+			border = color {"#9CB6C5"};
+			tb_selbg = color {"#5695D3"};
+			tb_selbg_unfocused = tb_selbg.blend(nana::colors::white, .3);
 		}
 
 		void make_dark()
@@ -68,13 +83,18 @@ namespace widgets
 			Text_fg_error = color {"#f99"};
 			path_bg = color {"#383737"}.blend(colors::black, shade);
 			path_fg = colors::white;
-			sep_bg = color {"#888"};
+			sep_bg = color {"#777"};
 			gpfg = "0xE4D6BA";
 			lb_headerbg = color {"#525658"}.blend(colors::black, shade);
 			title_fg = nana::color {"#cde"};
 			path_link_fg = color {"#E4D6BA"};
 			tbkw = color {"#b5c5d5"};
 			tbkw_special = color {"#F0B0A0"};
+			tbkw_warning = color {"#EEBF00"};
+			tbkw_error = color {"#CA86E3"};
+			overlay_fg = border = color {"#666"};
+			tb_selbg = color {"#95443B"};
+			tb_selbg_unfocused = tb_selbg.blend(nana::colors::black , .3);
 		}
 
 		bool is_dark() { return dark; }
@@ -87,62 +107,95 @@ namespace widgets
 		double contrast() { return shade; }
 
 		theme_t() { make_light(); }
-	};
+	} theme;
 
 
 	class Label : public nana::label
 	{
-		theme_t* theme {nullptr};
 
 	public:
-		Label(nana::window parent, theme_t* ptheme, std::string_view text, bool dpi_adjust = false) : nana::label {parent, text}
+
+		Label() : label() {}
+
+		Label(nana::window parent, std::string_view text, bool dpi_adjust = false) : label {parent, text}
 		{
-			theme = ptheme;
-			fgcolor(theme->Label_fg);
+			fgcolor(theme.Label_fg);
+			typeface(nana::paint::font_info {"", 12 - (double)(nana::API::screen_dpi(true) > 96) * 2 * dpi_adjust});
+			text_align(dpi_adjust ? nana::align::right : nana::align::left, nana::align_v::center);
+			nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
+			events().expose([this] { fgcolor(theme.Label_fg); });
+		}
+
+		void create(nana::window parent, std::string_view text, bool dpi_adjust = false)
+		{
+			label::create(parent);
+			caption(text);
+			fgcolor(theme.Label_fg);
 			typeface(nana::paint::font_info {"", 12 - (double)(nana::API::screen_dpi(true) > 96) * 2 * dpi_adjust});
 			text_align(nana::align::right, nana::align_v::center);
 			nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
-			events().expose([this] { fgcolor(theme->Label_fg); });
+			events().expose([this] { fgcolor(theme.Label_fg); });
 		}
 	};
 
 
 	class Text : public nana::label
 	{
-		theme_t* theme {nullptr};
 		bool error_mode_ {false};
 
 	public:
-		Text(nana::window parent, theme_t* ptheme, std::string_view text = "") : nana::label {parent, text}
+		Text(nana::window parent, std::string_view text = "", bool dpi_adjust = false) : label {parent, text}
 		{
-			theme = ptheme;
-			fgcolor(theme->Text_fg);
-			typeface(nana::paint::font_info {"", 12 - (double)(nana::API::screen_dpi(true) > 96) * 2});
+			fgcolor(theme.Text_fg);
+			typeface(nana::paint::font_info {"", 12 - (double)(nana::API::screen_dpi(true) > 96) * 2 * dpi_adjust});
 			text_align(nana::align::left, nana::align_v::center);
 			nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
 			events().expose([this]
 			{
-				fgcolor(error_mode_ ? theme->Text_fg_error : theme->Text_fg);
-				scheme().activated = theme->nimbus;
+				fgcolor(error_mode_ ? theme.Text_fg_error : theme.Text_fg);
+				scheme().activated = theme.nimbus;
 			});
 		}
+
 		void error_mode(bool enable)
 		{
 			error_mode_ = enable;
-			fgcolor(error_mode_ ? theme->Text_fg_error : theme->Text_fg);
+			fgcolor(error_mode_ ? theme.Text_fg_error : theme.Text_fg);
 		}
 	};
 
 
-	class separator : public nana::label
+	class Separator : public nana::panel<false>
 	{
-		theme_t* theme {nullptr};
+		nana::place plc;
+		nana::label sep1, sep2;
 
 	public:
-		separator(nana::window parent, theme_t* ptheme) : nana::label {parent}
+
+		Separator() {}
+
+		Separator(nana::window parent)
 		{
-			theme = ptheme;
-			events().expose([this] { bgcolor(theme->sep_bg); });
+			create(parent);
+		}
+
+		void create(nana::window parent)
+		{
+			panel<false>::create(parent);
+			plc.bind(*this);
+			sep1.create(*this);
+			sep2.create(*this);
+			plc.div("vert <sep1> <> <sep2>");
+			plc["sep1"] << sep1;
+			plc["sep2"] << sep2;
+
+			events().expose([this] { refresh_theme(); });
+		}
+
+		void refresh_theme()
+		{
+			sep1.bgcolor(theme.sep_bg);
+			sep2.bgcolor(theme.sep_bg);
 		}
 	};
 
@@ -151,25 +204,47 @@ namespace widgets
 	{
 		using variant = std::variant<fs::path*, std::wstring*>;
 		variant v;
-		theme_t* theme {nullptr};
-		nana::drawing border {*this};
+		
 		bool is_path {std::holds_alternative<fs::path*>(v)};
 
 	public:
-		path_label(nana::window parent, theme_t* ptheme, const variant var) : nana::label {parent}, v {var}
+
+		path_label() : label() {}
+
+		path_label(nana::window parent, const variant var) : label {parent}, v {var}
 		{
-			theme = ptheme;
 			refresh_theme();
 			if(is_path) typeface(nana::paint::font_info {"Tahoma", 10});
 			else typeface(nana::paint::font_info {"", 11, {700}});
 			text_align(nana::align::center, nana::align_v::center);
+			nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
 			nana::API::effects_edge_nimbus(*this, nana::effects::edge_nimbus::over);
 			events().expose([this] { refresh_theme(); });
 			events().resized([this] { update_caption(); });
-			border.draw([this](nana::paint::graphics& g)
+			nana::drawing {*this}.draw([this](nana::paint::graphics& g)
 			{
-				if(theme->is_dark())
-					g.rectangle(false, theme->path_bg.blend(nana::colors::white, .3));
+				if(theme.is_dark())
+					g.rectangle(false, theme.path_bg.blend(nana::colors::white, .3));
+				else g.rectangle(false, nana::color {"#9aa"});
+			});
+		}
+
+		void create(nana::window parent, const variant var)
+		{
+			label::create(parent);
+			v = var;
+			refresh_theme();
+			if(is_path) typeface(nana::paint::font_info {"Tahoma", 10});
+			else typeface(nana::paint::font_info {"", 11, {700}});
+			text_align(nana::align::center, nana::align_v::center);
+			nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
+			nana::API::effects_edge_nimbus(*this, nana::effects::edge_nimbus::over);
+			events().expose([this] { refresh_theme(); });
+			events().resized([this] { update_caption(); });
+			nana::drawing {*this}.draw([this](nana::paint::graphics &g)
+			{
+				if(theme.is_dark())
+					g.rectangle(false, theme.path_bg.blend(nana::colors::white, .3));
 				else g.rectangle(false, nana::color {"#9aa"});
 			});
 		}
@@ -198,16 +273,14 @@ namespace widgets
 
 		void refresh_theme()
 		{
-			scheme().activated = theme->nimbus;
-			if(theme->is_dark())
+			scheme().activated = theme.nimbus;
+			if(theme.is_dark())
 			{
-				bgcolor(theme->path_bg);
-				fgcolor(is_path ? theme->path_fg : theme->path_link_fg);
+				fgcolor(is_path ? theme.path_fg : theme.path_link_fg);
 			}
 			else
 			{
-				bgcolor(theme->fmbg);
-				fgcolor(is_path ? theme->path_fg : theme->path_link_fg);
+				fgcolor(is_path ? theme.path_fg : theme.path_link_fg);
 			}
 		}
 	};
@@ -215,12 +288,22 @@ namespace widgets
 
 	class cbox : public nana::checkbox
 	{
-		theme_t* theme {nullptr};
-
 	public:
-		cbox(nana::window parent, theme_t* ptheme, std::string_view text) : nana::checkbox {parent, text}
+
+		cbox() : checkbox() {}
+
+		cbox(nana::window parent, std::string_view text) : checkbox {parent, text}
 		{
-			theme = ptheme;
+			refresh_theme();
+			typeface(nana::paint::font_info {"", 12});
+			nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
+			events().expose([this] { refresh_theme(); });
+		}
+
+		void create(nana::window parent, std::string_view text)
+		{
+			checkbox::create(parent);
+			caption(text);
 			refresh_theme();
 			typeface(nana::paint::font_info {"", 12});
 			nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
@@ -229,7 +312,7 @@ namespace widgets
 
 		void refresh_theme()
 		{
-			fgcolor(theme->cbox_fg);
+			fgcolor(theme.cbox_fg);
 			scheme().square_border_color = fgcolor();
 			auto parent {nana::API::get_widget(this->parent())};
 			scheme().square_bgcolor = parent->bgcolor();
@@ -239,7 +322,6 @@ namespace widgets
 
 	class Button : public nana::button
 	{
-		theme_t* theme {nullptr};
 		nana::paint::image img, img_disabled;
 
 		class btn_bg : public nana::element::element_interface
@@ -258,9 +340,21 @@ namespace widgets
 		};
 
 	public:
-		Button(nana::window parent, theme_t* ptheme, std::string_view text = "") : nana::button {parent, text}
+
+		Button() : button() {}
+
+		Button(nana::window parent, std::string_view text = "") : button {parent, text}
 		{
-			theme = ptheme;
+			refresh_theme();
+			typeface(nana::paint::font_info {"", 14, {800}});
+			enable_focus_color(false);
+			events().expose([this] { refresh_theme(); });
+		}
+
+		void create(nana::window parent, std::string_view text = "")
+		{
+			button::create(parent);
+			caption(text);
 			refresh_theme();
 			typeface(nana::paint::font_info {"", 14, {800}});
 			enable_focus_color(false);
@@ -269,10 +363,10 @@ namespace widgets
 
 		void refresh_theme()
 		{
-			fgcolor(theme->btn_fg);
-			bgcolor(theme->btn_bg);
-			scheme().activated = theme->nimbus;
-			if(theme->is_dark())
+			fgcolor(theme.btn_fg);
+			bgcolor(theme.btn_bg);
+			scheme().activated = theme.nimbus;
+			if(theme.is_dark())
 				set_bground(btn_bg {});
 			else set_bground("");
 		}
@@ -281,7 +375,7 @@ namespace widgets
 		{
 			if(enable)
 			{
-				if(theme->is_dark())
+				if(theme.is_dark())
 				{
 					fgcolor(nana::color {"#E4D6BA"});
 					scheme().activated = nana::color {"#E4D6BA"};
@@ -294,8 +388,8 @@ namespace widgets
 			}
 			else
 			{
-				fgcolor(theme->btn_fg);
-				scheme().activated = theme->nimbus;
+				fgcolor(theme.btn_fg);
+				scheme().activated = theme.nimbus;
 			}
 		}
 
@@ -328,14 +422,12 @@ namespace widgets
 
 	class Listbox : public nana::listbox
 	{
-		theme_t* theme {nullptr};
 		nana::drawing dw {*this};
 
 	public:
 
-		Listbox(nana::window parent, theme_t* ptheme) : listbox {parent}
+		Listbox(nana::window parent) : listbox {parent}
 		{
-			theme = ptheme;
 			refresh_theme();
 			events().expose([this] { refresh_theme(); });
 		}
@@ -348,23 +440,29 @@ namespace widgets
 			return count;
 		}
 
+		auto item_from_value(std::wstring val, size_t cat = 0)
+		{
+			for(auto item : at(cat))
+				if(item.value<std::wstring>() == val)
+					return item;
+			return at(cat).end();
+		}
+
 		void refresh_theme()
 		{
-			bgcolor(theme->tbbg);
-			fgcolor(theme->tbfg);
-			if(theme->is_dark())
+			bgcolor(theme.tbbg);
+			fgcolor(theme.tbfg);
+			dw.draw([](nana::paint::graphics &g) { g.rectangle(false, theme.border); });
+
+			if(theme.is_dark())
 			{
 				borderless(true);
-				scheme().header_bgcolor = theme->lb_headerbg;
+				scheme().header_bgcolor = theme.lb_headerbg;
 				scheme().header_fgcolor = nana::colors::white;
-				scheme().cat_fgcolor = theme->nimbus;
-				scheme().item_selected = nana::color {"#BA4B3E"};
-				scheme().item_selected_border = nana::color {"#BA4B3E"}.blend(nana::colors::black, .15);
+				scheme().cat_fgcolor = theme.nimbus;
+				scheme().item_selected = nana::color {"#AC4F44"};
+				scheme().item_selected_border = nana::color {"#B05348"}.blend(nana::colors::black, .15);
 				scheme().item_highlighted = nana::color {"#544"};
-				dw.draw([](nana::paint::graphics& g)
-				{
-					g.rectangle(false, nana::color {"#666"});
-				});
 			}
 			else
 			{
@@ -372,24 +470,37 @@ namespace widgets
 				scheme().header_bgcolor = nana::color {"#f1f2f4"};
 				scheme().header_fgcolor = nana::colors::black;
 				scheme().cat_fgcolor = nana::color {"#039"};
-				scheme().item_selected = nana::color {"#c7dEe4"}.blend(nana::colors::grey, .1 - theme->contrast());
-				scheme().item_selected_border = nana::color {"#a7cEd4"}.blend(nana::colors::grey, .1 - theme->contrast());
-				scheme().item_highlighted = nana::color {"#ECFCFF"};
+				scheme().item_selected = nana::color {"#c7dEe4"}.blend(nana::colors::grey, .1 - theme.contrast());
+				scheme().item_selected_border = nana::color {"#a7cEd4"}.blend(nana::colors::grey, .1 - theme.contrast());
+				scheme().item_highlighted = nana::color {"#eee"};
 				dw.clear();
 			}
+
+			for(auto &item : at(0))
+				item.fgcolor(fgcolor());
 		}
 	};
 
 
 	class Progress : public nana::progress_ex
 	{
-		theme_t* theme {nullptr};
-
 	public:
 
-		Progress(nana::window parent, theme_t* ptheme) : progress_ex {parent}
+		Progress() : progress_ex() {}
+
+		Progress(nana::window parent) : progress_ex {parent}
 		{
-			theme = ptheme;
+			refresh_theme();
+			typeface(nana::paint::font_info {"", 11, {800}});
+			nana::paint::image img;
+			img.open(arr_progbar_jpg, sizeof arr_progbar_jpg);
+			image(img);
+			events().expose([this] { refresh_theme(); });
+		}
+
+		void create(nana::window parent)
+		{
+			nana::progress_ex::create(parent, true);
 			refresh_theme();
 			typeface(nana::paint::font_info {"", 11, {800}});
 			nana::paint::image img;
@@ -400,21 +511,21 @@ namespace widgets
 
 		void refresh_theme()
 		{
-			if(theme->is_dark())
+			if(theme.is_dark())
 			{
 				dark_bg(true);
 				outline_color(nana::color {"#345"});
-				text_contrast_colors(theme->Label_fg, theme->Label_fg);
-				scheme().background = theme->fmbg.blend(nana::colors::black, .1);
-				scheme().lower_background = theme->fmbg.blend(nana::colors::white, .1);
+				text_contrast_colors(theme.Label_fg, theme.Label_fg);
+				scheme().background = theme.fmbg.blend(nana::colors::black, .1);
+				scheme().lower_background = theme.fmbg.blend(nana::colors::white, .1);
 			}
 			else
 			{
 				dark_bg(false);
 				outline_color(nana::color {"#678"});
 				text_contrast_colors(nana::colors::white, nana::color {"#678"});
-				scheme().background = nana::color {nana::colors::white}.blend(nana::colors::light_grey, .3 - theme->contrast());
-				scheme().lower_background = nana::color {"#f5f5f5"}.blend(nana::colors::light_grey, .3 - theme->contrast());
+				scheme().background = nana::color {nana::colors::white}.blend(nana::colors::light_grey, .3 - theme.contrast());
+				scheme().lower_background = nana::color {"#f5f5f5"}.blend(nana::colors::light_grey, .3 - theme.contrast());
 			}
 		}
 	};
@@ -422,14 +533,14 @@ namespace widgets
 
 	class Group : public nana::group
 	{
-		theme_t* theme {nullptr};
 		std::string title;
 
 	public:
 
-		Group(nana::window parent, std::string title, theme_t* ptheme) : group {parent}, title {title}
+		Group() : group() {}
+
+		Group(nana::window parent, std::string title) : group {parent}, title {title}
 		{
-			theme = ptheme;
 			enable_format_caption(true);
 			caption(title);
 			caption_align(nana::align::center);
@@ -437,14 +548,34 @@ namespace widgets
 			events().expose([this] { refresh_theme(); });
 		}
 
+		void create(nana::window parent, std::string title = "")
+		{
+			group::create(parent);
+			this->title = title;
+			caption(title);
+			enable_format_caption(true);
+			caption_align(nana::align::center);
+			refresh_theme();
+			events().expose([this] { refresh_theme(); });
+		}
+
 		nana::widget& caption(std::string utf8)
 		{
-			return nana::group::caption("<bold color=" + theme->gpfg + " size=11 font=\"Tahoma\"> " + utf8 + " </>");
+			title = utf8;
+			widget::typeface(nana::paint::font_info{}); // workaround for bug: group.hpp declares undefined method `typeface`
+			return group::caption("<bold color=" + theme.gpfg + " size=11 font=\"Tahoma\"> " + utf8 + " </>");
+		}
+
+		std::string caption()
+		{
+			auto cap {group::caption()};
+			auto pos1 {cap.find('>') + 2}, pos2 {cap.rfind('<') - 2};
+			return cap.substr(pos1, pos2 - pos1 + 1);
 		}
 
 		void refresh_theme()
 		{
-			bgcolor(theme->gpbg);
+			bgcolor(theme.gpbg);
 			caption(title);
 		}
 	};
@@ -452,8 +583,6 @@ namespace widgets
 
 	class Combox : public nana::combox
 	{
-		theme_t* theme {nullptr};
-
 		class my_renderer : public nana::combox::item_renderer
 		{
 			void image(bool enabled, unsigned pixels) override {}
@@ -466,7 +595,7 @@ namespace widgets
 				const nana::color fg_normal {"#e6e6e3"};
 				const nana::color fg_hilighted {nana::colors::white};
 				const nana::color bg_normal {"#33373e"};
-				const nana::color bg_hilighted {"#BA4B3E"};
+				const nana::color bg_hilighted {"#A94c41"};
 
 				g.rectangle(r, true, bg_normal);
 				if(state == StateHighlighted)
@@ -475,7 +604,7 @@ namespace widgets
 					g.rectangle(nana::rectangle {r}.pare_off(1), false, bg_hilighted.blend(nana::colors::black, .4));
 					g.palette(false, bg_normal);
 					nana::paint::draw {g}.corner(r, 1);
-					g.gradual_rectangle(nana::rectangle {r}.pare_off(2), bg_hilighted, bg_hilighted.blend(nana::colors::black, .2), true);
+					g.gradual_rectangle(nana::rectangle {r}.pare_off(2), bg_hilighted, bg_hilighted.blend(nana::colors::black, .25), true);
 				}
 				auto size {g.text_extent_size(ii->text())};
 				auto pos {r.position()};
@@ -492,7 +621,7 @@ namespace widgets
 
 			unsigned item_pixels(graph_reference g) const override
 			{
-				const unsigned padding {4}; // empty space padding the top and bottom of the text area
+				const unsigned padding {6}; // empty space padding the top and bottom of the text area
 				unsigned ascent, descent, internal_leading; // font metrics
 				g.text_metrics(ascent, descent, internal_leading);
 				return ascent + descent + padding;
@@ -505,36 +634,42 @@ namespace widgets
 		} renderer_;
 
 	public:
-		Combox(nana::window parent, theme_t* ptheme) : nana::combox {parent}
+
+		Combox() : combox() {}
+
+		Combox(nana::window parent)
 		{
-			theme = ptheme;
+			create(parent);
+		}
+
+		void create(nana::window parent)
+		{
+			combox::create(parent);
 			refresh_theme();
 			events().expose([this] { refresh_theme(); });
-			nana::drawing {*this}.draw([this](nana::paint::graphics& g)
+			nana::drawing {*this}.draw([this](nana::paint::graphics &g)
 			{
-				if(theme->is_dark())
+				if(theme.is_dark())
 					g.rectangle(false, nana::color {"#999A9E"});
 			});
 		}
 
 		void refresh_theme()
 		{
-			auto parent {nana::API::get_widget(this->parent())};
-			bgcolor(parent->bgcolor());
-			scheme().activated = theme->nimbus;
-			if(theme->is_dark())
+			bgcolor(nana::API::get_widget(parent())->bgcolor());
+			scheme().activated = theme.nimbus;
+			scheme().selection = theme.tb_selbg;
+			scheme().selection_unfocused = theme.tb_selbg_unfocused;
+
+			if(theme.is_dark())
 			{
-				fgcolor(theme->Label_fg);
+				fgcolor(theme.Label_fg);
 				renderer(&renderer_);
-				scheme().selection = nana::color {"#d8d4c8"};
-				scheme().selection_text = bgcolor();
 			}
 			else
 			{
 				fgcolor(nana::colors::black);
 				renderer(nullptr);
-				scheme().selection = nana::color {"#7D8393"};
-				scheme().selection_text = bgcolor();
 			}
 		}
 
@@ -553,13 +688,20 @@ namespace widgets
 
 	class Textbox : public nana::textbox
 	{
-		theme_t* theme {nullptr};
-		bool highlighted {true};
+		bool highlighted {false};
 
 	public:
-		Textbox(nana::window parent, theme_t* ptheme) : nana::textbox {parent}
+
+		Textbox() : textbox() {};
+
+		Textbox(nana::window parent, bool visible = true)
 		{
-			theme = ptheme;
+			create(parent, visible);
+		}
+
+		void create(nana::window parent, bool visible = true)
+		{
+			textbox::create(parent, visible);
 			refresh_theme();
 			events().expose([this] { refresh_theme(); });
 			nana::drawing {*this}.draw([](nana::paint::graphics &g)
@@ -570,12 +712,16 @@ namespace widgets
 
 		void refresh_theme()
 		{
-			scheme().activated = theme->nimbus;
+			scheme().activated = theme.nimbus;
 			auto bgparent {nana::API::get_widget(parent())->bgcolor()};
-			bgcolor(theme->is_dark() ? bgparent.blend(nana::colors::black, .045) : theme->tbbg);
-			fgcolor(theme->tbfg);
-			highlight(true);
+			bgcolor(theme.is_dark() ? bgparent.blend(nana::colors::black, .045) : bgparent);
+			fgcolor(theme.tbfg);
+			scheme().selection = theme.tb_selbg;
+			scheme().selection_unfocused = theme.tb_selbg_unfocused;
+			highlight(highlighted);
 			set_keywords("special", true, true, {"[download]"});
+			set_keywords("warning", true, true, {"WARNING:"});
+			set_keywords("error", true, true, {"ERROR:"});
 		}
 
 		void set_keyword(std::string name)
@@ -588,13 +734,17 @@ namespace widgets
 			highlighted = enable;
 			if(enable)
 			{
-				set_highlight("general", theme->tbkw, theme->tbbg);
-				set_highlight("special", theme->tbkw_special, theme->tbbg);
+				set_highlight("general", theme.tbkw, theme.tbbg);
+				set_highlight("special", theme.tbkw_special, theme.tbbg);
+				set_highlight("warning", theme.tbkw_warning, theme.tbbg);
+				set_highlight("error", theme.tbkw_error, theme.tbbg);
 			}
 			else
 			{
 				erase_highlight("general");
 				erase_highlight("special");
+				erase_highlight("warning");
+				erase_highlight("error");
 			}
 		}
 
@@ -604,28 +754,23 @@ namespace widgets
 
 	class Title : public nana::label
 	{
-		theme_t* theme {nullptr};
-
 	public:
-		Title(nana::window parent, theme_t* ptheme) : nana::label {parent}
+		Title(nana::window parent) : label {parent}
 		{
-			theme = ptheme;
-			fgcolor(theme->title_fg);
+			fgcolor(theme.title_fg);
 			typeface(nana::paint::font_info {"Arial", 15 - (double)(nana::API::screen_dpi(true) > 96) * 3, {800}});
 			text_align(nana::align::center, nana::align_v::top);
 			nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
-			events().expose([this] { fgcolor(theme->title_fg); });
+			events().expose([this] { fgcolor(theme.title_fg); });
 		}
 	};
 
+
 	class Slider : public nana::slider
 	{
-		theme_t* theme {nullptr};
-
 	public:
-		Slider(nana::window parent, theme_t* ptheme) : nana::slider {parent}
+		Slider(nana::window parent) : slider {parent}
 		{
-			theme = ptheme;
 			transparent(true);
 			refresh_theme();
 			events().expose([this] {refresh_theme(); });
@@ -637,7 +782,7 @@ namespace widgets
 
 		void refresh_theme()
 		{
-			if(theme->is_dark())
+			if(theme.is_dark())
 			{
 				scheme().color_adorn = scheme().color_slider = nana::color {"#a8967a"};
 				scheme().color_slider_highlighted = nana::colors::dark_goldenrod;
@@ -654,4 +799,138 @@ namespace widgets
 			}
 		}
 	};
+
+
+	class Overlay : public nana::label
+	{
+	public:
+
+		Overlay() : label() {}
+
+		Overlay(nana::window parent, std::string_view text = "", bool visible = true) : label {parent, text, visible}
+		{
+			if(text.empty())
+				caption("output from yt-dlp.exe appears here\n\nclick to copy to clipboard"
+					"\n\nright-click to toggle keyword highlighting\n\ndouble-click to show queue");
+			fgcolor(theme.overlay_fg);
+			text_align(nana::align::center, nana::align_v::center);
+			typeface(nana::paint::font_info {"", 14, {700}});
+			nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
+			events().expose([this] { fgcolor(theme.overlay_fg); });
+			nana::drawing{*this}.draw([](nana::paint::graphics &g) { g.rectangle(false, theme.border); });
+		}
+
+		void create(nana::window parent, bool visible = true)
+		{
+			label::create(parent, visible);
+			fgcolor(theme.overlay_fg);
+			text_align(nana::align::center, nana::align_v::center);
+			typeface(nana::paint::font_info {"", 14, {700}});
+			nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
+			events().expose([this] { fgcolor(theme.overlay_fg); });
+			nana::drawing {*this}.draw([](nana::paint::graphics &g) { g.rectangle(false, theme.border); });
+		}
+	};
+
+
+	class Menu : public nana::menu
+	{
+		class menu_renderer : public nana::menu::renderer_interface
+		{
+
+		public:
+			menu_renderer(const nana::pat::cloneable<renderer_interface> &rd) : reuse_(rd) {}
+
+		private:
+			void background(graph_reference graph, nana::window wd) override
+			{
+				auto bgclr {nana::color {"#33373e"}};
+				graph.rectangle(true, bgclr); // entire area
+				graph.rectangle({1,1,28,graph.height() - 2}, true, nana::color {"#43474e"}); // icon area
+				graph.rectangle(false, nana::color {"#A3A2A1"}); // border
+			}
+
+			void item(graph_reference g, const nana::rectangle &r, const attr &attr) override
+			{
+				if(!attr.enabled) return;
+				using namespace nana;
+				const unsigned margin {8};
+				const color fg_normal {"#e6e6e3"};
+				const color bg_normal {"#33373e"};
+				const color bg_hilighted {"#AC4F44"};
+
+				g.rectangle(r, true, bg_normal);				
+				if(attr.item_state == state::active)
+				{
+					g.rectangle(r, false, bg_hilighted.blend(colors::white, .1));
+					g.rectangle(rectangle {r}.pare_off(1), false, bg_hilighted.blend(colors::black, .4));
+					g.palette(false, bg_normal);
+					paint::draw {g}.corner(r, 1);
+					g.gradual_rectangle(rectangle {r}.pare_off(2), bg_hilighted, bg_hilighted.blend(colors::black, .3), true);
+				}
+				else g.rectangle({1,r.y,28,r.height}, true, color {"#43474e"}); // icon area
+			}
+
+			void item_image(graph_reference graph, const nana::point &pos, unsigned image_px, const nana::paint::image &img) override
+			{
+				reuse_->item_image(graph, pos, image_px, img);
+			}
+
+			void item_text(graph_reference g, const nana::point &pos, const std::string &text, unsigned pixels, const attr &atr) override
+			{
+				auto size {g.text_extent_size(text)};
+				g.string(pos, text, nana::colors::white);
+			}
+
+			void item_text(graph_reference graph, const nana::point &pos, std::u8string_view text, unsigned pixels, const attr &atr) override
+			{
+				reuse_->item_text(graph, pos, text, pixels, atr);
+			}
+
+			void sub_arrow(graph_reference graph, const nana::point &pos, unsigned pixels, const attr &atr) override
+			{
+				reuse_->sub_arrow(graph, pos, pixels, atr);
+			}
+		private:
+			nana::pat::cloneable<renderer_interface> reuse_;
+		};
+
+	public:
+
+		Menu()
+		{
+			if(theme.is_dark())
+				renderer(menu_renderer {renderer()});
+		}
+	};
+
+
+	class Spinbox : public nana::spinbox
+	{
+	public:
+
+		Spinbox() = default;
+
+		Spinbox(nana::window parent)
+		{
+			create(parent);
+		}
+
+		void create(nana::window parent)
+		{
+			spinbox::create(parent);
+			editable(false);
+
+			events().expose([this] { refresh_theme(); });
+		}
+
+		void refresh_theme()
+		{
+			bgcolor(theme.tbbg);
+			fgcolor(theme.tbfg);
+			scheme().activated = theme.nimbus;
+		}
+	};
+
+
 }

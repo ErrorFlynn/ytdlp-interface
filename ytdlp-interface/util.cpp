@@ -72,8 +72,11 @@ HWND util::hwnd_from_pid(DWORD pid)
 	return lparam.hwnd;
 }
 
-std::string util::run_piped_process(std::wstring cmd, bool *working, widgets::Textbox *tb, callback cb, bool *graceful_exit)
+std::string util::run_piped_process(std::wstring cmd, bool *working, append_callback cbappend, progress_callback cbprog, bool *graceful_exit)
 {
+	std::wstring modpath(4096, '\0');
+	modpath.resize(GetModuleFileNameW(0, &modpath.front(), modpath.size()));
+
 	std::string ret;
 	HANDLE hPipeRead, hPipeWrite;
 
@@ -147,7 +150,7 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, widgets::Te
 
 			buf[dwRead] = 0;
 			std::string s;
-			if(cb)
+			if(cbprog)
 			{
 				static bool subs {false};
 				if(std::string(buf).find("Writing video subtitles") != -1)
@@ -171,14 +174,19 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, widgets::Te
 					}
 					if(!line.empty())
 					{
-						if(tb && line[0] == '[')
+						if(cbappend && *working && line[0] == '[')
 						{
 							auto pos {line.find(']')};
-							if(line.find(']') != -1)
+							if(pos != -1)
 							{
 								auto text {line.substr(0, pos + 1)};
 								if(text != "[download]" && text[1] != '#')
-									tb->set_keyword(text);
+									if(*working)
+										cbappend(text, true);
+								if(text == "[Exec]" && text.find("ytdlp_status") != 1)
+									continue;
+								if(text == "[ExtractAudio]" || text == "[Merger]" || text == "[FixupM3u8]")
+									cbprog(1000, 1000, text);
 							}
 						}
 						auto pos {line.find('%')};
@@ -195,7 +203,8 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, widgets::Te
 								auto pos2 {line.rfind(' ', pos) + 1};
 								auto percent {std::stod(line.substr(pos2, pos - pos2))};
 								line.pop_back();
-								cb(static_cast<ULONGLONG>(percent * 10), 1000, line.substr(pos2));
+								if(*working)
+									cbprog(static_cast<ULONGLONG>(percent * 10), 1000, line.substr(pos2));
 							}
 						}
 						else if(pos != -1 && line.find("[#") == 0 && line[line.size()-2] == ']')
@@ -208,7 +217,8 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, widgets::Te
 								eta = line.substr(pos3, line.size() - 2 - pos3);
 							std::string text {strpct + '%'};
 							if(!eta.empty()) text += " " + eta;
-							cb(static_cast<ULONGLONG>(std::stod(strpct) * 10), 1000, text);
+							if(*working)
+								cbprog(static_cast<ULONGLONG>(std::stod(strpct) * 10), 1000, text);
 							s += line;
 						}
 						else s += line;
@@ -216,7 +226,8 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, widgets::Te
 				} while(lnend != -1);
 			}
 			else ret += buf;
-			if(tb) tb->append(s, false);
+			if(cbappend && *working)
+				cbappend(s, false);
 		}
 		if(working && !*working)
 		{
@@ -226,6 +237,13 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, widgets::Te
 				killproc();
 			break;
 		}
+	}
+
+	DWORD exit_code {0};
+	GetExitCodeProcess(pi.hProcess, &exit_code);
+	if(exit_code == STILL_ACTIVE)
+	{
+		killproc();
 	}
 
 	CloseHandle(hPipeWrite);
@@ -272,7 +290,6 @@ void util::end_processes(std::wstring img_name)
 		}
 		CloseHandle(hSnapshot);
 	}
-
 }
 
 std::wstring util::get_sys_folder(REFKNOWNFOLDERID rfid)
@@ -300,7 +317,7 @@ std::string util::get_inet_res(std::string res, std::string *error)
 		return str;
 	};*/
 
-	auto hinet {InternetOpenA("Smith", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0)};
+	auto hinet {InternetOpenA("ytdlp-interface", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0)};
 	if(hinet)
 	{
 		auto hfile {InternetOpenUrlA(hinet, res.data(), NULL, 0, 0, 0)};
@@ -334,7 +351,7 @@ std::string util::dl_inet_res(std::string res, fs::path fname, bool *working, st
 	if(!f.good())
 		return "Failed to open file for writing: " + fname.string();
 
-	auto hinet {InternetOpenA("Smith", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0)};
+	auto hinet {InternetOpenA("ytdlp-interface", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0)};
 	if(hinet)
 	{
 		auto hfile {InternetOpenUrlA(hinet, res.data(), NULL, 0, 0, 0)};
@@ -414,17 +431,17 @@ std::string util::extract_7z(fs::path arc_path, fs::path out_path, bool ffmpeg)
 	}
 }
 
-std::string util::get_clipboard_text()
+std::wstring util::get_clipboard_text()
 {
-	std::string text;
+	std::wstring text;
 	if(OpenClipboard(NULL))
 	{
-		if(IsClipboardFormatAvailable(CF_TEXT))
+		if(IsClipboardFormatAvailable(CF_UNICODETEXT))
 		{
-			auto h {GetClipboardData(CF_TEXT)};
+			auto h {GetClipboardData(CF_UNICODETEXT)};
 			if(h)
 			{
-				auto ptext {static_cast<char *>(GlobalLock(h))};
+				auto ptext {static_cast<wchar_t*>(GlobalLock(h))};
 				if(ptext)
 				{
 					text = ptext;
@@ -435,6 +452,30 @@ std::string util::get_clipboard_text()
 		CloseClipboard();
 	}
 	return text;
+}
+
+void util::set_clipboard_text(HWND hwnd, std::wstring text)
+{
+	if(!text.empty() && OpenClipboard(hwnd))
+	{
+		if(EmptyClipboard())
+		{
+			HGLOBAL hmem {GlobalAlloc(GMEM_MOVEABLE, text.size()*2+2)};
+			if(hmem)
+			{
+				auto ptext {static_cast<wchar_t*>(GlobalLock(hmem))};
+				if(ptext)
+				{
+					wmemcpy(ptext, text.data(), text.size());
+					GlobalUnlock(hmem);
+					if(!SetClipboardData(CF_UNICODETEXT, hmem))
+						GlobalFree(hmem);
+				}
+				else GlobalFree(hmem);
+			}
+		}
+		CloseClipboard();
+	}
 }
 
 bool util::is_dir_writable(fs::path dir)

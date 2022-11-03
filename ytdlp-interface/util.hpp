@@ -1,7 +1,6 @@
 #pragma once
 
 #include "json.hpp"
-#include "widgets.hpp"
 
 #include <Windows.h>
 #include <Shlobj.h>
@@ -23,21 +22,24 @@ namespace util
 		virtual std::string do_grouping() const { return "\003"; }
 	};
 
-	using callback = std::function<void(ULONGLONG, ULONGLONG, std::string)>;
+	using progress_callback = std::function<void(ULONGLONG, ULONGLONG, std::string)>;
+	using append_callback = std::function<void(std::string, bool)>;
 
 	std::string format_int(unsigned i);
 	std::string format_float(float f, unsigned precision = 2);
 	std::string int_to_filesize(unsigned i, bool with_bytes = true);
 	std::string GetLastErrorStr(bool inet = false);
 	HWND hwnd_from_pid(DWORD pid);
-	std::string run_piped_process(std::wstring cmd, bool *working = nullptr, widgets::Textbox *tb = nullptr, 
-								  callback cb = nullptr, bool *graceful_exit = nullptr);
-	void end_processes(std::wstring);
+	std::string run_piped_process(std::wstring cmd, bool *working = nullptr, append_callback cbappend = nullptr,
+								  progress_callback cbprog = nullptr, bool *graceful_exit = nullptr);
+	void end_processes(std::wstring img_name);
+	//void message_processes(std::wstring img_name, UINT msg, WPARAM wparam, LPARAM lparam);
 	std::wstring get_sys_folder(REFKNOWNFOLDERID rfid);
 	std::string get_inet_res(std::string res, std::string *error = nullptr);
 	std::string dl_inet_res(std::string res, fs::path fname, bool *working = nullptr, std::function<void(unsigned)> cb = nullptr);
 	std::string extract_7z(fs::path arc_path, fs::path out_path, bool ffmpeg = false);
-	std::string get_clipboard_text();
+	std::wstring get_clipboard_text();
+	void set_clipboard_text(HWND hwnd, std::wstring text);
 	bool is_dir_writable(fs::path dir);
 }
 

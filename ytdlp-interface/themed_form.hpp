@@ -5,7 +5,7 @@
 class themed_form : public nana::form
 {
 public:
-	using theme_cb = std::function<void(bool)>;
+	using theme_cb = std::function<bool(bool)>;
 	themed_form(theme_cb theme_change_callback = nullptr, 
 				nana::window owner = nullptr, 
 				nana::rectangle r = {}, 
@@ -15,8 +15,11 @@ public:
 	void system_theme(bool enable);
 	bool system_theme() { return use_system_setting; }
 	bool system_supports_darkmode() { return dark_mode_supported; }
+	bool is_system_theme_dark() { return _ShouldAppsUseDarkMode(); }
 	void theme_callback(theme_cb cb) { callback = cb; }
 	void refresh_widgets();
+	nana::size dpi_transform(double w, double h = 0);
+	void center(double w, double h);
 
 protected:
 	HWND hwnd {nullptr};

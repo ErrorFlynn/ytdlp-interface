@@ -1,10 +1,12 @@
 #include "gui.hpp"
 
-
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 {
-	//AllocConsole();
-	//freopen("conout$", "w", stdout);
+#ifdef _DEBUG
+	AllocConsole();
+	freopen("conout$", "w", stdout);
+#endif
+
 	using namespace nana;
 
 	int argc;
@@ -16,7 +18,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 
 	if(argc > 1)
 	{
-		if(std::wstring {argv[1]} == L"update")
+		const std::wstring first_arg {argv[1]};
+		if(first_arg == L"update")
 		{
 			fs::path arc_path {argv[2]}, target_dir {argv[3]};
 			util::end_processes(modpath.filename());
@@ -37,9 +40,23 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			LocalFree(argv);
 			return 0;
 		}
-		else if(std::wstring {argv[1]} == L"cleanup")
+		else if(first_arg == L"cleanup")
 		{
 			fs::remove(fs::temp_directory_path() / "ytdlp-interface.exe", ec);
+		}
+		else if(first_arg == L"ytdlp_status")
+		{
+			if(argc > 3)
+			{
+				auto hwnd {reinterpret_cast<HWND>(std::stoull(argv[3], 0, 16))};
+				std::wstring url {argv[4]};
+				COPYDATASTRUCT cds;
+				cds.dwData = std::stoi(argv[2]);
+				cds.cbData = url.size()*2;
+				cds.lpData = url.data();
+				SendMessageW(hwnd, WM_COPYDATA, NULL, reinterpret_cast<LPARAM>(&cds));
+			}
+			return 0;
 		}
 	}
 	LocalFree(argv);
@@ -101,7 +118,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				GUI::conf.pref_video = jconf["pref_video"];
 				GUI::conf.pref_audio = jconf["pref_audio"];
 				GUI::conf.pref_fps = jconf["pref_fps"];
-				GUI::conf.vidinfo = jconf["vidinfo"];
 			}
 			if(jconf.contains("cbtheme")) // v1.3
 				GUI::conf.cbtheme = jconf["cbtheme"];
@@ -121,6 +137,26 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				GUI::conf.com_args = jconf["com_args"];
 				for(auto &el : jconf["argsets"])
 					GUI::conf.argsets.push_back(el);
+				if(jconf.contains("vidinfo"))
+					jconf.erase("vidinfo"); // no longer used since v1.6
+			}
+			if(jconf.contains("output_template")) // v1.6
+			{
+				GUI::conf.output_template = to_wstring(std::string {jconf["output_template"]});
+				GUI::conf.max_concurrent_downloads = jconf["max_concurrent_downloads"];
+				GUI::conf.cb_lengthyproc = jconf["cb_lengthyproc"];
+				GUI::conf.max_proc_dur = std::chrono::milliseconds {static_cast<int>(jconf["max_proc_dur"])};
+				for(auto &el : jconf["unfinished_queue_items"])
+					GUI::conf.unfinished_queue_items.push_back(el);
+				for(auto &el : jconf["outpaths"])
+					GUI::conf.outpaths.insert(to_wstring(std::string {el}));
+				GUI::conf.common_dl_options = jconf["common_dl_options"];
+				GUI::conf.cb_autostart = jconf["cb_autostart"];
+			}
+			else
+			{
+				GUI::conf.output_template = GUI::conf.output_template_default;
+				GUI::conf.outpaths.insert(GUI::conf.outpath);
 			}
 		}
 	}
@@ -153,13 +189,23 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["pref_video"] = GUI::conf.pref_video;
 		jconf["pref_audio"] = GUI::conf.pref_audio;
 		jconf["pref_fps"] = GUI::conf.pref_fps;
-		jconf["vidinfo"] = GUI::conf.vidinfo;
 		jconf["cbtheme"] = GUI::conf.cbtheme;
 		jconf["contrast"] = GUI::conf.contrast;
 		jconf["cbargs"] = GUI::conf.cbargs;
 		jconf["kwhilite"] = GUI::conf.kwhilite;
 		jconf["argsets"] = GUI::conf.argsets;
 		jconf["com_args"] = GUI::conf.com_args;
+		jconf["output_template"] = to_utf8(GUI::conf.output_template);
+		jconf["max_concurrent_downloads"] = GUI::conf.max_concurrent_downloads;
+		jconf["cb_lengthyproc"] = GUI::conf.cb_lengthyproc;
+		jconf["max_proc_dur"] = GUI::conf.max_proc_dur.count();
+		jconf["unfinished_queue_items"] = GUI::conf.unfinished_queue_items;
+		jconf["common_dl_options"] = GUI::conf.common_dl_options;
+		jconf["cb_autostart"] = GUI::conf.cb_autostart;
+		if(jconf.contains("outpaths"))
+			jconf["outpaths"].clear();
+		for(auto &path : GUI::conf.outpaths)
+			jconf["outpaths"].push_back(to_utf8(path));
 		std::ofstream {confpath} << std::setw(4) << jconf;
 	});
 	nana::exec();
