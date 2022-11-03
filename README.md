@@ -8,11 +8,7 @@ Some third-party binaries are distributed with the program binary:
 
 To use, unpack the archive in a new folder at a location of your choice, and run `ytdlp-interface.exe`. The program writes a settings file named `ytdlp-interface.json` to the folder it's in, or to `%AppData%` if the folder is not write accessible. For example, an application can't write in the `Program Files` folder (or any subfolder thereof) unless it has administrative permissions, so if `ytdlp-interface.exe` is located there, it won't be able to update `yt-dlp` and `FFmpeg`, or write the settings file there, unless it has administrator permissions (you would have to right-click on file and select `Run as administrator`, or in the properties of the shortcut, choose `Advanced...`->`Run as administrator`).
 
----
-
-***KNOWN ISSUE: currently, the "YT list of formats" feature doesn't work with the latest yt-dlp version (2022.10.04). This will be corrected in the next version, hopefully in about a week or so.***
-
-Download link: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v1.5.1/ytdlp-interface.7z
+Download link: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v1.6/ytdlp-interface.7z
 
 ---
 
@@ -25,16 +21,12 @@ The easiest way to build the project is to open the solution file with Visual St
 
 ---
 
-![ytdlp-interface v1 5 - page 1](https://user-images.githubusercontent.com/20293505/171078136-79b1b793-b0d7-4dce-8a9f-8bf09772f545.png)
+![ytdlp-interface_settings](https://user-images.githubusercontent.com/20293505/199632897-31020961-63b8-4a8f-98e5-9cda8adc4340.png)
 
 ---
 
-![ytdlp-interface v1 5 - settings](https://user-images.githubusercontent.com/20293505/171078171-ec4f35ed-60ee-4a5a-9bb6-dd4ebecdd0c9.png)
+![ytdlp-interface_queue](https://user-images.githubusercontent.com/20293505/199632781-db7aa408-15cb-44ea-b5a5-e67e595e2372.png)
 
 ---
 
-![ytdlp-interface v1 5 - updater](https://user-images.githubusercontent.com/20293505/171094668-3a8807a4-9389-44e3-a056-8bb00de536bd.png)
-
----
-
-![ytdlp-interface v1 5 - download page](https://user-images.githubusercontent.com/20293505/171078195-fef579dc-852c-41bc-9e37-83619bbf2109.png)
+![ytdlp-interface_output](https://user-images.githubusercontent.com/20293505/199632812-21d21500-3acf-453c-bd1b-a445eec03f7a.png)
