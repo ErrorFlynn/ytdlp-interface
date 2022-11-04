@@ -218,33 +218,6 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 	for(auto &url : conf.unfinished_queue_items)
 		add_url(to_wstring(url));
 
-/*#ifdef _DEBUG
-	add_url(L"testing1");
-	add_url(L"testing2");
-	add_url(L"testing3");
-	add_url(L"testing4");
-	add_url(L"testing5");
-	add_url(L"testing6");
-	add_url(L"testing7");
-	add_url(L"testing8");
-	add_url(L"testing9");
-	add_url(L"testing10");
-	add_url(L"testing11");
-	add_url(L"testing12");
-	add_url(L"testing13");
-	add_url(L"testing14");
-	add_url(L"testing15");
-	add_url(L"testing16");
-#endif*/
-
-	/*add_url(L"https://www.youtube.com/watch?v=44k7cMj_kpY");
-	add_url(L"https://www.youtube.com/watch?v=LFGEW_pF7SE");
-	add_url(L"https://www.youtube.com/watch?v=72_3gmawPg0");*/
-
-	/*add_url(L"https://www.youtube.com/watch?v=Vj8P7vLnQas");
-	add_url(L"https://www.youtube.com/watch?v=4zAFXEvLLpI");
-	add_url(L"https://www.youtube.com/watch?v=bFhTH-UZfus");*/
-
 	if(is_zoomed(true)) restore();
 	center(1000, 800);
 	api::track_window_size(*this, size(), false);
