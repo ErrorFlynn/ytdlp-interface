@@ -31,7 +31,8 @@ public:
 		std::chrono::milliseconds max_proc_dur {3000};
 		size_t com_args {0};
 		bool cbsplit {false}, cbchaps {false}, cbsubs {false}, cbthumb {false}, cbtime {true}, cbkeyframes {false}, cbmp3 {false},
-			cbargs {false}, kwhilite {true}, pref_fps {true}, cb_lengthyproc {true}, common_dl_options {true}, cb_autostart {true};
+			cbargs {false}, kwhilite {true}, pref_fps {true}, cb_lengthyproc {true}, common_dl_options {true}, cb_autostart {true},
+			cb_queue_autostart {false};
 	}
 	conf;
 
@@ -48,7 +49,7 @@ private:
 	std::thread thr, thr_releases, thr_releases_misc, thr_versions, thr_thumb, thr_menu;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v1.6"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/};
+	const std::string ver_tag {"v1.6.1"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/};
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
 	nana::timer tproc;
 
@@ -108,6 +109,8 @@ private:
 
 		void show_btncopy(bool show);
 		void show_btnytfmt(bool show);
+
+		bool started() { return btndl.caption().find("Stop") == 0; }
 	};
 
 
@@ -475,7 +478,7 @@ private:
 	void taskbar_overall_progress();
 	void on_btn_dl(std::wstring url);
 	void remove_queue_item(std::wstring url);
-	std::wstring next_startable_url(std::wstring current_url = L"");
+	std::wstring next_startable_url(std::wstring current_url = L"current");
 	void adjust_lbq_headers()
 	{
 		auto zero {dpi_transform(30).width};

@@ -36,7 +36,9 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 			switch(pcds->dwData)
 			{
 			case YTDLP_POSTPROCESS:
-				item.text(3, "processing");
+				if(bottoms.at(url).started())
+					item.text(3, "processing");
+				else return true;
 				if(conf.cb_lengthyproc && bottoms.contains(url))
 				{
 					auto &bottom {bottoms.at(url)};
@@ -97,6 +99,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 			auto &bottom {bottoms.current()};
 			if(fwnd != bottom.com_args && fwnd != bottom.tbrate && !lbq.selected().empty())
 			{
+				outbox.clear();
 				remove_queue_item(bottom.url);
 			}
 		}
@@ -210,13 +213,16 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 		for(auto item : lbq.at(0))
 		{
 			auto text {item.text(3)};
-			if(text != "done")
+			if(text != "done" && text != "error")
 				conf.unfinished_queue_items.push_back(to_utf8(item.value<std::wstring>()));
 		}			
 	});
 
 	for(auto &url : conf.unfinished_queue_items)
 		add_url(to_wstring(url));
+
+	if(conf.cb_queue_autostart && lbq.at(0).size())
+		on_btn_dl(lbq.at(0).at(0).value<std::wstring>());
 
 	if(is_zoomed(true)) restore();
 	center(1000, 800);
@@ -488,6 +494,7 @@ void GUI::formats_dlg()
 
 bool GUI::process_queue_item(std::wstring url)
 {
+	if(lbq.item_from_value(url).text(3) == "error") return false;
 	using widgets::theme;
 	auto &bottom {bottoms.at(url)};
 	auto &tbpipe {outbox};
@@ -505,7 +512,7 @@ bool GUI::process_queue_item(std::wstring url)
 	auto &graceful_exit {bottom.graceful_exit};
 	const auto argset {com_args.caption_wstring()};
 
-	if(bottom.btndl.caption().find("Stop") == -1)
+	if(!bottom.started())
 	{
 		bottom.btndl.caption("Stop download");
 		bottom.btndl.cancel_mode(true);
@@ -723,8 +730,8 @@ bool GUI::process_queue_item(std::wstring url)
 		}
 		bottom.received_procmsg = false;
 		if(graceful_exit)
-			tbpipe.append(url, "\n[GUI] yt-dlp.exe process was ended gracefully via Ctrl+C signal\n"/*, false*/);
-		else tbpipe.append(url, "\n[GUI] yt-dlp.exe process was ended forcefully via WM_CLOSE message\n"/*, false*/);
+			tbpipe.append(url, "\n[GUI] yt-dlp.exe process was ended gracefully via Ctrl+C signal\n");
+		else tbpipe.append(url, "\n[GUI] yt-dlp.exe process was ended forcefully via WM_CLOSE message\n");
 		auto item {lbq.item_from_value(url)};
 		auto text {item.text(3)};
 		if(text.find('%') != -1)
@@ -853,17 +860,16 @@ void GUI::add_url(std::wstring url)
 					auto stridx {lbq.item_from_value(url).text(0)};
 					lbq.item_from_value(url).text(1, "error");
 					lbq.item_from_value(url).text(2, "yt-dlp failed to get info (see output)");
-					if(bottom.btndl.caption().find("Start") != -1)
+					lbq.item_from_value(url).text(3, "error");
+					outbox.caption("GUI: yt-dlp is unable to process queue item #" + stridx +
+												" (output below)\n\n" + media_info + "\n", url);
+					bottom.btndl.enable(false);
+					if(outbox.current() == url)
 					{
-						outbox.caption("GUI: yt-dlp is unable to process queue item #" + stridx +
-													" (output below)\n\n" + media_info + "\n", url);
-						if(outbox.current() == url)
-						{
-							auto ca {outbox.colored_area_access()};
-							ca->clear();
-							auto p {ca->get(0)};
-							p->fgcolor = widgets::theme.is_dark() ? widgets::theme.path_link_fg : nana::color {"#569"};
-						}
+						auto ca {outbox.colored_area_access()};
+						ca->clear();
+						auto p {ca->get(0)};
+						p->fgcolor = widgets::theme.is_dark() ? widgets::theme.path_link_fg : nana::color {"#569"};
 					}
 				}
 			}
@@ -1105,10 +1111,12 @@ void GUI::make_queue_listbox()
 
 	static color dragging_color {colors::green};
 	static timer scroll_down_timer, scroll_up_timer;
+	static bool dragging {false};
 
 	lbq.events().mouse_move([this](const arg_mouse &arg)
 	{
 		if(!arg.is_left_button() || !lbq_can_drag) return;
+		dragging = true;
 
 		const auto lines {3};
 		bool autoscroll {true};
@@ -1116,11 +1124,11 @@ void GUI::make_queue_listbox()
 
 		dragging_color = ::widgets::theme.is_dark() ? ::widgets::theme.path_link_fg : colors::green;
 		lbq.auto_draw(false);
-		auto lb = lbq.at(0);
-		auto selection = lbq.selected();
+		auto lb {lbq.at(0)};
+		auto selection {lbq.selected()};
 		if(selection.empty())
 		{
-			auto hovered = lbq.cast(point(arg.pos.x, arg.pos.y));
+			auto hovered {lbq.cast(point(arg.pos.x, arg.pos.y))};
 			if(hovered.item != npos)
 			{
 				lbq.at(hovered).select(true);
@@ -1222,7 +1230,7 @@ void GUI::make_queue_listbox()
 				hovitem.select(true);
 				hovitem.fgcolor(dragging_color);
 				if(!conf.common_dl_options)
-					bottoms.at(to_wstring(selval)).gpopt.caption("Download options for queue item #" + lb.at(lbq.selected().front().item).text(0));
+					bottoms.at(selval).gpopt.caption("Download options for queue item #" + lb.at(lbq.selected().front().item).text(0));
 				lbq.auto_draw(true);
 			}
 		}
@@ -1230,18 +1238,59 @@ void GUI::make_queue_listbox()
 
 	static auto dragstop_fn = [this]
 	{
-		lbq_can_drag = false;
-		auto selection = lbq.selected();
-		if(selection.size()) lbq.at(0).at(selection[0].item).fgcolor(lbq.fgcolor());
+		dragging = lbq_can_drag = false;
+		auto sel {lbq.selected()};
+		auto selitem {lbq.at(sel[0])};
+		selitem.fgcolor(lbq.fgcolor());
 		lbq.auto_draw(true);
 		if(scroll_up_timer.started()) scroll_up_timer.stop();
 		if(scroll_down_timer.started()) scroll_down_timer.stop();
 		lbq.scheme().mouse_wheel.lines = 3;
+		auto &curbot {bottoms.current()};
+		if(curbot.started())
+		{
+			auto temp {conf.max_concurrent_downloads};
+			conf.max_concurrent_downloads = -1;
+			auto first_startable_url {next_startable_url(L"")};
+			conf.max_concurrent_downloads = temp;
+			if(!first_startable_url.empty())
+			{
+				auto first_startable_item {lbq.item_from_value(first_startable_url)};
+				if(stoi(selitem.text(0)) > stoi(first_startable_item.text(0)))
+				{
+					autostart_next_item = false;
+					process_queue_item(curbot.url);
+					autostart_next_item = true;
+					process_queue_item(first_startable_url);
+				}
+			}
+		}
+		else
+		{
+			std::wstring last_downloading_url;
+			for(auto item : lbq.at(0))
+			{
+				auto &bot {bottoms.at(item.value<std::wstring>())};
+				if(bot.started())
+					last_downloading_url = bot.url;
+			}
+			if(!last_downloading_url.empty())
+			{
+				auto last_downloading_item {lbq.item_from_value(last_downloading_url)};
+				if(stoi(selitem.text(0)) < stoi(last_downloading_item.text(0)))
+				{
+					autostart_next_item = false;
+					process_queue_item(last_downloading_url);
+					autostart_next_item = true;
+					process_queue_item(curbot.url);
+				}
+			}
+		}
 	};
 
 	lbq.events().mouse_up([this](const arg_mouse &arg)
 	{
-		if(arg.is_left_button())
+		if(arg.is_left_button() && dragging)
 			dragstop_fn();
 		else if(arg.button == mouse::right_button)
 			pop_queue_menu(arg.pos.x, arg.pos.y);
@@ -1360,7 +1409,7 @@ void GUI::settings_dlg()
 	using widgets::theme;
 
 	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize>{}};
-	fm.center(585, 574);
+	fm.center(585, 619);
 	fm.caption(title + " - settings");
 	fm.bgcolor(theme.fmbg);
 	fm.div(R"(vert margin=20
@@ -1376,6 +1425,7 @@ void GUI::settings_dlg()
 		<weight=25 <l_maxdl weight=196> <weight=10> <sb_maxdl weight=40> <> <cb_lengthyproc weight=282>> <weight=20>
 		<weight=25 <cb_autostart weight=460>> <weight=20>
 		<weight=25 <cb_common weight=400>> <weight=20>
+		<weight=25 <cb_queue_autostart weight=485>> <weight=20>
 		<sep3 weight=3px> <weight=20>
 		<weight=25 <l_theme weight=92> <weight=20> <cbtheme_dark weight=57> <weight=20> 
 			<cbtheme_light weight=58> <weight=20> <cbtheme_system weight=152> > <weight=20>
@@ -1392,9 +1442,10 @@ void GUI::settings_dlg()
 	widgets::Textbox tb_template {fm};
 	widgets::Combox com_res {fm}, com_video {fm}, com_audio {fm};
 	widgets::cbox cbfps {fm, "Prefer a higher framerate"}, cbtheme_dark {fm, "Dark"}, cbtheme_light {fm, "Light"},
-		cbtheme_system {fm, "System preference"}, cb_lengthyproc {fm, "Start next item on lenghty processing"},
+		cbtheme_system {fm, "System preference"}, cb_lengthyproc {fm, "Start next item on lengthy processing"},
 		cb_common {fm, "Each queue item has its own download options"}, 
-		cb_autostart {fm, "When stopping a queue item, automatically start the next one"};
+		cb_autostart {fm, "When stopping a queue item, automatically start the next one"},
+		cb_queue_autostart {fm, "When the program starts, automatically start processing the queue"};
 	widgets::Separator sep1 {fm}, sep2 {fm}, sep3 {fm}, sep4 {fm};
 	widgets::Button btn_close {fm, " Close"}, btn_updater {fm, " Updater"}, btn_default {fm, "Reset to default"};
 	btn_updater.image(arr_updater_ico);
@@ -1492,6 +1543,7 @@ void GUI::settings_dlg()
 	fm["cb_lengthyproc"] << cb_lengthyproc;
 	fm["cb_autostart"] << cb_autostart;
 	fm["cb_common"] << cb_common;
+	fm["cb_queue_autostart"] << cb_queue_autostart;
 
 	cbfps.tooltip("If several different formats have the same resolution,\ndownload the one with the highest framerate.");
 	cb_lengthyproc.tooltip("When yt-dlp finishes downloading all the files associated with a queue item,\n"
@@ -1532,6 +1584,7 @@ void GUI::settings_dlg()
 	cb_lengthyproc.check(conf.cb_lengthyproc);
 	cb_autostart.check(conf.cb_autostart);
 	cb_common.check(!conf.common_dl_options);
+	cb_queue_autostart.check(conf.cb_queue_autostart);
 
 	l_path.events().click([&, this]
 	{
@@ -1567,6 +1620,7 @@ void GUI::settings_dlg()
 		conf.max_concurrent_downloads = sb_maxdl.to_int();
 		conf.cb_lengthyproc = cb_lengthyproc.checked();
 		conf.cb_autostart = cb_autostart.checked();
+		conf.cb_queue_autostart = cb_queue_autostart.checked();
 		if(conf.common_dl_options == cb_common.checked())
 		{
 			if(conf.common_dl_options = !conf.common_dl_options)
@@ -1975,7 +2029,18 @@ bool GUI::is_tag_a_new_version(std::string tag_name)
 {
 	if(tag_name[1] > ver_tag[1]) return true;
 	if(tag_name[1] == ver_tag[1] && tag_name[3] > ver_tag[3]) return true;
-	if(tag_name[1] == ver_tag[1] && tag_name[3] == ver_tag[3] && tag_name[5] > ver_tag[5]) return true;
+	if(tag_name[1] == ver_tag[1] && tag_name[3] == ver_tag[3])
+	{
+		if(tag_name.size() == 6)
+		{
+			if(ver_tag.size() == 6)
+			{
+				if(tag_name[5] > ver_tag[5])
+					return true;
+			}
+			else return true;
+		}
+	}
 	return false;
 }
 
@@ -2957,7 +3022,7 @@ void GUI::on_btn_dl(std::wstring url)
 	auto items_currently_downloading {0};
 	
 	for(auto &bottom : bottoms)
-		if(bottom.second->btndl.caption().find("Stop") == 0)
+		if(bottom.second->started())
 			items_currently_downloading++;
 
 	auto item_total {lbq.at(0).size()};
@@ -3045,7 +3110,9 @@ std::wstring GUI::next_startable_url(std::wstring current_url)
 		if(item_total > 1)
 		{
 			auto items_currently_downloading {0};
-			auto &curbot {current_url.empty() ? bottoms.current() : bottoms.at(current_url)};
+			//auto &curbot {current_url == L"current" ? bottoms.current() : bottoms.at(current_url)};
+			if(current_url == L"current")
+				current_url = bottoms.current().url;
 			for(auto item : lbq.at(0))
 			{
 				const auto text {item.text(3)};
@@ -3053,7 +3120,7 @@ std::wstring GUI::next_startable_url(std::wstring current_url)
 					items_currently_downloading++;
 			}
 
-			auto pos {std::stoi(lbq.item_from_value(curbot.url).text(0)) - 1};
+			auto pos {current_url.empty() ? -1 : stoi(lbq.item_from_value(current_url).text(0)) - 1};
 			if(pos == item_total - 1)
 				pos = -1;
 			while(++pos < item_total && items_currently_downloading < conf.max_concurrent_downloads)
@@ -3061,7 +3128,7 @@ std::wstring GUI::next_startable_url(std::wstring current_url)
 				auto next_item {lbq.at(0).at(pos)};
 				auto next_url {next_item.value<std::wstring>()};
 				auto text {next_item.text(3)};
-				if(text == "queued" || text.find("stopped") != -1)
+				if(text == "queued" || (text.find("stopped") != -1 && text.find("error") != -1))
 					return next_url;
 			}
 		}

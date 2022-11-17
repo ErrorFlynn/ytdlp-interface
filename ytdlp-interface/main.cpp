@@ -158,12 +158,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				GUI::conf.output_template = GUI::conf.output_template_default;
 				GUI::conf.outpaths.insert(GUI::conf.outpath);
 			}
+			if(jconf.contains("cb_queue_autostart")) // v1.6.1
+			{
+				GUI::conf.cb_queue_autostart = jconf["cb_queue_autostart"];
+			}
 		}
 	}
 	else
 	{
-		if(GUI::conf.ytdlp_path.empty() && fs::exists(LR"(C:\Program Files\yt-dlp\yt-dlp.exe)"))
-			GUI::conf.ytdlp_path = LR"(C:\Program Files\yt-dlp\yt-dlp.exe)";
 		GUI::conf.outpath = util::get_sys_folder(FOLDERID_Downloads);
 	}
 
@@ -202,6 +204,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["unfinished_queue_items"] = GUI::conf.unfinished_queue_items;
 		jconf["common_dl_options"] = GUI::conf.common_dl_options;
 		jconf["cb_autostart"] = GUI::conf.cb_autostart;
+		jconf["cb_queue_autostart"] = GUI::conf.cb_queue_autostart;
 		if(jconf.contains("outpaths"))
 			jconf["outpaths"].clear();
 		for(auto &path : GUI::conf.outpaths)
