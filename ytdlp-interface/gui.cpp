@@ -808,8 +808,7 @@ void GUI::add_url(std::wstring url)
 				if(is_ytplaylist)
 				{
 					media_info = util::run_piped_process(conf.ytdlp_path.wstring() +
-															L" --no-warnings --print :%(webpage_url_domain)s:%(playlist_title)s " + url,
-															&bottom.working_info);
+						L" --no-warnings --flat-playlist --print :%(webpage_url_domain)s:%(playlist_title)s " + url, &bottom.working_info);
 					media_info.erase(media_info.find('\n'));
 				}
 				else
