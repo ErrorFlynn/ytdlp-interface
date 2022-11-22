@@ -606,7 +606,12 @@ bool GUI::process_queue_item(std::wstring url)
 			+ L" " + strhwnd + L" \\\"" + url + L"\\\"\" ";
 		std::wstring cmd2;
 		if(!conf.cbargs || argset.find(L"-P ") == -1)
-			cmd2 += L" -P \"" + bottom.outpath.wstring() + L"\"";
+		{
+			auto wstr {bottom.outpath.wstring()};
+			if(wstr.find(' ') == -1)
+				cmd2 += L" -P " + wstr;
+			else cmd2 += L" -P \"" + wstr + L"\"";
+		}
 		if((!conf.cbargs || argset.find(L"-o ") == -1) && !conf.output_template.empty())
 			cmd2 += L" -o " + conf.output_template;
 		cmd2 += L" " + url;
@@ -2006,19 +2011,22 @@ void GUI::get_versions()
 }
 
 
-bool GUI::is_ytlink(std::string_view text)
+bool GUI::is_ytlink(std::wstring text)
 {
-	if(text.find(R"(https://www.youtube.com/watch?v=)") == 0)
+	auto pos {text.find(L"m.youtube.")};
+	if(pos != -1)
+		text.replace(pos, 1, L"www");
+	if(text.find(LR"(https://www.youtube.com/watch?v=)") == 0)
 		if(text.size() == 43)
 			return true;
 		else if(text.size() > 43 && text[43] == '&')
 			return true;
-	if(text.find(R"(https://youtu.be/)") == 0)
+	if(text.find(LR"(https://youtu.be/)") == 0)
 		if(text.size() == 28)
 			return true;
 		else if(text.size() > 28 && text[28] == '?')
 			return true;
-	if(text.find(R"(https://www.youtube.com/playlist?list=)") == 0)
+	if(text.find(LR"(https://www.youtube.com/playlist?list=)") == 0)
 		return true;
 	return false;
 }

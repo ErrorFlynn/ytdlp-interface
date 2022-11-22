@@ -49,7 +49,7 @@ private:
 	std::thread thr, thr_releases, thr_releases_misc, thr_versions, thr_thumb, thr_menu;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v1.6.2"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/};
+	const std::string ver_tag {"v1.6.3"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/};
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
 	nana::timer tproc;
 
@@ -196,7 +196,7 @@ private:
 				gui->get_place()["Bottom"].fasten(*pbot);
 				pbot->index = insertion_order.size() - 1;
 				pbot->url = url;
-				pbot->is_ytlink = gui->is_ytlink(nana::to_utf8(url));
+				pbot->is_ytlink = gui->is_ytlink(url);
 				return *pbot;
 			}
 			return *it->second;
@@ -468,7 +468,7 @@ private:
 	void get_releases();
 	void get_releases_misc();
 	void get_versions();
-	bool is_ytlink(std::string_view text);
+	bool is_ytlink(std::wstring text);
 	void change_field_weight(nana::place &plc, std::string field, unsigned new_weight);
 	bool is_tag_a_new_version(std::string tag_name);
 	void updater_dlg(nana::window parent);
