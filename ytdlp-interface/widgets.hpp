@@ -539,13 +539,9 @@ namespace widgets
 
 		Group() : group() {}
 
-		Group(nana::window parent, std::string title) : group {parent}, title {title}
+		Group(nana::window parent, std::string title)
 		{
-			enable_format_caption(true);
-			caption(title);
-			caption_align(nana::align::center);
-			refresh_theme();
-			events().expose([this] { refresh_theme(); });
+			create(parent, title);
 		}
 
 		void create(nana::window parent, std::string title = "")

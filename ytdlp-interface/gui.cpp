@@ -36,7 +36,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 			switch(pcds->dwData)
 			{
 			case YTDLP_POSTPROCESS:
-				if(bottoms.at(url).started())
+				if(item.text(3) != "done")
 					item.text(3, "processing");
 				else return true;
 				if(conf.cb_lengthyproc && bottoms.contains(url))
@@ -648,7 +648,8 @@ bool GUI::process_queue_item(std::wstring url)
 
 			auto cb_progress = [&, this](ULONGLONG completed, ULONGLONG total, std::string text)
 			{
-				lbq.item_from_value(url).text(3, (std::stringstream {} << static_cast<double>(completed) / 10).str() + '%');
+				auto item {lbq.item_from_value(url)};
+				item.text(3, (std::stringstream {} << static_cast<double>(completed) / 10).str() + '%');
 				if(i_taskbar && lbq.at(0).size() == 1)
 					i_taskbar->SetProgressValue(hwnd, completed, total);
 				if(completed < 1000)
@@ -820,6 +821,9 @@ void GUI::add_url(std::wstring url)
 				{
 					media_info = util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + L" --no-warnings -j " + url,
 															&bottom.working_info);
+					auto pos {media_info.rfind('}')};
+					if(pos != -1)
+						media_info.erase(pos+1);
 					if(bottom.working_info)
 					{
 						auto pos {media_info.find("{\"id\":")};
