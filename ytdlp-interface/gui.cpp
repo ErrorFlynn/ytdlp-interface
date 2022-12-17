@@ -36,7 +36,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 			switch(pcds->dwData)
 			{
 			case YTDLP_POSTPROCESS:
-				if(item.text(3) != "done")
+				if(bottoms.at(url).started())
 					item.text(3, "processing");
 				else return true;
 				if(conf.cb_lengthyproc && bottoms.contains(url))
@@ -525,7 +525,7 @@ bool GUI::process_queue_item(std::wstring url)
 			}
 		}
 		else tbpipe.clear(url);
-		if(conf.cbargs)
+		if(bottom.cbargs.checked())
 		{
 			const auto args {bottom.com_args.caption()};
 			auto idx {com_args.caption_index()};
@@ -549,7 +549,7 @@ bool GUI::process_queue_item(std::wstring url)
 		}
 
 		std::wstring cmd {L'\"' + conf.ytdlp_path.wstring() + L'\"'};
-		if(!conf.cbargs || com_args.caption_wstring().find(L"-f ") == -1)
+		if(!bottom.cbargs.checked() || com_args.caption_wstring().find(L"-f ") == -1)
 		{
 			if(bottom.use_strfmt) cmd += L" -f " + bottom.strfmt;
 			else
@@ -591,7 +591,7 @@ bool GUI::process_queue_item(std::wstring url)
 			cmd += L"--split-chapters -o chapter:\"" + bottom.outpath.wstring() + L"\\%(title)s - %(section_number)s -%(section_title)s.%(ext)s\" ";
 		if(cbkeyframes.checked() && argset.find(L"--force-keyframes-at-cuts") == -1)
 			cmd += L"--force-keyframes-at-cuts ";
-		if(conf.cbargs && !argset.empty())
+		if(bottom.cbargs.checked() && !argset.empty())
 			cmd += argset + L" ";
 
 		auto display_cmd {cmd};
@@ -605,14 +605,14 @@ bool GUI::process_queue_item(std::wstring url)
 		cmd += L"--exec \"before_dl:\\\"" + self_path.wstring() + L"\\\" ytdlp_status " + std::to_wstring(YTDLP_DOWNLOAD)
 			+ L" " + strhwnd + L" \\\"" + url + L"\\\"\" ";
 		std::wstring cmd2;
-		if(!conf.cbargs || argset.find(L"-P ") == -1)
+		if(!bottom.cbargs.checked() || argset.find(L"-P ") == -1)
 		{
 			auto wstr {bottom.outpath.wstring()};
 			if(wstr.find(' ') == -1)
 				cmd2 += L" -P " + wstr;
 			else cmd2 += L" -P \"" + wstr + L"\"";
 		}
-		if((!conf.cbargs || argset.find(L"-o ") == -1) && !conf.output_template.empty())
+		if((!bottom.cbargs.checked() || argset.find(L"-o ") == -1) && !conf.output_template.empty())
 			cmd2 += L" -o " + conf.output_template;
 		cmd2 += L" " + url;
 		display_cmd += cmd2;
@@ -699,12 +699,13 @@ bool GUI::process_queue_item(std::wstring url)
 			{
 				if(bottom.timer_proc.started())
 					bottom.timer_proc.stop();
+				item = lbq.item_from_value(url);
 				item.text(3, "done");
 				taskbar_overall_progress();
 				if(i_taskbar && lbq.at(0).size() == 1)
 					i_taskbar->SetProgressState(hwnd, TBPF_NOPROGRESS);
 				btndl.enabled(true);
-				tbpipe.append(url, "\n[GUI] yt-dlp.exe process has exited\n"/*, false*/);
+				tbpipe.append(url, "\n[GUI] yt-dlp.exe process has exited\n");
 				if(tbpipe.current() == url)
 				{
 					ca = tbpipe.colored_area_access();
@@ -1680,7 +1681,8 @@ void GUI::changes_dlg(nana::window parent)
 {
 	using widgets::theme;
 
-	themed_form fm {nullptr, parent, nana::API::make_center(parent, dpi_transform(900, 445)), appear::decorate<appear::sizable>{}};
+	themed_form fm {nullptr, parent, {}, appear::decorate<appear::sizable>{}};
+	fm.center(1000, 445);
 	fm.theme_callback([&, this](bool dark)
 	{
 		apply_theme(dark);
@@ -1746,7 +1748,7 @@ void GUI::changes_dlg(nana::window parent)
 			block += title + body + "\n\n";
 			if(tag_name != "v1.0.0")
 			{
-				block += "-----------------------------------------------------------------------------------\n\n";
+				block += "---------------------------------------------------------------------------------------------\n\n";
 				tb.caption(tb.caption() + block);
 				auto p {ca->get(tb.text_line_count() - 3)};
 				p->count = 1;
