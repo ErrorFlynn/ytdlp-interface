@@ -45,11 +45,11 @@ private:
 	std::wstringstream multiple_url_text;
 	unsigned size_latest_ffmpeg {0}, size_latest_ytdlp {0}, number_of_processors {4};
 	bool working {false}, menu_working {false}, lbq_no_action {false}, thumbthr_working {false}, 
-		autostart_next_item {true}, lbq_can_drag {false};
+		autostart_next_item {true}, lbq_can_drag {false}, cnlang {false};
 	std::thread thr, thr_releases, thr_releases_misc, thr_versions, thr_thumb, thr_menu;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v1.6.5"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/};
+	const std::string ver_tag {"v1.6.6"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/};
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
 	nana::timer tproc;
 

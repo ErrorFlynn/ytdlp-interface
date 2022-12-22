@@ -139,6 +139,10 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 		return true;
 	});
 
+	auto langid {GetUserDefaultUILanguage()};
+	if(langid == 2052 || langid == 3076 || langid == 5124 || langid == 4100 || langid == 1028)
+		cnlang = true;
+
 	SYSTEM_INFO sysinfo;
 	GetSystemInfo(&sysinfo);
 	number_of_processors = sysinfo.dwNumberOfProcessors;
@@ -816,7 +820,8 @@ void GUI::add_url(std::wstring url)
 				{
 					media_info = util::run_piped_process(conf.ytdlp_path.wstring() +
 						L" --no-warnings --flat-playlist --print :%(webpage_url_domain)s:%(playlist_title)s " + url, &bottom.working_info);
-					media_info.erase(media_info.find('\n'));
+					if(!media_info.empty())
+						media_info.erase(media_info.find('\n'));
 				}
 				else
 				{
@@ -1249,6 +1254,7 @@ void GUI::make_queue_listbox()
 	{
 		dragging = lbq_can_drag = false;
 		auto sel {lbq.selected()};
+		if(sel.empty()) return;
 		auto selitem {lbq.at(sel[0])};
 		selitem.fgcolor(lbq.fgcolor());
 		lbq.auto_draw(true);
@@ -1418,11 +1424,34 @@ void GUI::settings_dlg()
 	using widgets::theme;
 
 	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize>{}};
-	fm.center(585, 619);
+	if(cnlang) fm.center(630, 619);
+	else fm.center(585, 619);
 	fm.caption(title + " - settings");
 	fm.bgcolor(theme.fmbg);
-	fm.div(R"(vert margin=20
-		<weight=25 <l_res weight=148> <weight=10> <com_res weight=52> <> <cbfps weight=196> <weight=54> > <weight=20>
+	if(cnlang) fm.div(R"(vert margin=20
+		<weight=25 <l_res weight=156> <weight=10> <com_res weight=56> <> <cbfps weight=220> <weight=52> > <weight=20>
+		<weight=25
+			<l_video weight=198> <weight=10> <com_video weight=61> <>
+			<l_audio weight=200> <weight=10> <com_audio weight=61>
+		>
+		<weight=20> <sep1 weight=3px> <weight=20>
+		<weight=25 <l_ytdlp weight=170> <weight=10> <l_path> > <weight=20>
+		<weight=25 <l_template weight=132> <weight=10> <tb_template> <weight=15> <btn_default weight=140>> <weight=20>
+		<sep2 weight=3px> <weight=20>
+		<weight=25 <l_maxdl weight=216> <weight=10> <sb_maxdl weight=40> <> <cb_lengthyproc weight=310>> <weight=20>
+		<weight=25 <cb_autostart weight=500>> <weight=20>
+		<weight=25 <cb_common weight=400>> <weight=20>
+		<weight=25 <cb_queue_autostart weight=540>> <weight=20>
+		<sep3 weight=3px> <weight=20>
+		<weight=25 <l_theme weight=100> <weight=20> <cbtheme_dark weight=57> <weight=20> 
+			<cbtheme_light weight=58> <weight=20> <cbtheme_system weight=170> > <weight=20>
+		<weight=25 <l_contrast weight=70> <weight=20> <slider> > <weight=20>
+		<sep4 weight=3px> <weight=21>
+		<weight=35 <> <btn_close weight=100> <weight=20> <btn_updater weight=150> <>>
+	)");
+
+	else fm.div(R"(vert margin=20
+		<weight=25 <l_res weight=148> <weight=10> <com_res weight=52> <> <cbfps weight=196> <weight=59> > <weight=20>
 		<weight=25
 			<l_video weight=184> <weight=10> <com_video weight=60> <>
 			<l_audio weight=185> <weight=10> <com_audio weight=60>
@@ -1695,7 +1724,10 @@ void GUI::changes_dlg(nana::window parent)
 
 	fm.caption("ytdlp-interface - release notes");
 	fm.bgcolor(theme.fmbg);
-	fm.div(R"(vert margin=20 <tb> <weight=20>
+	if(cnlang) fm.div(R"(vert margin=20 <tb> <weight=20>
+					<weight=25 <> <l_history weight=180> <weight=10> <com_history weight=60> <weight=20> <cblogview weight=150> <> >)");
+
+	else fm.div(R"(vert margin=20 <tb> <weight=20>
 				<weight=25 <> <l_history weight=164> <weight=10> <com_history weight=55> <weight=20> <cblogview weight=132> <> >)");
 
 	widgets::Textbox tb {fm};
@@ -2062,10 +2094,23 @@ void GUI::updater_dlg(nana::window parent)
 {
 	using widgets::theme;
 	themed_form fm {nullptr, parent, nana::API::make_center(parent, dpi_transform(575, 347)), appear::decorate<appear::minimize>{}};
+	if(cnlang) fm.center(600, 347);
 
 	fm.caption(title + " - updater");
 	fm.bgcolor(theme.fmbg);
-	fm.div(R"(
+	if(cnlang) fm.div(R"(
+		vert margin=20
+		<weight=30 <l_ver weight=110> <weight=10> <l_vertext> <weight=20> <btn_changes weight=150> >
+		<weight=20>
+		<weight=30 <btn_update weight=100> <weight=20> <prog> > <weight=25>
+		<separator weight=3px> <weight=20>
+		<weight=30 <l_ver_ytdlp weight=158> <weight=10> <l_ytdlp_text> > <weight=10>
+		<weight=30 <l_ver_ffmpeg weight=170> <weight=10> <l_ffmpeg_text> > <weight=20>
+		<weight=30 <prog_misc> > <weight=25>
+		<weight=30 <> <btn_update_ytdlp weight=150> <weight=20> <btn_update_ffmpeg weight=160> <> >
+	)");
+
+	else fm.div(R"(
 		vert margin=20
 		<weight=30 <l_ver weight=101> <weight=10> <l_vertext> <weight=20> <btn_changes weight=150> >
 		<weight=20>
@@ -2624,7 +2669,9 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 	btnerase.create(gpopt);
 	btnq.create(*this, gui.queue_panel.visible() ? "Show output" : "Show queue");
 	l_out.create(gpopt, "Download folder:");
+	l_out.text_align(nana::align::left, nana::align_v::center);
 	l_rate.create(gpopt, "Download rate limit:");
+	l_rate.text_align(nana::align::left, nana::align_v::center);
 	l_outpath.create(gpopt, &outpath);
 	com_rate.create(gpopt);
 	com_args.create(gpopt);
@@ -2680,7 +2727,17 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 
 	gpopt.size({10, 10}); // workaround for weird caption display bug
 
-	gpopt.div(R"(vert margin=20
+	if(gui.cnlang) gpopt.div(R"(vert margin=20
+			<weight=25 <l_out weight=140> <l_outpath> > <weight=20>
+			<weight=25 
+				<l_rate weight=163> <tbrate weight=45> <weight=15> <com_rate weight=55> 
+				<> <cbchaps weight=145> <> <cbsplit weight=135> <> <cbkeyframes weight=205>
+			> <weight=20>
+			<weight=25 <cbtime weight=325> <> <cbthumb weight=160> <> <cbsubs weight=145> <> <cbmp3 weight=190>>
+			<weight=20> <weight=24 <cbargs weight=170> <weight=15> <com_args> <weight=10> <btnerase weight=24>>
+		)");
+
+	else gpopt.div(R"(vert margin=20
 			<weight=25 <l_out weight=122> <weight=15> <l_outpath> > <weight=20>
 			<weight=25 
 				<l_rate weight=144> <weight=15> <tbrate weight=45> <weight=15> <com_rate weight=55> 
@@ -2689,6 +2746,7 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 			<weight=25 <cbtime weight=296> <> <cbthumb weight=144> <> <cbsubs weight=132> <> <cbmp3 weight=173>>
 			<weight=20> <weight=24 <cbargs weight=156> <weight=15> <com_args> <weight=10> <btnerase weight=24>>
 		)");
+
 	gpopt["l_out"] << l_out;
 	gpopt["l_outpath"] << l_outpath;
 	gpopt["l_rate"] << l_rate;

@@ -292,12 +292,9 @@ namespace widgets
 
 		cbox() : checkbox() {}
 
-		cbox(nana::window parent, std::string_view text) : checkbox {parent, text}
+		cbox(nana::window parent, std::string_view text)
 		{
-			refresh_theme();
-			typeface(nana::paint::font_info {"", 12});
-			nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
-			events().expose([this] { refresh_theme(); });
+			create(parent, text);
 		}
 
 		void create(nana::window parent, std::string_view text)
