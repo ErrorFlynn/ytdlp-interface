@@ -21,8 +21,8 @@ public:
 	static struct settings_t
 	{
 		fs::path ytdlp_path, outpath;
-		const std::wstring output_template_default {L"%(title)s.%(ext)s"};
-		std::wstring fmt1, fmt2, output_template {output_template_default};
+		const std::wstring output_template_default {L"%(title)s.%(ext)s"}, playlist_indexing_default {L"%(playlist_index)d - "};
+		std::wstring fmt1, fmt2, output_template {output_template_default}, playlist_indexing {playlist_indexing_default};
 		std::vector<std::string> argsets, unfinished_queue_items;
 		std::unordered_set<std::wstring> outpaths;
 		double ratelim {0}, contrast {.1};
@@ -32,7 +32,7 @@ public:
 		size_t com_args {0};
 		bool cbsplit {false}, cbchaps {false}, cbsubs {false}, cbthumb {false}, cbtime {true}, cbkeyframes {false}, cbmp3 {false},
 			cbargs {false}, kwhilite {true}, pref_fps {true}, cb_lengthyproc {true}, common_dl_options {true}, cb_autostart {true},
-			cb_queue_autostart {false};
+			cb_queue_autostart {false}, gpopt_hidden {false}, open_dialog_origin {false};
 	}
 	conf;
 
@@ -43,13 +43,14 @@ private:
 	std::string inet_error, url_latest_ffmpeg, url_latest_ytdlp, url_latest_ytdlp_relnotes;
 	std::wstring clipboard_buffer;
 	std::wstringstream multiple_url_text;
+	long minw {0}, minh {0};
 	unsigned size_latest_ffmpeg {0}, size_latest_ytdlp {0}, number_of_processors {4};
 	bool working {false}, menu_working {false}, lbq_no_action {false}, thumbthr_working {false}, 
-		autostart_next_item {true}, lbq_can_drag {false}, cnlang {false};
+		autostart_next_item {true}, lbq_can_drag {false}, cnlang {false}, no_draw_freeze {true};
 	std::thread thr, thr_releases, thr_releases_misc, thr_versions, thr_thumb, thr_menu;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v1.6.6"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/};
+	const std::string ver_tag {"v1.7.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 4)};
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
 	nana::timer tproc;
 
@@ -87,7 +88,8 @@ private:
 	public:
 		gui_bottom(GUI &gui, bool visible = false);
 
-		bool is_ytlink {false}, use_strfmt {false}, working {false}, graceful_exit {false}, working_info {true}, received_procmsg {false};
+		bool is_ytlink {false}, use_strfmt {false}, working {false}, graceful_exit {false}, working_info {true}, received_procmsg {false},
+			is_ytplaylist {false};
 		fs::path outpath;
 		nlohmann::json vidinfo;
 		std::wstring url, strfmt, fmt1, fmt2;
@@ -106,9 +108,11 @@ private:
 		widgets::Combox com_rate, com_args;
 		widgets::cbox cbsplit, cbkeyframes, cbmp3, cbchaps, cbsubs, cbthumb, cbtime, cbargs;
 		widgets::Separator separator;
+		widgets::Expcol expcol;
 
 		void show_btncopy(bool show);
 		void show_btnytfmt(bool show);
+		fs::path file_path();
 
 		bool started() { return btndl.caption().find("Stop") == 0; }
 	};
@@ -197,6 +201,14 @@ private:
 				pbot->index = insertion_order.size() - 1;
 				pbot->url = url;
 				pbot->is_ytlink = gui->is_ytlink(url);
+				pbot->is_ytplaylist = pbot->is_ytlink && (url.find(L"?list=") != -1 || url.find(L"&list=") != -1);
+				if(gui->conf.gpopt_hidden && !gui->no_draw_freeze)
+				{
+					pbot->expcol.operate(true);
+					pbot->plc.field_display("gpopt", false);
+					pbot->plc.field_display("gpopt_spacer", false);
+					pbot->plc.collocate();
+				}
 				return *pbot;
 			}
 			return *it->second;
@@ -469,7 +481,7 @@ private:
 	void get_releases_misc();
 	void get_versions();
 	bool is_ytlink(std::wstring text);
-	void change_field_weight(nana::place &plc, std::string field, unsigned new_weight);
+	void change_field_attr(nana::place &plc, std::string field, std::string attr, unsigned new_val);
 	bool is_tag_a_new_version(std::string tag_name);
 	void updater_dlg(nana::window parent);
 	void show_queue(bool freeze_redraw = true);
@@ -481,9 +493,9 @@ private:
 	std::wstring next_startable_url(std::wstring current_url = L"current");
 	void adjust_lbq_headers()
 	{
-		auto zero {dpi_transform(30).width};
-		auto one {dpi_transform(120).width + dpi_transform(16 * lbq.scroll_operation()->visible(true)).width};
-		auto three {dpi_transform(116).width};
-		lbq.column_at(2).width(lbq.size().width - (zero + one + three) - dpi_transform(9).width);
+		auto zero {dpi_transform(30)};
+		auto one {dpi_transform(120) + dpi_transform(16 * lbq.scroll_operation()->visible(true))};
+		auto three {dpi_transform(116)};
+		lbq.column_at(2).width(lbq.size().width - (zero + one + three) - dpi_transform(9));
 	}
 };

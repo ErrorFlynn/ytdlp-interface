@@ -19,7 +19,8 @@ public:
 	void theme_callback(theme_cb cb) { callback = cb; }
 	void refresh_widgets();
 	nana::size dpi_transform(double w, double h = 0);
-	void center(double w, double h);
+	int dpi_transform(int val);
+	void center(double w = 0, double h = 0);
 
 protected:
 	HWND hwnd {nullptr};
@@ -107,7 +108,7 @@ private:
 	fnIsDarkModeAllowedForWindow _IsDarkModeAllowedForWindow = nullptr;
 	fnOpenNcThemeData _OpenNcThemeData = nullptr;
 	// 1903 18362
-	fnShouldSystemUseDarkMode _ShouldSystemUseDarkMode = nullptr;
+	// fnShouldSystemUseDarkMode _ShouldSystemUseDarkMode = nullptr;
 	fnSetPreferredAppMode _SetPreferredAppMode = nullptr;
 
 	bool dark_mode_supported = false, use_system_setting = true, use_dark_mode = false;
@@ -170,7 +171,11 @@ private:
 				buildNumber == 18362 || // 1903
 				buildNumber == 18363 || // 1909
 				buildNumber == 19041 || // 2004
-				buildNumber >= 22000);
+				buildNumber == 19042 || // 20H2
+				buildNumber == 19043 || // 21H1
+				buildNumber == 19044 || // 21H2
+				(buildNumber > 19044 && buildNumber < 22000) || // Windows 10 any version > 21H2 
+				buildNumber >= 22000);  // Windows 11 builds
 	}
 
 	void InitDarkMode();

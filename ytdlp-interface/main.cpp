@@ -3,6 +3,7 @@
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 {
 #ifdef _DEBUG
+	SetConsoleOutputCP(65001);
 	AllocConsole();
 	freopen("conout$", "w", stdout);
 #endif
@@ -162,6 +163,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			{
 				GUI::conf.cb_queue_autostart = jconf["cb_queue_autostart"];
 			}
+			if(jconf.contains("gpopt_hidden")) // v1.7
+			{
+				GUI::conf.gpopt_hidden = jconf["gpopt_hidden"];
+				GUI::conf.open_dialog_origin = jconf["open_dialog_origin"];
+				GUI::conf.playlist_indexing = to_wstring(std::string {jconf["playlist_indexing"]});
+			}
 		}
 	}
 	else
@@ -205,6 +212,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["common_dl_options"] = GUI::conf.common_dl_options;
 		jconf["cb_autostart"] = GUI::conf.cb_autostart;
 		jconf["cb_queue_autostart"] = GUI::conf.cb_queue_autostart;
+		jconf["gpopt_hidden"] = GUI::conf.gpopt_hidden;
+		jconf["open_dialog_origin"] = GUI::conf.open_dialog_origin;
+		jconf["playlist_indexing"] = to_utf8(GUI::conf.playlist_indexing);
 		if(jconf.contains("outpaths"))
 			jconf["outpaths"].clear();
 		for(auto &path : GUI::conf.outpaths)

@@ -146,12 +146,21 @@ nana::size themed_form::dpi_transform(double w, double h)
 }
 
 
+int themed_form::dpi_transform(int val)
+{
+	double dpi_horz {static_cast<double>(nana::API::screen_dpi(true))};
+	if(dpi_horz > 96)
+		val = round(val * dpi_horz / 96.0);
+	return val;
+}
+
+
 void themed_form::center(double w, double h)
 {
 	using namespace nana;
 	const auto maxh {screen {}.from_window(*this).area().dimension().height};
 	const auto maxw {screen {}.from_window(*this).area().dimension().width};
-	auto r {API::make_center(dpi_transform(w, h))};
+	auto r {API::make_center(w ? dpi_transform(w, h) : size())};
 	move(r);
 	auto sz {API::window_outline_size(*this)};
 	if(sz.height > maxh)

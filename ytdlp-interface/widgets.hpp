@@ -36,7 +36,7 @@ namespace widgets
 	public:
 		nana::color nimbus, fmbg, Label_fg, Text_fg, Text_fg_error, cbox_fg, btn_bg, btn_fg, path_bg, path_fg, path_link_fg, 
 			sep_bg, tbfg, tbbg, tbkw, tbkw_special, tbkw_warning, tbkw_error, gpbg, lb_headerbg, title_fg, overlay_fg, border,
-			tb_selbg, tb_selbg_unfocused;
+			tb_selbg, tb_selbg_unfocused, expcol_fg;
 		std::string gpfg;
 
 		void make_light()
@@ -56,6 +56,7 @@ namespace widgets
 			path_fg = color {"#354"};
 			path_link_fg = color {"#789"};
 			sep_bg = color {"#cdcdcd"};
+			expcol_fg = color {"#aaa"};
 			gpfg = "0x81544F";
 			title_fg = color {"#789"};
 			tbkw = color {"#272"};
@@ -84,6 +85,7 @@ namespace widgets
 			path_bg = color {"#383737"}.blend(colors::black, shade);
 			path_fg = colors::white;
 			sep_bg = color {"#777"};
+			expcol_fg = color {"#999"};
 			gpfg = "0xE4D6BA";
 			lb_headerbg = color {"#525658"}.blend(colors::black, shade);
 			title_fg = nana::color {"#cde"};
@@ -922,6 +924,87 @@ namespace widgets
 			bgcolor(theme.tbbg);
 			fgcolor(theme.tbfg);
 			scheme().activated = theme.nimbus;
+		}
+	};
+
+
+	class Expcol : public nana::label
+	{
+		bool hovered {false}, downward {false};
+
+	public:
+
+		Expcol() : label() {}
+		Expcol(nana::window parent) : label {parent} { create(parent); }
+
+		void create(nana::window parent)
+		{
+			using namespace nana;
+			label::create(parent);
+			refresh_theme();
+			events().expose([this] { refresh_theme(); });
+			events().mouse_enter([this] { hovered = true; api::refresh_window(*this); });
+			events().mouse_leave([this] { hovered = false; api::refresh_window(*this); });
+			events().click([this] { operate(!downward); });
+
+			drawing {*this}.draw([&, this](paint::graphics &g)
+			{
+				auto draw_v = [&](const point pos, const int w)
+				{
+					const int x {pos.x}, y {pos.y};
+					if(downward)
+					{
+						g.line({x, y}, {x + w/2, y + w/2});
+						g.line({x + w/2, y + w/2}, {x + w, y});
+					}
+					else
+					{
+						g.line({x + w/2, y}, {x, y + w/2});
+						g.line({x + w/2, y}, {x + w, y + w/2});
+					}
+				};
+				int pad {4};
+				const double dpi {static_cast<double>(nana::API::screen_dpi(true))};
+				if(dpi > 96)
+					pad = round(pad * dpi / 96.0);
+
+				const auto w {g.width() - pad * 2};
+				auto x {pad}, y {pad + (int)(g.height()/2 - w/1.5)};
+
+				if(hovered)
+				{
+					g.palette(false, theme.nimbus);
+					draw_v({x-1, y-1}, w);
+					draw_v({x, y-2}, w);
+					draw_v({x+1, y-1}, w);
+					draw_v({x+1, y}, w);
+					draw_v({x, y}, w);
+					draw_v({x-1, y}, w);
+					draw_v({x, y+1}, w);
+					g.blur({0, 0, g.width(), g.height()}, 1);
+					g.palette(false, fgcolor());
+					draw_v({x, y+1}, w);
+				}
+				else
+				{
+					g.palette(false, fgcolor());
+					draw_v({x, y}, w);
+				}
+			});
+		}
+
+		void refresh_theme()
+		{
+			bgcolor(theme.fmbg);
+			fgcolor(theme.expcol_fg);
+		}
+
+		bool collapsed() { return downward; }
+
+		void operate(bool collapse)
+		{
+			downward = collapse;
+			nana::api::refresh_window(*this);
 		}
 	};
 
