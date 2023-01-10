@@ -8,7 +8,7 @@ Some third-party binaries are distributed with the program binary:
 
 To use, unpack the archive in a new folder at a location of your choice, and run `ytdlp-interface.exe`. The program writes a settings file named `ytdlp-interface.json` to the folder it's in, or to `%AppData%` if the folder is not write accessible. For example, an application can't write in the `Program Files` folder (or any subfolder thereof) unless it has administrative permissions, so if `ytdlp-interface.exe` is located there, it won't be able to update `yt-dlp` and `FFmpeg`, or write the settings file there, unless it has administrator permissions (you would have to right-click on file and select `Run as administrator`, or in the properties of the shortcut, choose `Advanced...`->`Run as administrator`).
 
-Download link: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v1.6.6/ytdlp-interface.7z
+Download link: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v1.7.0/ytdlp-interface.7z
 
 ---
 
