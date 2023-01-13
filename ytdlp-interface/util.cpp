@@ -201,10 +201,15 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 							else
 							{
 								auto pos2 {line.rfind(' ', pos) + 1};
-								auto percent {std::stod(line.substr(pos2, pos - pos2))};
-								line.pop_back();
-								if(*working)
-									cbprog(static_cast<ULONGLONG>(percent * 10), 1000, line.substr(pos2));
+								if(pos2 != -1)
+								{
+									try {
+										auto percent {std::stod(line.substr(pos2, pos - pos2))};
+										line.pop_back();
+										if(*working)
+											cbprog(static_cast<ULONGLONG>(percent * 10), 1000, line.substr(pos2));
+									} catch(...) {}
+								}
 							}
 						}
 						else if(pos != -1 && line.find("[#") == 0 && line[line.size()-2] == ']')

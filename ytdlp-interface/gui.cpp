@@ -230,9 +230,6 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 		}			
 	});
 
-	//add_url(L"https://www.youtube.com/watch?v=44k7cMj_kpY");
-	//add_url(L"https://www.youtube.com/watch?v=2XID_W4neJo");
-
 	for(auto &url : conf.unfinished_queue_items)
 		add_url(to_wstring(url));
 
@@ -520,7 +517,6 @@ void GUI::formats_dlg()
 
 bool GUI::process_queue_item(std::wstring url)
 {
-	if(lbq.item_from_value(url).text(3) == "error") return false;
 	using widgets::theme;
 	auto &bottom {bottoms.at(url)};
 	auto &tbpipe {outbox};
@@ -913,7 +909,6 @@ void GUI::add_url(std::wstring url)
 					lbq.item_from_value(url).text(3, "error");
 					outbox.caption("GUI: yt-dlp is unable to process queue item #" + stridx +
 												" (output below)\n\n" + media_info + "\n", url);
-					bottom.btndl.enable(false);
 					if(outbox.current() == url)
 					{
 						auto ca {outbox.colored_area_access()};
@@ -1380,8 +1375,9 @@ void GUI::make_queue_listbox()
 
 	lbq.events().mouse_leave([this]
 	{
-		if(GetAsyncKeyState(GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON) & 0xff00)
-			dragstop_fn();
+		if(queue_panel.visible())
+			if(GetAsyncKeyState(GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON) & 0xff00)
+				dragstop_fn();
 	});
 }
 
