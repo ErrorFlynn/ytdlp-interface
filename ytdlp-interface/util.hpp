@@ -10,7 +10,10 @@
 #include <sstream>
 #include <mutex>
 
-#include <nana/gui/widgets/textbox.hpp>
+#include <nana/gui.hpp>
+
+#pragma comment(linker, "/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
+	processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
 namespace fs = std::filesystem;
 
@@ -31,7 +34,7 @@ namespace util
 	std::string GetLastErrorStr(bool inet = false);
 	HWND hwnd_from_pid(DWORD pid);
 	std::string run_piped_process(std::wstring cmd, bool *working = nullptr, append_callback cbappend = nullptr,
-								  progress_callback cbprog = nullptr, bool *graceful_exit = nullptr);
+								  progress_callback cbprog = nullptr, bool *graceful_exit = nullptr, std::string suppress = "");
 	void end_processes(std::wstring img_name);
 	//void message_processes(std::wstring img_name, UINT msg, WPARAM wparam, LPARAM lparam);
 	std::wstring get_sys_folder(REFKNOWNFOLDERID rfid);

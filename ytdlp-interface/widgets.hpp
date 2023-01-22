@@ -22,6 +22,9 @@
 #include "icons.hpp"
 
 #pragma warning(disable : 4267)
+#ifdef small
+	#undef small
+#endif
 
 namespace fs = std::filesystem;
 
@@ -119,13 +122,9 @@ namespace widgets
 
 		Label() : label() {}
 
-		Label(nana::window parent, std::string_view text, bool dpi_adjust = false) : label {parent, text}
+		Label(nana::window parent, std::string_view text, bool dpi_adjust = false)
 		{
-			fgcolor(theme.Label_fg);
-			typeface(nana::paint::font_info {"", 12 - (double)(nana::API::screen_dpi(true) > 96) * 2 * dpi_adjust});
-			text_align(dpi_adjust ? nana::align::right : nana::align::left, nana::align_v::center);
-			nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
-			events().expose([this] { fgcolor(theme.Label_fg); });
+			create(parent, text, dpi_adjust);
 		}
 
 		void create(nana::window parent, std::string_view text, bool dpi_adjust = false)
@@ -255,7 +254,7 @@ namespace widgets
 		{
 			const std::wstring wstr {is_path ? std::get<fs::path*>(v)->wstring() : *std::get<std::wstring*>(v)};
 			if(!is_path && wstr.empty())
-				caption("Press Ctrl+V or click here to paste media link");
+				caption("Press Ctrl+V or click here to paste media link (click again to also add)");
 			else if(!size().empty())
 			{
 				caption(wstr);
@@ -342,20 +341,17 @@ namespace widgets
 
 		Button() : button() {}
 
-		Button(nana::window parent, std::string_view text = "") : button {parent, text}
+		Button(nana::window parent, std::string_view text = "", bool small = false)
 		{
-			refresh_theme();
-			typeface(nana::paint::font_info {"", 14, {800}});
-			enable_focus_color(false);
-			events().expose([this] { refresh_theme(); });
+			create(parent, text, small);
 		}
 
-		void create(nana::window parent, std::string_view text = "")
+		void create(nana::window parent, std::string_view text = "", bool small = false)
 		{
 			button::create(parent);
 			caption(text);
 			refresh_theme();
-			typeface(nana::paint::font_info {"", 14, {800}});
+			typeface(nana::paint::font_info {"", small ? 11e0 : 14, {800}});
 			enable_focus_color(false);
 			events().expose([this] { refresh_theme(); });
 		}
@@ -422,10 +418,11 @@ namespace widgets
 	class Listbox : public nana::listbox
 	{
 		nana::drawing dw {*this};
+		bool hicontrast {false};
 
 	public:
 
-		Listbox(nana::window parent) : listbox {parent}
+		Listbox(nana::window parent, bool hicontrast = false) : listbox {parent}, hicontrast {hicontrast}
 		{
 			refresh_theme();
 			events().expose([this] { refresh_theme(); });
@@ -461,7 +458,9 @@ namespace widgets
 				scheme().cat_fgcolor = theme.nimbus;
 				scheme().item_selected = nana::color {"#AC4F44"};
 				scheme().item_selected_border = nana::color {"#B05348"}.blend(nana::colors::black, .15);
-				scheme().item_highlighted = nana::color {"#544"};
+				if(hicontrast)
+					scheme().item_highlighted = nana::color {"#544"}.blend(nana::colors::light_grey, .15 - theme.contrast()/2);
+				else scheme().item_highlighted = nana::color {"#544"};
 			}
 			else
 			{
@@ -469,9 +468,10 @@ namespace widgets
 				scheme().header_bgcolor = nana::color {"#f1f2f4"};
 				scheme().header_fgcolor = nana::colors::black;
 				scheme().cat_fgcolor = nana::color {"#039"};
-				scheme().item_selected = nana::color {"#c7dEe4"}.blend(nana::colors::grey, .1 - theme.contrast());
-				scheme().item_selected_border = nana::color {"#a7cEd4"}.blend(nana::colors::grey, .1 - theme.contrast());
-				scheme().item_highlighted = nana::color {"#eee"};
+				auto c {theme.contrast()};
+				scheme().item_selected = nana::color {"#c7dEe4"}.blend(nana::colors::grey, .1 - c);
+				scheme().item_selected_border = nana::color {"#a7cEd4"}.blend(nana::colors::grey, .1 - c);
+				scheme().item_highlighted = nana::color {"#eee"}.blend(nana::colors::dark_grey, .25 - c / 2);
 				dw.clear();
 			}
 
@@ -750,7 +750,7 @@ namespace widgets
 	class Title : public nana::label
 	{
 	public:
-		Title(nana::window parent) : label {parent}
+		Title(nana::window parent, std::string text = "") : label {parent, text}
 		{
 			fgcolor(theme.title_fg);
 			typeface(nana::paint::font_info {"Arial", 15 - (double)(nana::API::screen_dpi(true) > 96) * 3, {800}});
@@ -871,10 +871,10 @@ namespace widgets
 				reuse_->item_image(graph, pos, image_px, img);
 			}
 
-			void item_text(graph_reference g, const nana::point &pos, const std::string &text, unsigned pixels, const attr &atr) override
+			void item_text(graph_reference g, const nana::point &pos, const std::string &text, unsigned pixels, const attr &attr) override
 			{
 				auto size {g.text_extent_size(text)};
-				g.string(pos, text, nana::colors::white);
+				g.string(pos, text, attr.enabled ? nana::colors::white : nana::color {"#aaa"});
 			}
 
 			void item_text(graph_reference graph, const nana::point &pos, std::u8string_view text, unsigned pixels, const attr &atr) override
@@ -1007,6 +1007,5 @@ namespace widgets
 			nana::api::refresh_window(*this);
 		}
 	};
-
 
 }

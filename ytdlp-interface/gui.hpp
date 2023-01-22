@@ -32,7 +32,9 @@ public:
 		size_t com_args {0};
 		bool cbsplit {false}, cbchaps {false}, cbsubs {false}, cbthumb {false}, cbtime {true}, cbkeyframes {false}, cbmp3 {false},
 			cbargs {false}, kwhilite {true}, pref_fps {true}, cb_lengthyproc {true}, common_dl_options {true}, cb_autostart {true},
-			cb_queue_autostart {false}, gpopt_hidden {false}, open_dialog_origin {false};
+			cb_queue_autostart {false}, gpopt_hidden {false}, open_dialog_origin {false}, cb_zeropadding {true}, cb_playlist_folder {true},
+			zoomed {false};
+		nana::rectangle winrect;
 	}
 	conf;
 
@@ -50,9 +52,11 @@ private:
 	std::thread thr, thr_releases, thr_releases_misc, thr_versions, thr_thumb, thr_menu;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v1.7.1"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/};
+	const std::string ver_tag {"v1.8.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 4)};
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
 	nana::timer tproc;
+
+	struct { nana::menu *m {nullptr}; std::size_t pos {0}; } vidsel_item;
 
 	const std::vector<std::wstring>
 		com_res_options {L"2160", L"1440", L"1080", L"720", L"480", L"360"},
@@ -90,9 +94,11 @@ private:
 
 		bool is_ytlink {false}, use_strfmt {false}, working {false}, graceful_exit {false}, working_info {true}, received_procmsg {false},
 			is_ytplaylist {false};
-		fs::path outpath;
+		fs::path outpath, merger_path, download_path, printed_path;
 		nlohmann::json vidinfo;
-		std::wstring url, strfmt, fmt1, fmt2;
+		std::vector<nlohmann::json> playlist_info;
+		std::vector<bool> playlist_selection;
+		std::wstring url, strfmt, fmt1, fmt2, playsel_string;
 		std::thread dl_thread, info_thread;
 		int index {0};
 
@@ -115,6 +121,14 @@ private:
 		fs::path file_path();
 
 		bool started() { return btndl.caption().find("Stop") == 0; }
+
+		auto playlist_selected()
+		{
+			int cnt {0};
+			for(auto el : playlist_selection)
+				if(el) cnt++;
+			return cnt;
+		}
 	};
 
 
@@ -464,17 +478,19 @@ private:
 	nana::panel<false> queue_panel {*this};
 	nana::place plc_queue {queue_panel};
 	widgets::Listbox lbq {queue_panel};
-	widgets::Button btnadd {queue_panel, "Add link"}, btn_qact {queue_panel, "Queue actions"}, btn_settings {queue_panel, "Settings"};
+	widgets::Button btnadd {queue_panel, "Add link", true}, btn_qact {queue_panel, "Queue actions", true}, 
+		btn_settings {queue_panel, "Settings", true};
 	std::wstring qurl;
 	widgets::path_label l_url {queue_panel, &qurl};
 
 
+	void dlg_playlist();
 	void pop_queue_menu(int x, int y);
 	void make_queue_listbox();
-	void formats_dlg();
+	void dlg_formats();
 	bool process_queue_item(std::wstring url);
-	void settings_dlg();
-	void changes_dlg(nana::window parent);
+	void dlg_settings();
+	void dlg_changes(nana::window parent);
 	void make_form();
 	bool apply_theme(bool dark);
 	void get_releases();
@@ -483,7 +499,7 @@ private:
 	bool is_ytlink(std::wstring text);
 	void change_field_attr(nana::place &plc, std::string field, std::string attr, unsigned new_val);
 	bool is_tag_a_new_version(std::string tag_name);
-	void updater_dlg(nana::window parent);
+	void dlg_updater(nana::window parent);
 	void show_queue(bool freeze_redraw = true);
 	void show_output();
 	void add_url(std::wstring url);

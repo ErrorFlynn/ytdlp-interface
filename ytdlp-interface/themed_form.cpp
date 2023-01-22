@@ -155,7 +155,7 @@ int themed_form::dpi_transform(int val)
 }
 
 
-void themed_form::center(double w, double h)
+bool themed_form::center(double w, double h)
 {
 	using namespace nana;
 	const auto maxh {screen {}.from_window(*this).area().dimension().height};
@@ -164,7 +164,13 @@ void themed_form::center(double w, double h)
 	move(r);
 	auto sz {API::window_outline_size(*this)};
 	if(sz.height > maxh)
+	{
 		MoveWindow(hwnd, (maxw - sz.width) / 2, 0, sz.width, maxh, TRUE);
+		return true;
+	}
 	else
+	{
 		MoveWindow(hwnd, (maxw - sz.width) / 2, (maxh - sz.height) / 2, sz.width, sz.height, TRUE);
+		return false;
+	}
 }

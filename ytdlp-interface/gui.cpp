@@ -93,6 +93,11 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 					show_queue(true);
 			}
 		}
+		else if(wparam == VK_NUMPAD0 && GetAsyncKeyState(VK_CONTROL) & 0xff00)
+		{
+			if(is_zoomed(true)) restore();
+			center(1000, 800 - bottoms.current().expcol.collapsed() * dpi_transform(240));
+		}
 		else if(wparam == VK_DELETE)
 		{
 			auto fwnd {api::focus_window()};
@@ -193,6 +198,9 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 
 	events().unload([&]
 	{
+		conf.zoomed = is_zoomed(true);
+		if(conf.zoomed) restore();
+		conf.winrect = nana::rectangle {pos(), size()};
 		working = menu_working = false;
 		if(thr_menu.joinable())
 			thr_menu.join();
@@ -210,7 +218,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 			if(bot.info_thread.joinable())
 			{
 				bot.working_info = false;
-				bot.info_thread.detach();
+				bot.info_thread.join();
 			}
 			if(bot.dl_thread.joinable())
 			{
@@ -236,24 +244,28 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 	if(conf.cb_queue_autostart && lbq.at(0).size())
 		on_btn_dl(lbq.at(0).at(0).value<std::wstring>());
 
-	if(is_zoomed(true)) restore();
 	center(1000, 800);
-	auto sz {api::window_outline_size(*this)};
-	minw = sz.width;
-	minh = sz.height;
-	collocate();
 	show_queue(false);
 	if(conf.gpopt_hidden)
 	{
 		auto &expcol {bottoms.current().expcol};
 		expcol.events().click.emit({}, expcol);
-		center();
+		if(conf.winrect.empty())
+			center();
 	}
+	auto sz {api::window_outline_size(*this)};
+	minw = sz.width;
+	minh = sz.height;
+	if(!conf.winrect.empty())
+		move(conf.winrect);
+	show();
+	bring_top(true);
+	if(conf.zoomed) zoom(true);
 	no_draw_freeze = false;
 }
 
 
-void GUI::formats_dlg()
+void GUI::dlg_formats()
 {
 	using namespace nana;
 	using ::widgets::theme;
@@ -586,7 +598,7 @@ bool GUI::process_queue_item(std::wstring url)
 				cmd += '\"';
 			}
 		}
-		cmd += L" --windows-filenames ";
+		cmd += L" ";
 
 		if(conf.cbchaps && argset.find(L"--embed-chapters") == -1)
 			cmd += L"--embed-chapters ";
@@ -626,6 +638,8 @@ bool GUI::process_queue_item(std::wstring url)
 			+ L" " + strhwnd + L" \\\"" + url + L"\\\"\" ";
 		cmd += L"--exec \"before_dl:\\\"" + self_path.wstring() + L"\\\" ytdlp_status " + std::to_wstring(YTDLP_DOWNLOAD)
 			+ L" " + strhwnd + L" \\\"" + url + L"\\\"\" ";
+		fs::path tempfile {fs::temp_directory_path() / std::tmpnam(nullptr)};
+		cmd += L"--print-to-file after_move:" + conf.output_template + L" " + tempfile.wstring();
 		std::wstring cmd2;
 		if(!bottom.cbargs.checked() || argset.find(L"-P ") == -1)
 		{
@@ -636,10 +650,33 @@ bool GUI::process_queue_item(std::wstring url)
 		}
 		if((!bottom.cbargs.checked() || argset.find(L"-o ") == -1) && !conf.output_template.empty())
 		{
-			if(bottom.is_ytplaylist && !conf.playlist_indexing.empty())
-				cmd2 += L" -o \"" + conf.playlist_indexing + conf.output_template + L'\"';
+			std::wstring folder;
+			if(bottom.is_ytplaylist)
+			{
+				if(conf.cb_playlist_folder)
+					folder = L"%(playlist_title)s\\";
+				if(!conf.playlist_indexing.empty())
+				{
+					if(conf.cb_zeropadding && bottom.playlist_selection.size() > 9)
+					{
+						auto pos {conf.playlist_indexing.find(L"%(playlist_index)d")};
+						if(pos != -1)
+						{
+							auto str1 {conf.playlist_indexing.substr(0, pos)},
+								str2 {conf.playlist_indexing.substr(pos + 18)},
+								str_padval {std::to_wstring(std::to_string(bottom.playlist_selection.size()).size())},
+								newstr {str1 + L"%(playlist_index)0" + str_padval + L'd' + str2};
+							cmd2 += L" -o \"" + folder + newstr + conf.output_template + L'\"';
+						}
+					}
+					else cmd2 += L" -o \"" + folder + conf.playlist_indexing + conf.output_template + L'\"';
+				}
+				else  cmd2 += L" -o \"" + folder + conf.output_template + L'\"';
+			}
 			else cmd2 += L" -o \"" + conf.output_template + L'\"';
 		}
+		if(bottom.is_ytplaylist && !bottom.playsel_string.empty())
+			cmd2 += L" -I " + bottom.playsel_string + L" --compat-options no-youtube-unavailable-videos";
 		cmd2 += L" " + url;
 		display_cmd += cmd2;
 		cmd += cmd2;
@@ -647,7 +684,7 @@ bool GUI::process_queue_item(std::wstring url)
 		if(tbpipe.current() == url)
 			tbpipe.clear();
 
-		bottom.dl_thread = std::thread([&, this, display_cmd, cmd, url]
+		bottom.dl_thread = std::thread([&, this, tempfile, display_cmd, cmd, url]
 		{
 			working = true;
 			auto ca {tbpipe.colored_area_access()};
@@ -675,9 +712,12 @@ bool GUI::process_queue_item(std::wstring url)
 			auto cb_progress = [&, this](ULONGLONG completed, ULONGLONG total, std::string text)
 			{
 				auto item {lbq.item_from_value(url)};
-				item.text(3, (std::stringstream {} << static_cast<double>(completed) / 10).str() + '%');
-				if(i_taskbar && lbq.at(0).size() == 1)
-					i_taskbar->SetProgressValue(hwnd, completed, total);
+				if(total != -1)
+				{
+					item.text(3, (std::stringstream {} << static_cast<double>(completed) / 10).str() + '%');
+					if(i_taskbar && lbq.at(0).size() == 1)
+						i_taskbar->SetProgressValue(hwnd, completed, total);
+				}
 				if(completed < 1000)
 				{
 					prog.caption(text);
@@ -686,13 +726,27 @@ bool GUI::process_queue_item(std::wstring url)
 				{
 					if(prev_val)
 					{
-						if(text == "[ExtractAudio]" || text == "[Merger]" || text == "[FixupM3u8]")
+						if(text == "[ExtractAudio]" || text.find("[Merger]") == 0 || text == "[FixupM3u8]")
 						{
 							COPYDATASTRUCT cds;
 							cds.dwData = YTDLP_POSTPROCESS;
 							cds.cbData = url.size() * 2;
 							cds.lpData = const_cast<std::wstring&>(url).data();
 							SendMessageW(hwnd, WM_COPYDATA, NULL, reinterpret_cast<LPARAM>(&cds));
+
+							if(text.find("[Merger]") == 0)
+							{
+								auto pos {text.find('\"')};
+								if(pos++ != -1)
+								{
+									auto pos2 {text.find('\"', pos)};
+									if(pos2 != -1)
+									{
+										auto substr {text.substr(pos, pos2 - pos)};
+										bottom.merger_path = text.substr(pos, pos2 - pos);
+									}
+								}
+							}
 						}
 						else
 						{
@@ -701,6 +755,20 @@ bool GUI::process_queue_item(std::wstring url)
 								text.erase(pos + 1);
 							prog.caption(text);
 						}
+					}
+					if(total == -1 && text.find("[download]") == 0)
+					{
+						auto pos {text.find("has already been downloaded")};
+						if(pos != -1)
+							bottom.download_path = text.substr(11, pos - 2);
+						else
+						{
+							pos = text.find("Destination: ");
+							if(pos != -1)
+								bottom.download_path = text.substr(24);
+							else bottom.download_path.clear();
+						}
+						return;
 					}
 				}
 				prog.value(completed);
@@ -718,8 +786,29 @@ bool GUI::process_queue_item(std::wstring url)
 					outbox.set_keyword(text);
 				else outbox.append(url, text);
 			};
-			util::run_piped_process(cmd, &working, cb_append, cb_progress, &graceful_exit);
+			bottom.printed_path.clear();
+			bottom.merger_path.clear();
+			bottom.download_path.clear();
+			auto outpath {bottom.outpath};
+			util::run_piped_process(cmd, &working, cb_append, cb_progress, &graceful_exit, tempfile.filename().string());
 			bottom.received_procmsg = false;
+			if(fs::exists(tempfile))
+			{
+				if(std::ifstream is {tempfile, std::ios::binary | std::ios::ate})
+				{
+					auto size {is.tellg()};
+					std::string str (size, '\0');
+					is.seekg(0);
+					if(is.read(&str.front(), size))
+					{
+						while(str.find_last_of("\r\n") != -1)
+							str.pop_back();
+						bottom.printed_path = outpath / fs::u8path(str);
+					}
+				}
+				std::error_code ec;
+				fs::remove(tempfile, ec);
+			}
 
 			if(working)
 			{
@@ -839,10 +928,8 @@ void GUI::add_url(std::wstring url)
 			{
 				if(bottom.is_ytplaylist)
 				{
-					media_info = util::run_piped_process(conf.ytdlp_path.wstring() +
-						L" --windows-filenames --no-warnings --flat-playlist --print :%(webpage_url_domain)s:%(playlist_title)s " + url, &bottom.working_info);
-					if(!media_info.empty())
-						media_info.erase(media_info.find('\n'));
+					media_info = util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + 
+						L" --no-warnings --flat-playlist --compat-options no-youtube-unavailable-videos -j " + url, &bottom.working_info);
 				}
 				else
 				{
@@ -853,7 +940,7 @@ void GUI::add_url(std::wstring url)
 						fmt_args += L",aext:" + com_audio_options[conf.pref_audio];
 					if(conf.pref_fps)
 						fmt_args += L",fps\" ";
-					media_info = util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + L" --windows-filenames --no-warnings -j " + 
+					media_info = util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + L" --no-warnings -j " + 
 								+ L"-o " + conf.output_template + fmt_args + url, &bottom.working_info);
 					auto pos {media_info.rfind('}')};
 					if(pos != -1)
@@ -869,11 +956,12 @@ void GUI::add_url(std::wstring url)
 					}
 				}
 			}
-			else media_info = util::run_piped_process(conf.ytdlp_path.wstring() + L" --windows-filenames --no-warnings --print :%(webpage_url_domain)s:%(title)s "
+			else media_info = util::run_piped_process(conf.ytdlp_path.wstring() + L" --no-warnings --print :%(webpage_url_domain)s:%(title)s "
 														+ url, &bottom.working_info);
 			if(!media_info.empty() && bottom.working_info)
 			{
-				if(media_info[0] == ':' || (bottom.is_ytlink && media_info.find("{\"id\":") == 0))
+				if(media_info[0] == ':' || (bottom.is_ytlink && media_info.find("{\"id\":") == 0) || 
+				   (bottom.is_ytplaylist && media_info.find("{\"_type\":") == 0))
 				{
 					if(bottom.is_ytlink && !bottom.is_ytplaylist)
 					{
@@ -886,13 +974,34 @@ void GUI::add_url(std::wstring url)
 						get_place().collocate();
 						nana::api::update_window(*this);
 					}
+					else if(bottom.is_ytplaylist)
+					{
+						size_t endpos {0}, pos {0};
+						do {
+							endpos = media_info.find('\n', pos);
+							std::string vidinfo {media_info.substr(pos, endpos - pos)};
+							pos = endpos + 1;
+							bottom.playlist_info.push_back(nlohmann::json::parse(vidinfo));
+						} while(pos < media_info.size());
+						bottom.playlist_selection.assign(bottom.playlist_info.size(), true);
+						media_website = "YouTube";
+						media_title = "[playlist] " + std::string {bottom.playlist_info[0]["playlist"]};
+						if(vidsel_item.m && lbq.item_from_value(url).selected())
+						{
+							auto m {vidsel_item.m};
+							auto pos {vidsel_item.pos};
+							m->enabled(pos, true);
+							auto str {std::to_string(bottom.playlist_info.size())};
+							m->text(pos, "Select videos (" + str + '/' + str + ")");
+							nana::api::refresh_window(m->handle());
+							m = nullptr;
+						}
+					}
 					else
 					{
 						auto pos {media_info.find(':', 1)};
 						media_website = media_info.substr(1, pos - 1);
 						media_title = media_info.substr(pos + 1);
-						if(bottom.is_ytplaylist)
-							media_title = "[playlist] " + media_title;
 					}
 
 					lbq.item_from_value(url).text(1, media_website);
@@ -923,6 +1032,285 @@ void GUI::add_url(std::wstring url)
 				bottom.info_thread.detach();
 		});
 	}
+}
+
+
+void GUI::dlg_playlist()
+{
+	using widgets::theme;
+	using std::string;
+	using namespace nana;
+
+	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize>{}};
+	fm.caption(title);
+	fm.div(R"(vert margin=20 
+		<weight=25 <l_title> <btnall weight=100> <weight=20> <btnnone weight=120>> <weight=20> 
+		<range_row weight=25 <l_first weight=36> <weight=10> <tbfirst weight=45> <weight=10> <slfirst> <weight=20> 
+			<l_last weight=36> <weight=10> <tblast weight=45> <weight=10> <sllast> <weight=20> <btnrange weight=120>>
+		<range_row_spacer weight=20> <lbv> <weight=20> 
+		<weight=35 <> <btnclose weight=100> <>>
+	)");
+
+	::widgets::Title l_title {fm, "Select which videos to download from the playlist"};
+	::widgets::Button btnall {fm, "Select all", true}, btnnone {fm, "Select none", true}, btnclose {fm, "Close"}, 
+		btnrange {fm, "Select range", true};
+	::widgets::Listbox lbv {fm, true};
+	::widgets::Label l_first {fm, "First:"}, l_last {fm, "Last:"};
+	::widgets::Textbox tbfirst {fm}, tblast {fm};
+	::widgets::Slider slfirst {fm}, sllast {fm};
+
+	fm["l_title"] << l_title;
+	fm["btnall"] << btnall;
+	fm["btnnone"] << btnnone;
+	fm["lbv"] << lbv;
+	fm["l_first"] << l_first;
+	fm["l_last"] << l_last;
+	fm["tbfirst"] << tbfirst;
+	fm["tblast"] << tblast;
+	fm["slfirst"] << slfirst;
+	fm["sllast"] << sllast;
+	fm["btnrange"] << btnrange;
+	fm["btnclose"] << btnclose;
+
+	auto &bottom {bottoms.current()};
+	int min {1}, max {static_cast<int>(bottom.playlist_selection.size())};
+
+	slfirst.maximum(max-1);
+	slfirst.vernier([&](unsigned, unsigned val) { return std::to_string(val < sllast.value() ? val+1 : sllast.value()); });
+	sllast.maximum(max-1);
+	sllast.vernier([&](unsigned, unsigned val) { return std::to_string(val > slfirst.value() ? val+1 : slfirst.value() + 2); });
+	slfirst.events().value_changed([&]
+	{
+		if(slfirst.value() >= sllast.value())
+			slfirst.value(sllast.value() - 1);
+		else tbfirst.caption(std::to_string(slfirst.value() + 1));
+	});
+	sllast.events().value_changed([&]
+	{
+		if(sllast.value() <= slfirst.value())
+			sllast.value(slfirst.value() + 1);
+		else tblast.caption(std::to_string(sllast.value() + 1));
+	});
+	slfirst.events().click([&] { tbfirst.caption(std::to_string(slfirst.value() + 1)); });
+	sllast.events().click([&] { tblast.caption(std::to_string(sllast.value() + 1)); });
+	sllast.value(sllast.maximum());
+
+	l_title.typeface(paint::font_info {"Arial", 14, {800}});
+	l_title.text_align(align::left, align_v::center);
+	tbfirst.caption("1");
+	tbfirst.text_align(align::center);
+	tbfirst.typeface(nana::paint::font_info {"", 11});
+	tblast.caption(std::to_string(max));
+	tblast.text_align(align::center);
+	tblast.typeface(nana::paint::font_info {"", 11});
+
+
+	lbv.sortable(false);
+	lbv.checkable(true);
+	lbv.enable_single(true, false);
+	lbv.typeface(paint::font_info {"Calibri", 12});
+	lbv.scheme().item_height_ex = 8;
+	lbv.append_header("", dpi_transform(25));
+	lbv.append_header("#", dpi_transform(33));
+	lbv.append_header("Video title", dpi_transform(theme.is_dark() ? 752 : 747));
+	lbv.append_header("Duration", dpi_transform(75));
+	lbv.column_movable(false);
+	lbv.column_resizable(false);
+
+	int cnt {0};
+	for(auto jvid : bottom.playlist_info)
+	{
+		const int idx {jvid["playlist_index"]};
+		const string title {jvid["title"]}, dur {jvid["duration_string"] == nullptr ? "null" : jvid["duration_string"]};
+		lbv.at(0).append({"", std::to_string(idx), title, dur});
+		if(dur == "null")
+			bottom.playlist_selection[idx - 1] = false;
+		else lbv.at(0).back().check(bottom.playlist_selection[idx - 1]);
+	}
+
+	btnclose.events().click([&] {fm.close(); });
+
+	lbv.events().selected([&](const arg_listbox &arg)
+	{
+		if(arg.item.selected())
+			arg.item.check(!arg.item.checked()).select(false);
+	});
+
+	lbv.events().checked([&](const arg_listbox &arg)
+	{
+		bottom.playlist_selection[arg.item.to_display().item] = arg.item.checked();
+	});
+
+	btnall.events().click([&]
+	{
+		for(auto item : lbv.at(0))
+			item.check(true);
+	});
+
+	btnnone.events().click([&]
+	{
+		for(auto item : lbv.at(0))
+			item.check(false);
+	});
+
+	btnrange.events().click([&]
+	{
+		const auto a {slfirst.value()}, b {sllast.value()};
+		const auto cat {lbv.at(0)};
+		const auto catsize {cat.size()};
+		for(auto n {0}; n < a; n++)
+			cat.at(n).check(false);
+		for(auto n {a}; n <= b; n++)
+			cat.at(n).check(true);
+		for(auto n {b+1}; n < catsize; n++)
+			cat.at(n).check(false);
+	});
+
+	tbfirst.set_accept([&](char c)
+	{
+		auto sel {tbfirst.selection()};
+		return c == keyboard::backspace || c == keyboard::del || (isdigit(c) && 
+			(sel.second.x || tbfirst.text().size() < std::to_string(max).size()));
+	});
+
+	tbfirst.events().focus([&](const arg_focus &arg)
+	{
+		if(!arg.getting)
+		{
+			if(tbfirst.text().empty() || tbfirst.to_int() >= sllast.value() + 1 || tbfirst.text() == "0")
+				tbfirst.caption(std::to_string(slfirst.value()+1));
+		}
+	});
+
+	tbfirst.events().text_changed([&, this]
+	{
+		if(tbfirst == api::focus_window())
+		{
+			auto text {tbfirst.text()};
+			if(!text.empty() && text[0] == '0')
+			{
+				text.erase(0, 1);
+				if(!text.empty())
+				{
+					tbfirst.caption(text);
+					return;
+				}
+			}
+			if(!tbfirst.text().empty() && tbfirst.to_int() < sllast.value() + 1 && tbfirst.text() != "0")
+				slfirst.value(stoi(tbfirst.caption())-1);
+		}
+	});
+
+	tblast.set_accept([&](char c)
+	{
+		auto sel {tblast.selection()};
+		return c == keyboard::backspace || c == keyboard::del || (isdigit(c) && 
+			(sel.second.x || tblast.text().size() < std::to_string(max).size()));
+	});
+
+	tblast.events().focus([&](const arg_focus &arg)
+	{
+		if(!arg.getting)
+		{
+			if(tblast.text().empty() || tblast.to_int() <= slfirst.value() + 1 || tblast.to_int() > max+1)
+				tblast.caption(std::to_string(sllast.value()+1));
+		}
+	});
+
+	tblast.events().text_changed([&, this]
+	{
+		if(tblast == api::focus_window())
+		{
+			auto text {tblast.text()};
+			if(!text.empty() && text[0] == '0')
+			{
+				text.erase(0, 1);
+				if(!text.empty())
+				{
+					tblast.caption(text);
+					return;
+				}
+			}
+			if(!tblast.text().empty() && tblast.to_int() > slfirst.value() + 1 && tblast.to_int() < max+1)
+				sllast.value(stoi(tblast.caption())-1);
+		}
+	});
+
+	fm.events().unload([&, this]
+	{
+		const auto sel {bottom.playlist_selected()};
+		if(0 < sel && sel < bottom.playlist_selection.size())
+		{
+			std::wstring str;
+			bool stopped {true};
+			const auto &playsel {bottom.playlist_selection};
+			const auto size {playsel.size()};
+			for(int n {0}, b {0}, e {0}; n < size; n++)
+			{
+				const auto val {playsel[n]};
+				if(val)
+				{
+					if(stopped)
+					{
+						stopped = false;
+						b = n;
+					}
+					if(n == size - 1)
+					{
+						e = n;
+						stopped = true;
+					}
+				}
+				else if(!stopped)
+				{
+					stopped = true;
+					e = n - 1;
+				}
+
+				if(stopped && b != -1)
+				{
+					if(e == b)
+					{
+						if(playsel[b])
+							str += std::to_wstring(b + 1) + L',';
+					}
+					else str += std::to_wstring(b + 1) + L':' + std::to_wstring(e + 1) + L',';
+					b = e = -1;
+				}
+			}
+			bottom.playsel_string = str.substr(0, str.size() - 1);
+		}
+		else 
+		{
+			bottom.playlist_selection.assign(bottom.playlist_info.size(), true);
+			bottom.playsel_string.clear();
+		}
+	});
+
+	fm.theme_callback([&, this](bool dark)
+	{
+		apply_theme(dark);
+		fm.bgcolor(theme.fmbg);
+		return false;
+	});
+
+	if(conf.cbtheme == 2)
+		fm.system_theme(true);
+	else fm.dark_theme(conf.cbtheme == 0);
+
+	auto range_row_visible {bottom.playlist_selection.size() >= 15};
+	if(!range_row_visible)
+	{
+		fm.get_place().field_display("range_row", false);
+		fm.get_place().field_display("range_row_spacer", false);
+	}
+	auto overflow {fm.center(950, max(211.0 - !range_row_visible*45 + lbv.item_count() * (theme.is_dark() ? 27 : 27.4), 0))};
+
+	if(!overflow)
+		lbv.column_at(2).width(lbv.column_at(2).width() + dpi_transform(16));
+
+	fm.show();
+	fm.modality();
 }
 
 
@@ -995,6 +1383,24 @@ void GUI::pop_queue_menu(int x, int y)
 		{
 			ShellExecuteW(NULL, L"open", file.wstring().data(), NULL, NULL, SW_NORMAL);
 		});
+
+		if(bottom.is_ytplaylist)
+		{
+			int count {0};
+			if(item.text(1) != "...")
+				count = bottom.playlist_info.size();
+			m.append_splitter();
+			auto item = m.append("Select videos (" + (count ? std::to_string(bottom.playlist_selected()) + '/' + std::to_string(count) + ")" :
+													  "getting data...)"), [&, this](menu::item_proxy &)
+			{
+				dlg_playlist();
+			});
+			if(!count)
+			{
+				item.enabled(false);
+				vidsel_item = {&m, item.index()};
+			}
+		}
 
 		if(lbq.at(0).size() > 1)
 		{
@@ -1097,6 +1503,7 @@ void GUI::pop_queue_menu(int x, int y)
 		}
 		if(m.size())
 			m.popup_await(lbq, x, y);
+		vidsel_item.m = nullptr;
 	}
 }
 
@@ -1409,12 +1816,9 @@ void GUI::make_form()
 	apply_theme(::widgets::theme.is_dark());
 
 	btn_settings.image(arr_config16_ico);
-	btn_settings.typeface(paint::font_info {"", 11, {800}});
-	btn_settings.events().click([this] { settings_dlg(); });
+	btn_settings.events().click([this] { dlg_settings(); });
 
 	btnadd.enable(false);
-	btnadd.typeface(paint::font_info {"", 11, {800}});
-	btn_qact.typeface(paint::font_info {"", 11, {800}});
 	btn_qact.tooltip("Pops up a menu with actions that can be performed on\nthe queue items (same as right-clicking on the queue).");
 
 	l_url.events().mouse_up([this]
@@ -1435,10 +1839,12 @@ void GUI::make_form()
 			auto item {lbq.item_from_value(text)};
 			if(item == lbq.at(0).end())
 			{
+				bool add {qurl == text};
 				qurl = text;
 				l_url.update_caption();
 				btnadd.enable(true);
-				multiple_url_text.clear();
+				multiple_url_text.str(L"");
+				if(add) btnadd.events().click.emit({}, btnadd);
 			}
 			else
 			{
@@ -1468,9 +1874,7 @@ void GUI::make_form()
 	btnadd.events().key_press([&, this](const arg_keyboard &arg)
 	{
 		if(arg.key == keyboard::enter)
-		{
 			btnadd.events().click.emit({}, btnadd);
-		}
 	});
 
 	btn_qact.events().click([this]
@@ -1478,17 +1882,27 @@ void GUI::make_form()
 		pop_queue_menu(btn_qact.pos().x, btn_qact.pos().y + btn_qact.size().height);
 	});
 
+	/*events().resized([this]
+	{
+		conf.winrect = nana::rectangle{pos(), size()};
+	});
+
+	events().move([this]
+	{
+		conf.winrect = nana::rectangle {pos(), size()};
+	});*/
+
 	plc.collocate();
 }
 
 
-void GUI::settings_dlg()
+void GUI::dlg_settings()
 {
 	using widgets::theme;
 
 	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize>{}};
-	if(cnlang) fm.center(630, 664);
-	else fm.center(585, 664);
+	if(cnlang) fm.center(640, 709);
+	else fm.center(595, 709);
 	fm.caption(title + " - settings");
 	fm.bgcolor(theme.fmbg);
 	if(cnlang) fm.div(R"(vert margin=20
@@ -1501,6 +1915,7 @@ void GUI::settings_dlg()
 		<weight=25 <l_ytdlp weight=170> <weight=10> <l_path> > <weight=20>
 		<weight=25 <l_template weight=132> <weight=10> <tb_template> <weight=15> <btn_default weight=140>> <weight=20>
 		<weight=25 <l_playlist weight=132> <weight=10> <tb_playlist> <weight=15> <btn_playlist_default weight=140>> <weight=20>
+		<weight=25 <cb_zeropadding weight=315> <weight=20> <cb_playlist_folder>> <weight=20>
 		<sep2 weight=3px> <weight=20>
 		<weight=25 <l_maxdl weight=216> <weight=10> <sb_maxdl weight=40> <> <cb_lengthyproc weight=310>> <weight=20>
 		<weight=25 <cb_autostart weight=500>> <weight=20>
@@ -1524,6 +1939,7 @@ void GUI::settings_dlg()
 		<weight=25 <l_ytdlp weight=158> <weight=10> <l_path> > <weight=20>
 		<weight=25 <l_template weight=122> <weight=10> <tb_template> <weight=15> <btn_default weight=140>> <weight=20>
 		<weight=25 <l_playlist weight=122> <weight=10> <tb_playlist> <weight=15> <btn_playlist_default weight=140>> <weight=20>
+		<weight=25 <cb_zeropadding weight=290> <weight=20> <cb_playlist_folder>> <weight=20>
 		<sep2 weight=3px> <weight=20>
 		<weight=25 <l_maxdl weight=196> <weight=10> <sb_maxdl weight=40> <> <cb_lengthyproc weight=282>> <weight=20>
 		<weight=25 <cb_autostart weight=460>> <weight=20>
@@ -1548,16 +1964,15 @@ void GUI::settings_dlg()
 		cbtheme_system {fm, "System preference"}, cb_lengthyproc {fm, "Start next item on lengthy processing"},
 		cb_common {fm, "Each queue item has its own download options"}, 
 		cb_autostart {fm, "When stopping a queue item, automatically start the next one"},
-		cb_queue_autostart {fm, "When the program starts, automatically start processing the queue"};
+		cb_queue_autostart {fm, "When the program starts, automatically start processing the queue"},
+		cb_zeropadding {fm, "Pad the indexed filenames with zeroes"}, cb_playlist_folder {fm, "Put playlists in their own folders"};
 	widgets::Separator sep1 {fm}, sep2 {fm}, sep3 {fm}, sep4 {fm};
-	widgets::Button btn_close {fm, " Close"}, btn_updater {fm, " Updater"}, btn_default {fm, "Reset to default"}, 
-		btn_playlist_default {fm, "Reset to default"};
+	widgets::Button btn_close {fm, " Close"}, btn_updater {fm, " Updater"}, btn_default {fm, "Reset to default", true},
+		btn_playlist_default {fm, "Reset to default", true};
 	btn_updater.image(arr_updater_ico);
 	btn_close.events().click([&] {fm.close(); });
-	btn_updater.events().click([&, this] {updater_dlg(fm); l_path.update_caption(); });
-	btn_default.typeface(nana::paint::font_info {"", 11, {800}});
+	btn_updater.events().click([&, this] {dlg_updater(fm); l_path.update_caption(); });
 	btn_default.tooltip(nana::to_utf8(conf.output_template_default));
-	btn_playlist_default.typeface(nana::paint::font_info {"", 11, {800}});
 	btn_playlist_default.tooltip(nana::to_utf8(conf.playlist_indexing_default));
 	tb_template.multi_lines(false);
 	tb_template.padding(0, 5, 0, 5);
@@ -1592,6 +2007,23 @@ void GUI::settings_dlg()
 			theme.contrast(conf.contrast);
 			fm.bgcolor(theme.fmbg);
 			apply_theme(theme.is_dark());
+			nana::api::refresh_window(bottoms.current().gpopt);
+			tb_template.refresh_theme();
+			tb_playlist.refresh_theme();
+			com_audio.refresh_theme();
+			com_video.refresh_theme();
+			com_res.refresh_theme();
+			cb_autostart.refresh_theme();
+			cb_common.refresh_theme();
+			sb_maxdl.refresh_theme();
+			cbfps.refresh_theme();
+			cb_queue_autostart.refresh_theme();
+			btn_close.refresh_theme();
+			btn_default.refresh_theme();
+			btn_playlist_default.refresh_theme();
+			btn_updater.refresh_theme();
+			cb_playlist_folder.refresh_theme();
+			cb_zeropadding.refresh_theme();
 		});
 	}
 	nana::radio_group rg;
@@ -1662,12 +2094,26 @@ void GUI::settings_dlg()
 	fm["cb_autostart"] << cb_autostart;
 	fm["cb_common"] << cb_common;
 	fm["cb_queue_autostart"] << cb_queue_autostart;
+	fm["cb_zeropadding"] << cb_zeropadding;
+	fm["cb_playlist_folder"] << cb_playlist_folder;
 
 	cbfps.tooltip("If several different formats have the same resolution,\ndownload the one with the highest framerate.");
+
 	cb_lengthyproc.tooltip("When yt-dlp finishes downloading all the files associated with a queue item,\n"
 	"it performs actions on the files referred to as \"post-processing\". These actions\ncan be a number of things, depending "
 	"on the context, and on the options used.\n\nSometimes this post-processing phase can take a long time, so this setting\n"
 	"makes the program automatically start the next queue item when processing\ntakes longer that 3 seconds.");
+
+	cb_zeropadding.tooltip("This option pads the index numbers in the filenames of playlist videos\nwith zeroes, when the playlist "
+	"contains more than 9 videos. This allows\nthe filenames to be sorted properly when viewed in a file manager (for\nexample, "
+	"<bold>\"2 - name\"</> comes after <bold>\"14 - name\"</> in the sort order, but\n<bold>\"02 - name\"</> comes before <bold>\"14 - name\"</>).\n\n"
+	"This feature works by automatically editing the \"Playlist indexing\" string\ndefined above, as long as it contains "
+	"<bold>\"%(playlist_index)d\"</>.\n\nAn appropriate amount of zeroes is added, according to the size of the\nplaylist "
+	"(if it has tens of videos, up to one zero; if it has hundreds of\nvideos, up to two zeroes; etc).");
+
+	cb_playlist_folder.tooltip("Put playlist videos in a subfolder of the output folder, using the\nplaylist title as the name of "
+	"the subfolder.\n\nThis works by automatically prepending <bold>\"%(playlist_title)s\\\"</> to the\noutput template defined above, "
+	"whenever a playlist is downloaded.");
 
 	const auto res_tip {"Download the best video with the largest resolution available that is\n"
 		"not higher than the selected value. Resolution is determined using the\n"
@@ -1684,7 +2130,7 @@ void GUI::settings_dlg()
 		playlist_tip {"This is a string that the program optionally incorporates into the \noutput template defined above, only when "
 		"downloading \nYouTube playlists. It is prepended to the output template string, \nso with default values, the result would "
 		"look like this:\n\n<bold>\"%(playlist_index)d - %(title)s.%(ext)s\"</>\n\nThis output template produces filenames that look like this:\n\n"
-		"<bold>1 - title.ext\n2 - title.ext\n3 - title.ext</>\n\nLeave blank if you don't want playlist items to be numbered."};
+		"<bold>1 - title.ext\n2 - title.ext\n3 - title.ext</>\n\nLeave blank if you don't want playlist videos to be numbered."};
 
 
 	for(auto &opt : com_video_options)
@@ -1716,6 +2162,8 @@ void GUI::settings_dlg()
 	cb_autostart.check(conf.cb_autostart);
 	cb_common.check(!conf.common_dl_options);
 	cb_queue_autostart.check(conf.cb_queue_autostart);
+	cb_zeropadding.check(conf.cb_zeropadding);
+	cb_playlist_folder.check(conf.cb_playlist_folder);
 
 	l_path.events().click([&, this]
 	{
@@ -1753,6 +2201,8 @@ void GUI::settings_dlg()
 		conf.cb_lengthyproc = cb_lengthyproc.checked();
 		conf.cb_autostart = cb_autostart.checked();
 		conf.cb_queue_autostart = cb_queue_autostart.checked();
+		conf.cb_playlist_folder = cb_playlist_folder.checked();
+		conf.cb_zeropadding = cb_zeropadding.checked();
 		if(conf.common_dl_options == cb_common.checked())
 		{
 			if(conf.common_dl_options = !conf.common_dl_options)
@@ -1800,7 +2250,7 @@ void GUI::settings_dlg()
 }
 
 
-void GUI::changes_dlg(nana::window parent)
+void GUI::dlg_changes(nana::window parent)
 {
 	using widgets::theme;
 
@@ -2183,7 +2633,7 @@ bool GUI::is_tag_a_new_version(std::string tag_name)
 }
 
 
-void GUI::updater_dlg(nana::window parent)
+void GUI::dlg_updater(nana::window parent)
 {
 	using widgets::theme;
 	themed_form fm {nullptr, parent, nana::API::make_center(parent, dpi_transform(575, 347)), appear::decorate<appear::minimize>{}};
@@ -2233,7 +2683,7 @@ void GUI::updater_dlg(nana::window parent)
 
 	btn_changes.typeface(nana::paint::font_info {"", 12, {800}});
 	btn_changes.enabled(false);
-	btn_changes.events().click([&] { changes_dlg(fm); });
+	btn_changes.events().click([&] { dlg_changes(fm); });
 	btn_update.typeface(nana::paint::font_info {"", 12, {800}});
 	btn_update.enabled(false);
 	btn_update_ytdlp.typeface(nana::paint::font_info {"", 12, {800}});
@@ -2736,6 +3186,32 @@ void GUI::gui_bottom::show_btnytfmt(bool show)
 
 fs::path GUI::gui_bottom::file_path()
 {
+	if(!printed_path.empty())
+	{
+		if(printed_path.extension().string() != "NA")
+		{
+			if(fs::exists(printed_path))
+				return printed_path;
+		}
+		if(!merger_path.empty())
+		{
+			printed_path.replace_extension(merger_path.extension());
+			if(fs::exists(printed_path))
+				return printed_path;
+			else if(!download_path.empty())
+			{
+				printed_path.replace_extension(download_path.extension());
+				if(fs::exists(printed_path))
+					return printed_path;
+			}
+		}
+	}
+
+	if(!merger_path.empty() && fs::exists(merger_path))
+		return merger_path;
+	else if(!download_path.empty() && fs::exists(download_path))
+		return download_path;
+
 	fs::path file;
 	if(vidinfo.contains("filename"))
 		file = fs::u8path(std::string {vidinfo["filename"]});
@@ -3153,7 +3629,7 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 
 	btn_ytfmtlist.events().click([&gui, this]
 	{
-		gui.formats_dlg();
+		gui.dlg_formats();
 	});
 
 	l_outpath.events().click([&gui, this]
@@ -3432,7 +3908,6 @@ std::wstring GUI::next_startable_url(std::wstring current_url)
 		if(item_total > 1)
 		{
 			auto items_currently_downloading {0};
-			//auto &curbot {current_url == L"current" ? bottoms.current() : bottoms.at(current_url)};
 			if(current_url == L"current")
 				current_url = bottoms.current().url;
 			for(auto item : lbq.at(0))

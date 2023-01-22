@@ -20,7 +20,7 @@ public:
 	void refresh_widgets();
 	nana::size dpi_transform(double w, double h = 0);
 	int dpi_transform(int val);
-	void center(double w = 0, double h = 0);
+	bool center(double w = 0, double h = 0);
 
 protected:
 	HWND hwnd {nullptr};

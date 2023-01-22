@@ -72,7 +72,7 @@ HWND util::hwnd_from_pid(DWORD pid)
 	return lparam.hwnd;
 }
 
-std::string util::run_piped_process(std::wstring cmd, bool *working, append_callback cbappend, progress_callback cbprog, bool *graceful_exit)
+std::string util::run_piped_process(std::wstring cmd, bool *working, append_callback cbappend, progress_callback cbprog, bool *graceful_exit, std::string suppress)
 {
 	std::wstring modpath(4096, '\0');
 	modpath.resize(GetModuleFileNameW(0, &modpath.front(), modpath.size()));
@@ -172,7 +172,7 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 							lnend = -1;
 						else lnstart = lnend + 1;
 					}
-					if(!line.empty())
+					if(!line.empty() && line.find(suppress) == -1)
 					{
 						if(cbappend && *working && line[0] == '[')
 						{
@@ -185,8 +185,10 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 										cbappend(text, true);
 								if(text == "[Exec]" && text.find("ytdlp_status") != 1)
 									continue;
-								if(text == "[ExtractAudio]" || text == "[Merger]" || text == "[FixupM3u8]")
-									cbprog(1000, 1000, text);
+								if(text == "[ExtractAudio]" || text == "[FixupM3u8]" || text == "[Merger]")
+									cbprog(-1, -1, text);
+								else if(text == "[download]" && (line.find("Destination:") == 11 || line.find("has already been downloaded") != -1))
+									cbprog(-1, -1, line);
 							}
 						}
 						auto pos {line.find('%')};

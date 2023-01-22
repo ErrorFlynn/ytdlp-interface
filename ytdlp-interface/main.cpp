@@ -1,15 +1,15 @@
-#include "gui.hpp"
+﻿#include "gui.hpp"
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 {
 #ifdef _DEBUG
-	SetConsoleOutputCP(65001);
 	AllocConsole();
 	freopen("conout$", "w", stdout);
+	SetConsoleOutputCP(CP_UTF8);
 #endif
 
 	using namespace nana;
-
+	std::setlocale(LC_ALL, "en_US.UTF-8");
 	int argc;
 	LPWSTR *argv {CommandLineToArgvW(GetCommandLineW(), &argc)};
 	fs::path modpath {argv[0]}, appdir {modpath.parent_path()};
@@ -169,6 +169,16 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				GUI::conf.open_dialog_origin = jconf["open_dialog_origin"];
 				GUI::conf.playlist_indexing = to_wstring(std::string {jconf["playlist_indexing"]});
 			}
+			if(jconf.contains("cb_zeropadding")) // v1.8
+			{
+				GUI::conf.cb_zeropadding = jconf["cb_zeropadding"];
+				GUI::conf.cb_playlist_folder = jconf["cb_playlist_folder"];
+				GUI::conf.winrect.x = jconf["window"]["x"];
+				GUI::conf.winrect.y = jconf["window"]["y"];
+				GUI::conf.winrect.width = jconf["window"]["w"];
+				GUI::conf.winrect.height = jconf["window"]["h"];
+				GUI::conf.zoomed = jconf["window"]["zoomed"];
+			}
 		}
 	}
 	else
@@ -177,8 +187,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 	}
 
 	GUI gui;
-	gui.show();
-	gui.bring_top(true);
 	gui.events().unload([&]
 	{
 		jconf["ytdlp_path"] = GUI::conf.ytdlp_path;
@@ -215,6 +223,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["gpopt_hidden"] = GUI::conf.gpopt_hidden;
 		jconf["open_dialog_origin"] = GUI::conf.open_dialog_origin;
 		jconf["playlist_indexing"] = to_utf8(GUI::conf.playlist_indexing);
+		jconf["cb_zeropadding"] = GUI::conf.cb_zeropadding;
+		jconf["cb_playlist_folder"] = GUI::conf.cb_playlist_folder;
+		jconf["window"]["x"] = GUI::conf.winrect.x;
+		jconf["window"]["y"] = GUI::conf.winrect.y;
+		jconf["window"]["w"] = GUI::conf.winrect.width;
+		jconf["window"]["h"] = GUI::conf.winrect.height;
+		jconf["window"]["zoomed"] = GUI::conf.zoomed;
 		if(jconf.contains("outpaths"))
 			jconf["outpaths"].clear();
 		for(auto &path : GUI::conf.outpaths)
