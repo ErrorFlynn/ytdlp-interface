@@ -172,7 +172,7 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 							lnend = -1;
 						else lnstart = lnend + 1;
 					}
-					if(!line.empty() && line.find(suppress) == -1)
+					if(!line.empty() && (suppress.empty() || line.find(suppress) == -1))
 					{
 						if(cbappend && *working && line[0] == '[')
 						{

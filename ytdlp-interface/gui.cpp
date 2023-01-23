@@ -638,8 +638,12 @@ bool GUI::process_queue_item(std::wstring url)
 			+ L" " + strhwnd + L" \\\"" + url + L"\\\"\" ";
 		cmd += L"--exec \"before_dl:\\\"" + self_path.wstring() + L"\\\" ytdlp_status " + std::to_wstring(YTDLP_DOWNLOAD)
 			+ L" " + strhwnd + L" \\\"" + url + L"\\\"\" ";
-		fs::path tempfile {fs::temp_directory_path() / std::tmpnam(nullptr)};
-		cmd += L"--print-to-file after_move:" + conf.output_template + L" " + tempfile.wstring();
+		fs::path tempfile;
+		if(!bottom.is_ytplaylist)
+		{
+			tempfile = fs::temp_directory_path() / std::tmpnam(nullptr);
+			cmd += L"--print-to-file after_move:" + conf.output_template + L" " + tempfile.wstring();
+		}
 		std::wstring cmd2;
 		if(!bottom.cbargs.checked() || argset.find(L"-P ") == -1)
 		{
@@ -711,6 +715,8 @@ bool GUI::process_queue_item(std::wstring url)
 
 			auto cb_progress = [&, this](ULONGLONG completed, ULONGLONG total, std::string text)
 			{
+				while(text.find_last_of("\r\n") != -1)
+					text.pop_back();
 				auto item {lbq.item_from_value(url)};
 				if(total != -1)
 				{
@@ -718,7 +724,7 @@ bool GUI::process_queue_item(std::wstring url)
 					if(i_taskbar && lbq.at(0).size() == 1)
 						i_taskbar->SetProgressValue(hwnd, completed, total);
 				}
-				if(completed < 1000)
+				if(completed < 1000 && total != -1)
 				{
 					prog.caption(text);
 				}
@@ -742,8 +748,8 @@ bool GUI::process_queue_item(std::wstring url)
 									auto pos2 {text.find('\"', pos)};
 									if(pos2 != -1)
 									{
-										auto substr {text.substr(pos, pos2 - pos)};
-										bottom.merger_path = text.substr(pos, pos2 - pos);
+										try { bottom.merger_path = fs::u8path(text.substr(pos, pos2 - pos)); }
+										catch(...) { bottom.merger_path.clear(); }
 									}
 								}
 							}
@@ -760,12 +766,18 @@ bool GUI::process_queue_item(std::wstring url)
 					{
 						auto pos {text.find("has already been downloaded")};
 						if(pos != -1)
-							bottom.download_path = text.substr(11, pos - 2);
+						{
+							try { bottom.download_path = fs::u8path(text.substr(11, pos - 2)); }
+							catch(...) { bottom.download_path.clear(); }
+						}
 						else
 						{
 							pos = text.find("Destination: ");
 							if(pos != -1)
-								bottom.download_path = text.substr(24);
+							{
+								try { bottom.download_path = fs::u8path(text.substr(24)); }
+								catch(...) { bottom.download_path.clear(); }
+							}
 							else bottom.download_path.clear();
 						}
 						return;
@@ -792,7 +804,7 @@ bool GUI::process_queue_item(std::wstring url)
 			auto outpath {bottom.outpath};
 			util::run_piped_process(cmd, &working, cb_append, cb_progress, &graceful_exit, tempfile.filename().string());
 			bottom.received_procmsg = false;
-			if(fs::exists(tempfile))
+			if(!tempfile.empty() && fs::exists(tempfile))
 			{
 				if(std::ifstream is {tempfile, std::ios::binary | std::ios::ate})
 				{
@@ -2255,7 +2267,7 @@ void GUI::dlg_changes(nana::window parent)
 	using widgets::theme;
 
 	themed_form fm {nullptr, parent, {}, appear::decorate<appear::sizable>{}};
-	fm.center(1000, 445);
+	fm.center(1030, 465);
 	fm.theme_callback([&, this](bool dark)
 	{
 		apply_theme(dark);
@@ -2269,10 +2281,10 @@ void GUI::dlg_changes(nana::window parent)
 	fm.caption("ytdlp-interface - release notes");
 	fm.bgcolor(theme.fmbg);
 	if(cnlang) fm.div(R"(vert margin=20 <tb> <weight=20>
-					<weight=25 <> <l_history weight=180> <weight=10> <com_history weight=60> <weight=20> <cblogview weight=150> <> >)");
+					<weight=25 <> <l_history weight=180> <weight=10> <com_history weight=70> <weight=20> <cblogview weight=150> <> >)");
 
 	else fm.div(R"(vert margin=20 <tb> <weight=20>
-				<weight=25 <> <l_history weight=164> <weight=10> <com_history weight=55> <weight=20> <cblogview weight=132> <> >)");
+				<weight=25 <> <l_history weight=164> <weight=10> <com_history weight=65> <weight=20> <cblogview weight=132> <> >)");
 
 	widgets::Textbox tb {fm};
 	{
@@ -2346,7 +2358,7 @@ void GUI::dlg_changes(nana::window parent)
 		for(auto &release : releases)
 		{
 			std::string text {release["tag_name"]};
-			com_history.push_back(" " + text);
+			com_history.push_back(text);
 		}
 		com_history.option(0);
 		com_history.events().selected([&]
