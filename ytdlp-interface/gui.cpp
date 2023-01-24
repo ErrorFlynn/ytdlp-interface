@@ -952,8 +952,25 @@ void GUI::add_url(std::wstring url)
 						fmt_args += L",aext:" + com_audio_options[conf.pref_audio];
 					if(conf.pref_fps)
 						fmt_args += L",fps\" ";
+					else fmt_args += L"\" ";
+
 					media_info = util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + L" --no-warnings -j " + 
-								+ L"-o " + conf.output_template + fmt_args + url, &bottom.working_info);
+								L"-o " + conf.output_template + fmt_args + url, &bottom.working_info);
+					if(media_info.find("ERROR:") == 0)
+					{
+						auto pos {media_info.find("This live event will begin in ")};
+						if(pos != -1)
+						{
+							auto strtime {media_info.substr(pos + 30, media_info.rfind('.') - pos - 30)};
+							lbq.item_from_value(url).text(1, "youtube.com");
+							lbq.item_from_value(url).text(2, "[live event scheduled to begin in " + strtime + ']');
+							bottom.vidinfo.clear();
+							active_threads--;
+							if(bottom.working_info)
+								bottom.info_thread.detach();
+							return;
+						}
+					}
 					auto pos {media_info.rfind('}')};
 					if(pos != -1)
 						media_info.erase(pos+1);
