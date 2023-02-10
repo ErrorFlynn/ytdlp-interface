@@ -20,6 +20,7 @@
 
 #include "progress_ex.hpp"
 #include "icons.hpp"
+#include "util.hpp"
 
 #pragma warning(disable : 4267)
 #ifdef small
@@ -204,36 +205,20 @@ namespace widgets
 	class path_label : public nana::label
 	{
 		using variant = std::variant<fs::path*, std::wstring*>;
-		variant v;
-		
-		bool is_path {std::holds_alternative<fs::path*>(v)};
+		variant v;		
+		bool is_path {false};
 
 	public:
 
 		path_label() : label() {}
 
-		path_label(nana::window parent, const variant var) : label {parent}, v {var}
-		{
-			refresh_theme();
-			if(is_path) typeface(nana::paint::font_info {"Tahoma", 10});
-			else typeface(nana::paint::font_info {"", 11, {700}});
-			text_align(nana::align::center, nana::align_v::center);
-			nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
-			nana::API::effects_edge_nimbus(*this, nana::effects::edge_nimbus::over);
-			events().expose([this] { refresh_theme(); });
-			events().resized([this] { update_caption(); });
-			nana::drawing {*this}.draw([this](nana::paint::graphics& g)
-			{
-				if(theme.is_dark())
-					g.rectangle(false, theme.path_bg.blend(nana::colors::white, .3));
-				else g.rectangle(false, nana::color {"#9aa"});
-			});
-		}
+		path_label(nana::window parent, const variant var) { create(parent, var); }
 
 		void create(nana::window parent, const variant var)
 		{
 			label::create(parent);
 			v = var;
+			is_path = std::holds_alternative<fs::path *>(v);
 			refresh_theme();
 			if(is_path) typeface(nana::paint::font_info {"Tahoma", 10});
 			else typeface(nana::paint::font_info {"", 11, {700}});
@@ -242,6 +227,7 @@ namespace widgets
 			nana::API::effects_edge_nimbus(*this, nana::effects::edge_nimbus::over);
 			events().expose([this] { refresh_theme(); });
 			events().resized([this] { update_caption(); });
+
 			nana::drawing {*this}.draw([this](nana::paint::graphics &g)
 			{
 				if(theme.is_dark())
@@ -254,7 +240,7 @@ namespace widgets
 		{
 			const std::wstring wstr {is_path ? std::get<fs::path*>(v)->wstring() : *std::get<std::wstring*>(v)};
 			if(!is_path && wstr.empty())
-				caption("Press Ctrl+V or click here to paste media link (click again to also add)");
+				caption("Press Ctrl+V or click here to paste and add media link");
 			else if(!size().empty())
 			{
 				caption(wstr);

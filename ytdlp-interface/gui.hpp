@@ -52,7 +52,7 @@ private:
 	std::thread thr, thr_releases, thr_releases_misc, thr_versions, thr_thumb, thr_menu;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v1.8.2"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/};
+	const std::string ver_tag {"v1.9.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 4)};
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
 	nana::timer tproc;
 
@@ -93,11 +93,11 @@ private:
 		gui_bottom(GUI &gui, bool visible = false);
 
 		bool is_ytlink {false}, use_strfmt {false}, working {false}, graceful_exit {false}, working_info {true}, received_procmsg {false},
-			is_ytplaylist {false};
+			is_ytplaylist {false}, is_ytchan {false};
 		fs::path outpath, merger_path, download_path, printed_path;
-		nlohmann::json vidinfo;
-		std::vector<nlohmann::json> playlist_info;
+		nlohmann::json vidinfo, playlist_info;
 		std::vector<bool> playlist_selection;
+		std::vector<std::pair<std::wstring, std::wstring>> sections;
 		std::wstring url, strfmt, fmt1, fmt2, playsel_string;
 		std::thread dl_thread, info_thread;
 		int index {0};
@@ -216,6 +216,8 @@ private:
 				pbot->url = url;
 				pbot->is_ytlink = gui->is_ytlink(url);
 				pbot->is_ytplaylist = pbot->is_ytlink && (url.find(L"?list=") != -1 || url.find(L"&list=") != -1);
+				pbot->is_ytchan = url.find(L"www.youtube.com/c/") != -1 || url.find(L"www.youtube.com/@") != -1 ||
+					url.find(L"www.youtube.com/channel/") != -1 || url.find(L"www.youtube.com/user/") != -1;
 				if(gui->conf.gpopt_hidden && !gui->no_draw_freeze)
 				{
 					pbot->expcol.operate(true);
@@ -478,12 +480,12 @@ private:
 	nana::panel<false> queue_panel {*this};
 	nana::place plc_queue {queue_panel};
 	widgets::Listbox lbq {queue_panel};
-	widgets::Button btnadd {queue_panel, "Add link", true}, btn_qact {queue_panel, "Queue actions", true}, 
-		btn_settings {queue_panel, "Settings", true};
+	widgets::Button btn_qact {queue_panel, "Queue actions", true}, btn_settings {queue_panel, "Settings", true};
 	std::wstring qurl;
 	widgets::path_label l_url {queue_panel, &qurl};
 
 
+	void dlg_sections();
 	void dlg_playlist();
 	void pop_queue_menu(int x, int y);
 	void make_queue_listbox();

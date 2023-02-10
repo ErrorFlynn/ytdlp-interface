@@ -185,10 +185,11 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 										cbappend(text, true);
 								if(text == "[Exec]" && text.find("ytdlp_status") != 1)
 									continue;
-								if(text == "[ExtractAudio]" || text == "[FixupM3u8]" || text == "[Merger]")
+								if(text == "[ExtractAudio]" || text.find("[Fixup") == 0 || text == "[Merger]")
 									cbprog(-1, -1, text);
-								else if(text == "[download]" && (line.find("Destination:") == 11 || line.find("has already been downloaded") != -1))
-									cbprog(-1, -1, line);
+								else if(!suppress.empty())
+									if(text == "[download]" && (line.find("Destination:") == 11 || line.find("has already been downloaded") != -1))
+										cbprog(-1, -1, line);
 							}
 						}
 						auto pos {line.find('%')};
