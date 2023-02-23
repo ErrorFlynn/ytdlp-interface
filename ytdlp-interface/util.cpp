@@ -341,7 +341,11 @@ std::string util::get_inet_res(std::string res, std::string *error)
 						buf.resize(read);
 					ret += buf;
 				}
-				else break;
+				else
+				{
+					if(error) *error = GetLastErrorStr(true);
+					break;
+				}
 			}
 			InternetCloseHandle(hfile);
 		}

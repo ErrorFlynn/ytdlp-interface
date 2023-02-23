@@ -18,8 +18,8 @@ public:
 	bool is_system_theme_dark() { return _ShouldAppsUseDarkMode(); }
 	void theme_callback(theme_cb cb) { callback = cb; }
 	void refresh_widgets();
-	nana::size dpi_transform(double w, double h = 0);
-	int dpi_transform(int val);
+	nana::size dpi_transform_size(double w, double h = 0);
+	int dpi_transform(int val, double from_dpi = 96);
 	bool center(double w = 0, double h = 0);
 
 protected:

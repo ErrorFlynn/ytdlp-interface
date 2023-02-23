@@ -70,6 +70,17 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 		return true;
 	});
 
+	msg.make_after(WM_SYSCOMMAND, [&](UINT, WPARAM wparam, LPARAM, LRESULT *)
+	{
+		if(wparam == 1337)
+		{
+			restore();
+			bring_top(true);
+			center(1000, 800 - bottoms.current().expcol.collapsed() * dpi_transform(240));
+		}
+		return true;
+	});
+
 	msg.make_after(WM_ENDSESSION, [&](UINT, WPARAM wparam, LPARAM, LRESULT *)
 	{
 		if(wparam) close();
@@ -199,7 +210,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 	events().unload([&]
 	{
 		conf.zoomed = is_zoomed(true);
-		if(conf.zoomed) restore();
+		if(conf.zoomed || is_zoomed(false)) restore();
 		conf.winrect = nana::rectangle {pos(), size()};
 		working = menu_working = false;
 		if(thr_menu.joinable())
@@ -208,8 +219,10 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 			thr.join();
 		if(thr_releases.joinable())
 			thr_releases.detach();
-		if(thr_releases_misc.joinable())
-			thr_releases_misc.detach();
+		if(thr_releases_ffmpeg.joinable())
+			thr_releases_ffmpeg.detach();
+		if(thr_releases_ytdlp.joinable())
+			thr_releases_ytdlp.detach();
 		if(thr_versions.joinable())
 			thr_versions.detach();
 		for(auto &bottom : bottoms)
@@ -257,11 +270,39 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 	minw = sz.width;
 	minh = sz.height;
 	if(!conf.winrect.empty())
+	{
+		conf.winrect.width = dpi_transform(conf.winrect.width, conf.dpi);
+		conf.winrect.height = dpi_transform(conf.winrect.height, conf.dpi);
+		const auto maxh {screen {}.from_window(*this).area().dimension().height};
+		if(conf.winrect.height < size().height)
+			conf.winrect.height = size().height;
 		move(conf.winrect);
-	show();
+		size(conf.winrect.dimension());
+		sz = api::window_outline_size(*this);
+		if(sz.height > maxh)
+		{
+			sz.height = maxh;
+			api::window_outline_size(*this, sz);
+		}
+	}
 	bring_top(true);
 	if(conf.zoomed) zoom(true);
 	no_draw_freeze = false;
+
+	auto m {GetSystemMenu(hwnd, FALSE)};
+	if(m)
+	{
+		MENUITEMINFOA i {0};
+		i.cbSize = sizeof MENUITEMINFO;
+		i.fMask = MIIM_FTYPE | MIIM_STRING | MIIM_ID;
+		i.fType = MFT_STRING;
+		i.wID = 1337;
+		i.dwTypeData = (CHAR*)"Reset size and position\tCtrl+Num0";
+		InsertMenuItemA(m, SC_CLOSE, FALSE, &i);
+		i.dwTypeData = (CHAR*)"Close\tEsc, Alt+F4";
+		i.fMask = MIIM_STRING;
+		SetMenuItemInfoA(m, SC_CLOSE, FALSE, &i);
+	}
 }
 
 
@@ -270,10 +311,6 @@ void GUI::dlg_formats()
 	using namespace nana;
 	using ::widgets::theme;
 	auto url {bottoms.visible()};
-	auto id {to_utf8(url)};
-	if(id.find("youtu.be") != -1)
-		id = id.substr(id.rfind('/')+1, 11);
-	else id = id.substr(id.rfind("?v=")+3, 11);
 	auto &bottom {bottoms.at(url)};
 	auto &vidinfo {bottom.vidinfo};
 
@@ -964,7 +1001,11 @@ void GUI::add_url(std::wstring url)
 				{
 					media_info = util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + 
 						L" --no-warnings --flat-playlist --compat-options no-youtube-unavailable-videos -J " + url, &bottom.working_info);
-					bottom.playlist_info = nlohmann::json::parse(media_info);
+					try { bottom.playlist_info = nlohmann::json::parse(media_info); }
+					catch(nlohmann::detail::exception e)
+					{
+						bottom.playlist_info.clear();
+					}
 				}
 				else
 				{
@@ -1003,7 +1044,11 @@ void GUI::add_url(std::wstring url)
 						if(pos != -1)
 						{
 							media_info.erase(0, pos);
-							bottom.vidinfo = nlohmann::json::parse(media_info);
+							try { bottom.vidinfo = nlohmann::json::parse(media_info); }
+							catch(nlohmann::detail::exception e)
+							{
+								bottom.vidinfo.clear();
+							}
 						}
 					}
 				}
@@ -1012,22 +1057,29 @@ void GUI::add_url(std::wstring url)
 			{
 				media_info = util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() +
 					L"\" --no-warnings --flat-playlist -I :0 -J " + url, &bottom.working_info);
-				bottom.playlist_info = nlohmann::json::parse(media_info);
-				std::string tab {"[whole channel] "};
-				std::vector<std::string> tabs {"videos", "featured", "playlists", "shorts", "streams", "community"};
-				for(const auto &t : tabs)
-					if(url.rfind(L"/" + nana::to_wstring(t)) == url.size() - t.size() - 1)
-					{
-						tab = "[channel tab] ";
-						break;
-					}
-				lbq.item_from_value(url).text(1, "youtube.com");
-				lbq.item_from_value(url).text(2, tab + std::string {bottom.playlist_info["title"]});
-				bottom.vidinfo.clear();
-				active_threads--;
-				if(bottom.working_info)
-					bottom.info_thread.detach();
-				return;
+				try { bottom.playlist_info = nlohmann::json::parse(media_info); }
+				catch(nlohmann::detail::exception e)
+				{
+					bottom.playlist_info.clear();
+				}
+				if(!bottom.playlist_info.empty())
+				{
+					std::string tab {"[whole channel] "};
+					std::vector<std::string> tabs {"videos", "featured", "playlists", "shorts", "streams", "community"};
+					for(const auto &t : tabs)
+						if(url.rfind(L"/" + nana::to_wstring(t)) == url.size() - t.size() - 1)
+						{
+							tab = "[channel tab] ";
+							break;
+						}
+					lbq.item_from_value(url).text(1, "youtube.com");
+					lbq.item_from_value(url).text(2, tab + std::string {bottom.playlist_info["title"]});
+					bottom.vidinfo.clear();
+					active_threads--;
+					if(bottom.working_info)
+						bottom.info_thread.detach();
+					return;
+				}
 			}
 			else media_info = util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L"\" --no-warnings --print :%(webpage_url_domain)s:%(title)s "
 														+ url, &bottom.working_info);
@@ -1049,19 +1101,22 @@ void GUI::add_url(std::wstring url)
 					}
 					else if(bottom.is_ytplaylist)
 					{
-						int playlist_size {bottom.playlist_info["playlist_count"]};
-						bottom.playlist_selection.assign(playlist_size, true);
-						media_website = bottom.playlist_info["webpage_url_domain"];
-						media_title = "[playlist] " + std::string {bottom.playlist_info["title"]};
-						if(vidsel_item.m && lbq.item_from_value(url).selected())
+						if(!bottom.playlist_info.empty())
 						{
-							auto m {vidsel_item.m};
-							auto pos {vidsel_item.pos};
-							m->enabled(pos, true);
-							auto str {std::to_string(playlist_size)};
-							m->text(pos, "Select videos (" + str + '/' + str + ")");
-							nana::api::refresh_window(m->handle());
-							m = nullptr;
+							int playlist_size {bottom.playlist_info["playlist_count"]};
+							bottom.playlist_selection.assign(playlist_size, true);
+							media_website = bottom.playlist_info["webpage_url_domain"];
+							media_title = "[playlist] " + std::string {bottom.playlist_info["title"]};
+							if(vidsel_item.m && lbq.item_from_value(url).selected())
+							{
+								auto m {vidsel_item.m};
+								auto pos {vidsel_item.pos};
+								m->enabled(pos, true);
+								auto str {std::to_string(playlist_size)};
+								m->text(pos, "Select videos (" + str + '/' + str + ")");
+								nana::api::refresh_window(m->handle());
+								m = nullptr;
+							}
 						}
 					}
 					else
@@ -1412,8 +1467,18 @@ void GUI::dlg_sections()
 	auto &bottom {bottoms.current()};
 	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize>{}};
 	fm.caption(title + " - media sections");
-	fm.center(788, 678);
-	fm.div(R"(vert margin=[15,20,20,20] 
+	if(cnlang) fm.center(800, 678);
+	else fm.center(788, 678);
+	if(cnlang) fm.div(R"(vert margin=[15,20,20,20] 
+		<weight=130 <l_help>> <weight=20> 
+		<weight=25
+			<l_start weight=154> <weight=10> <tbfirst weight=80> <weight=10> <l_end weight=16> <weight=10> <tbsecond weight=80>
+			<weight=20> <btnadd weight=100> <weight=20> <btnremove weight=150> <weight=20> <btnclear weight=90>
+		>
+		<weight=20> <lbs> <weight=20> 
+		<weight=35 <> <btnclose weight=100> <>>
+	)");
+	else fm.div(R"(vert margin=[15,20,20,20] 
 		<weight=130 <l_help>> <weight=20> 
 		<weight=25
 			<l_start weight=142> <weight=10> <tbfirst weight=80> <weight=10> <l_end weight=16> <weight=10> <tbsecond weight=80>
@@ -1481,7 +1546,7 @@ void GUI::dlg_sections()
 		"in the \"to\" field or leave it blank. \n\nWARNING: your input is not validated in any way, what you "
 		"enter is what is passed to yt-dlp. The downloading of sections is done through FFmpeg (which is significantly slower), "
 		"and each section is downloaded to its own file."};
-	l_help.caption(std::regex_replace(helptext, std::regex {"\\b(0x)"}, theme.is_dark() ? "0xf5c040" : "0x3C3C8C"));
+	l_help.caption(std::regex_replace(helptext, std::regex {"\\b(0x)"}, theme.is_dark() ? "0xf5c040" : "0x4C4C9C"));
 
 	for(auto &val : bottom.sections)
 	{
@@ -2749,7 +2814,19 @@ void GUI::get_releases()
 		auto jtext {util::get_inet_res("https://api.github.com/repos/ErrorFlynn/ytdlp-interface/releases", &inet_error)};
 		if(!jtext.empty())
 		{
-			releases = json::parse(jtext);
+			try { releases = json::parse(jtext); }
+			catch(nlohmann::detail::exception e)
+			{
+				releases.clear();
+				nana::msgbox mbox {*this, "ytdlp-interface JSON error"};
+				mbox.icon(nana::msgbox::icon_error);
+				if(jtext.size() > 700)
+					jtext.erase(700);
+				(mbox << "Got an unexpected response when checking GitHub for a new version:\n\n" << jtext
+					<< "\n\nError from the JSON parser:\n\n" << e.what())();
+				thr_releases.detach();
+				return;
+			}
 			std::string tag_name {releases[0]["tag_name"]};
 			if(is_tag_a_new_version(tag_name))
 				caption(title + "   (" + tag_name + " is available)");
@@ -2762,13 +2839,27 @@ void GUI::get_releases()
 
 void GUI::get_releases_misc()
 {
-	thr_releases_misc = std::thread {[this]
+	using json = nlohmann::json;
+
+	thr_releases_ffmpeg = std::thread {[this]
 	{
-		using json = nlohmann::json;
 		auto jtext {util::get_inet_res("https://api.github.com/repos/yt-dlp/FFmpeg-Builds/releases", &inet_error)};
 		if(!jtext.empty())
 		{
-			auto json_ffmpeg {json::parse(jtext)};
+			json json_ffmpeg;
+			try { json_ffmpeg = json::parse(jtext); }
+			catch(nlohmann::detail::exception e)
+			{
+				nana::msgbox mbox {*this, "ytdlp-interface JSON error"};
+				mbox.icon(nana::msgbox::icon_error);
+				if(jtext.size() > 700)
+					jtext.erase(700);
+				(mbox << "Got an unexpected response when checking GitHub for a new FFmpeg version:\n\n" << jtext
+					<< "\n\nError from the JSON parser:\n\n" << e.what())();
+				if(thr_releases_ffmpeg.joinable())
+					thr_releases_ffmpeg.detach();
+				return;
+			}
 			if(!json_ffmpeg.empty())
 			{
 				for(auto &el : json_ffmpeg[0]["assets"])
@@ -2786,33 +2877,51 @@ void GUI::get_releases_misc()
 					}
 				}
 			}
+		}
+		if(thr_releases_ffmpeg.joinable())
+			thr_releases_ffmpeg.detach();
+	}};
 
-			jtext = util::get_inet_res("https://api.github.com/repos/yt-dlp/yt-dlp/releases", &inet_error);
-			if(!jtext.empty())
+	thr_releases_ytdlp = std::thread {[this]
+	{
+		auto jtext {util::get_inet_res("https://api.github.com/repos/yt-dlp/yt-dlp/releases", &inet_error)};
+		if(!jtext.empty())
+		{
+			json json_ytdlp;
+			try { json_ytdlp = json::parse(jtext); }
+			catch(nlohmann::detail::exception e)
 			{
-				auto json_ytdlp {json::parse(jtext)};
-				if(!json_ytdlp.empty())
+				nana::msgbox mbox {*this, "ytdlp-interface JSON error"};
+				mbox.icon(nana::msgbox::icon_error);
+				if(jtext.size() > 700)
+					jtext.erase(700);
+				(mbox << "Got an unexpected response when checking GitHub for a new yt-dlp version:\n\n" << jtext
+					<< "\n\nError from the JSON parser:\n\n" << e.what())();
+				if(thr_releases_ytdlp.joinable())
+					thr_releases_ytdlp.detach();
+				return;
+			}
+			if(!json_ytdlp.empty())
+			{
+				for(auto &el : json_ytdlp[0]["assets"])
 				{
-					for(auto &el : json_ytdlp[0]["assets"])
+					std::string url {el["browser_download_url"]};
+					if(url.find("yt-dlp.exe") != -1)
 					{
-						std::string url {el["browser_download_url"]};
-						if(url.find("yt-dlp.exe") != -1)
-						{
-							url_latest_ytdlp = url;
-							size_latest_ytdlp = el["size"];
-							url_latest_ytdlp_relnotes = json_ytdlp[0]["html_url"];
-							std::string date {json_ytdlp[0]["published_at"]};
-							ver_ytdlp_latest.year = stoi(date.substr(0, 4));
-							ver_ytdlp_latest.month = stoi(date.substr(5, 2));
-							ver_ytdlp_latest.day = stoi(date.substr(8, 2));
-							break;
-						}
+						url_latest_ytdlp = url;
+						size_latest_ytdlp = el["size"];
+						url_latest_ytdlp_relnotes = json_ytdlp[0]["html_url"];
+						std::string date {json_ytdlp[0]["published_at"]};
+						ver_ytdlp_latest.year = stoi(date.substr(0, 4));
+						ver_ytdlp_latest.month = stoi(date.substr(5, 2));
+						ver_ytdlp_latest.day = stoi(date.substr(8, 2));
+						break;
 					}
 				}
 			}
 		}
-		if(thr_releases_misc.joinable())
-			thr_releases_misc.detach();
+		if(thr_releases_ytdlp.joinable())
+			thr_releases_ytdlp.detach();
 	}};
 }
 
@@ -2873,6 +2982,8 @@ bool GUI::is_ytlink(std::wstring text)
 	auto pos {text.find(L"m.youtube.")};
 	if(pos != -1)
 		text.replace(pos, 1, L"www");
+	if(text.find(LR"(https://www.youtube.com/clip/)") == 0)
+		return true;
 	if(text.find(LR"(https://www.youtube.com/watch?v=)") == 0)
 		if(text.size() == 43)
 			return true;
@@ -2912,8 +3023,9 @@ bool GUI::is_tag_a_new_version(std::string tag_name)
 void GUI::dlg_updater(nana::window parent)
 {
 	using widgets::theme;
-	themed_form fm {nullptr, parent, nana::API::make_center(parent, dpi_transform(575, 347)), appear::decorate<appear::minimize>{}};
-	if(cnlang) fm.center(600, 347);
+	themed_form fm {nullptr, parent, /*nana::API::make_center(parent, dpi_transform_size(610, 347))*/{}, appear::decorate<appear::minimize>{}};
+	if(cnlang) fm.center(645, 347);
+	else fm.center(610, 347);
 
 	fm.caption(title + " - updater");
 	fm.bgcolor(theme.fmbg);
@@ -3091,7 +3203,7 @@ void GUI::dlg_updater(nana::window parent)
 		}
 	};
 
-	auto display_version_misc = [&, this]
+	auto display_version_ffmpeg = [&, this]
 	{
 		if(url_latest_ffmpeg.empty())
 		{
@@ -3104,14 +3216,17 @@ void GUI::dlg_updater(nana::window parent)
 		{
 			if(ver_ffmpeg_latest > ver_ffmpeg)
 			{
-				l_ffmpeg_text.caption(ver_ffmpeg_latest.string() + "  (current = " + 
-									  (ffmpeg_loc.empty() && !fs::exists(appdir / "ffmpeg.exe") ? "not present)" : ver_ffmpeg.string() + ")"));
+				l_ffmpeg_text.caption(ver_ffmpeg_latest.string() + "  (current = " +
+					(ffmpeg_loc.empty() && !fs::exists(appdir / "ffmpeg.exe") ? "not present)" : ver_ffmpeg.string() + ")"));
 				btn_update_ffmpeg.enabled(true);
 				btn_update_ffmpeg.tooltip(url_latest_ffmpeg);
 			}
 			else l_ffmpeg_text.caption(ver_ffmpeg_latest.string() + "  (current)");
 		}
+	};
 
+	auto display_version_ytdlp = [&, this]
+	{
 		if(url_latest_ytdlp.empty())
 		{
 			l_ytdlp_text.error_mode(true);
@@ -3124,8 +3239,8 @@ void GUI::dlg_updater(nana::window parent)
 			bool not_present {conf.ytdlp_path.empty() && !fs::exists(appdir / "yt-dlp.exe")};
 			if(ver_ytdlp_latest > ver_ytdlp)
 			{
-				l_ytdlp_text.caption(ver_ytdlp_latest.string() + "  (current = " + 
-					(not_present ? "not present)  [click 4 changes]" : ver_ytdlp.string() + ")  [click 4 changes]"));
+				l_ytdlp_text.caption(ver_ytdlp_latest.string() + "  (current = " +
+					(not_present ? "not present)  [click for changelog]" : ver_ytdlp.string() + ")  [click for changelog]"));
 				btn_update_ytdlp.enabled(true);
 				btn_update_ytdlp.tooltip(url_latest_ytdlp);
 			}
@@ -3337,21 +3452,31 @@ void GUI::dlg_updater(nana::window parent)
 		}
 	});
 
-	nana::timer t, t2;
-	t.interval(std::chrono::milliseconds {100});
-	t.elapse([&, this]
+	nana::timer t0, t1, t2;
+	t0.interval(std::chrono::milliseconds {100});
+	t0.elapse([&, this]
 	{
 		if(!thr_releases.joinable())
 		{
 			display_version();
-			t.stop();
+			t0.stop();
+		}
+	});
+
+	t1.interval(std::chrono::milliseconds {300});
+	t1.elapse([&, this]
+	{
+		if(!thr_releases_ffmpeg.joinable())
+		{			
+			display_version_ffmpeg();
+			t1.stop();
 		}
 	});
 
 	t2.interval(std::chrono::milliseconds {300});
 	t2.elapse([&, this]
 	{
-		if(!thr_releases_misc.joinable())
+		if(!thr_releases_ytdlp.joinable())
 		{
 			if(!url_latest_ytdlp_relnotes.empty())
 			{
@@ -3362,32 +3487,31 @@ void GUI::dlg_updater(nana::window parent)
 					nana::system::open_url(url_latest_ytdlp_relnotes);
 				});
 			}
-			display_version_misc();
+			display_version_ytdlp();
 			t2.stop();
 		}
 	});
 
 	if(thr_releases.joinable())
-		t.start();
+		t0.start();
 	else display_version();
 
 	if(url_latest_ffmpeg.empty())
 	{
 		get_releases_misc();
+		t1.start();
 		t2.start();
 	}
-	else
+	else display_version_ffmpeg();
+	if(!url_latest_ytdlp_relnotes.empty())
 	{
-		if(!url_latest_ytdlp_relnotes.empty())
+		nana::api::effects_edge_nimbus(l_ytdlp_text, nana::effects::edge_nimbus::over);
+		l_ytdlp_text.tooltip("Click to view release notes in web browser.");
+		l_ytdlp_text.events().click([this]
 		{
-			nana::api::effects_edge_nimbus(l_ytdlp_text, nana::effects::edge_nimbus::over);
-			l_ytdlp_text.tooltip("Click to view release notes in web browser.");
-			l_ytdlp_text.events().click([this]
-			{
-				nana::system::open_url(url_latest_ytdlp_relnotes);
-			});
-		}
-		display_version_misc();
+			nana::system::open_url(url_latest_ytdlp_relnotes);
+		});
+		display_version_ytdlp();
 	}
 
 	fm.theme_callback([&, this](bool dark)
@@ -3408,8 +3532,10 @@ void GUI::dlg_updater(nana::window parent)
 			thr.join();
 		if(thr_releases.joinable())
 			thr_releases.detach();
-		if(thr_releases_misc.joinable())
-			thr_releases_misc.detach();
+		if(thr_releases_ffmpeg.joinable())
+			thr_releases_ffmpeg.detach();
+		if(thr_releases_ytdlp.joinable())
+			thr_releases_ytdlp.detach();
 		if(thr_versions.joinable())
 			thr_versions.detach();
 	});

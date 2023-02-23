@@ -90,7 +90,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		try { f >> jconf; }
 		catch(nlohmann::detail::exception e)
 		{
-			msgbox mbox {"ytdlp-interface"};
+			msgbox mbox {"ytdlp-interface JSON error"};
 			mbox.icon(msgbox::icon_error);
 			(mbox << "an exception occured when trying to load the settings file: " << e.what())();
 		}
@@ -178,6 +178,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				GUI::conf.winrect.width = jconf["window"]["w"];
 				GUI::conf.winrect.height = jconf["window"]["h"];
 				GUI::conf.zoomed = jconf["window"]["zoomed"];
+				if(jconf["window"].contains("dpi"))
+					GUI::conf.dpi = jconf["window"]["dpi"];
+				else GUI::conf.dpi = API::screen_dpi(true);
 			}
 		}
 	}
@@ -230,6 +233,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["window"]["w"] = GUI::conf.winrect.width;
 		jconf["window"]["h"] = GUI::conf.winrect.height;
 		jconf["window"]["zoomed"] = GUI::conf.zoomed;
+		jconf["window"]["dpi"] = API::screen_dpi(true);
 		if(jconf.contains("outpaths"))
 			jconf["outpaths"].clear();
 		for(auto &path : GUI::conf.outpaths)

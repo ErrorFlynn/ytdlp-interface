@@ -35,6 +35,7 @@ public:
 			cb_queue_autostart {false}, gpopt_hidden {false}, open_dialog_origin {false}, cb_zeropadding {true}, cb_playlist_folder {true},
 			zoomed {false};
 		nana::rectangle winrect;
+		int dpi {96};
 	}
 	conf;
 
@@ -49,10 +50,10 @@ private:
 	unsigned size_latest_ffmpeg {0}, size_latest_ytdlp {0}, number_of_processors {4};
 	bool working {false}, menu_working {false}, lbq_no_action {false}, thumbthr_working {false}, 
 		autostart_next_item {true}, lbq_can_drag {false}, cnlang {false}, no_draw_freeze {true};
-	std::thread thr, thr_releases, thr_releases_misc, thr_versions, thr_thumb, thr_menu;
+	std::thread thr, thr_releases, thr_versions, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v1.9.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 4)};
+	const std::string ver_tag {"v1.9.1"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/};
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
 	nana::timer tproc;
 

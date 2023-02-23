@@ -1,4 +1,5 @@
 #include "themed_form.hpp"
+#include <iostream>
 
 
 themed_form::themed_form(theme_cb theme_change_callback, nana::window owner, nana::rectangle r, const nana::appearance& appear) : form{owner, r, appear}
@@ -132,7 +133,7 @@ void themed_form::refresh_widgets()
 }
 
 
-nana::size themed_form::dpi_transform(double w, double h)
+nana::size themed_form::dpi_transform_size(double w, double h)
 {
 	double dpi_horz {static_cast<double>(nana::API::screen_dpi(true))},
 		dpi_vert {static_cast<double>(nana::API::screen_dpi(false))};
@@ -146,11 +147,11 @@ nana::size themed_form::dpi_transform(double w, double h)
 }
 
 
-int themed_form::dpi_transform(int val)
+int themed_form::dpi_transform(int val, double from_dpi)
 {
-	double dpi_horz {static_cast<double>(nana::API::screen_dpi(true))};
-	if(dpi_horz > 96)
-		val = round(val * dpi_horz / 96.0);
+	double dpi {static_cast<double>(nana::API::screen_dpi(true))};
+	if(dpi != from_dpi)
+		val = round(val * dpi / from_dpi);
 	return val;
 }
 
@@ -160,17 +161,25 @@ bool themed_form::center(double w, double h)
 	using namespace nana;
 	const auto maxh {screen {}.from_window(*this).area().dimension().height};
 	const auto maxw {screen {}.from_window(*this).area().dimension().width};
-	auto r {API::make_center(w ? dpi_transform(w, h) : size())};
+	auto r {API::make_center(w ? dpi_transform_size(w, h) : size())};
 	move(r);
-	auto sz {API::window_outline_size(*this)};
-	if(sz.height > maxh)
+	const auto sz {API::window_outline_size(*this)};
+	const auto wnd {api::get_owner_window(*this)};
+	if(api::is_window(wnd))
 	{
-		MoveWindow(hwnd, (maxw - sz.width) / 2, 0, sz.width, maxh, TRUE);
-		return true;
+		RECT rect;
+		GetWindowRect(reinterpret_cast<themed_form*>(api::get_widget(wnd))->hwnd, &rect);
+		point owner_pos {rect.left, rect.top}, centered_pos;
+		nana::size owner_size {unsigned(rect.right - rect.left), unsigned(rect.bottom - rect.top)};
+		centered_pos.x = owner_pos.x + (owner_size.width / 2 - sz.width / 2);
+		centered_pos.y = owner_pos.y + (owner_size.height / 2 - sz.height / 2);
+		MoveWindow(hwnd, centered_pos.x, max(0, centered_pos.y), sz.width, min(sz.height, maxh), TRUE);
 	}
 	else
 	{
-		MoveWindow(hwnd, (maxw - sz.width) / 2, (maxh - sz.height) / 2, sz.width, sz.height, TRUE);
-		return false;
+		if(sz.height > maxh)
+			MoveWindow(hwnd, (maxw - sz.width) / 2, 0, sz.width, maxh, TRUE);
+		else MoveWindow(hwnd, (maxw - sz.width) / 2, (maxh - sz.height) / 2, sz.width, sz.height, TRUE);
 	}
+	return sz.height > maxh;
 }
