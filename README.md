@@ -3,7 +3,10 @@ This is a Windows graphical interface for [yt-dlp](https://github.com/yt-dlp/yt-
 
 To use, unpack the archive in a new folder at a location of your choice, and run `ytdlp-interface.exe`.
 
-Download link for the latest version: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v1.9.1/ytdlp-interface.7z
+Download link for the latest version (64 bit): https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v1.9.2/ytdlp-interface.7z
+
+32 bit build: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v1.9.2/ytdlp-interface_x86.7z
+
 
 ---
 
