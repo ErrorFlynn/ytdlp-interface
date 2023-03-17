@@ -13,6 +13,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 	int argc;
 	LPWSTR *argv {CommandLineToArgvW(GetCommandLineW(), &argc)};
 	fs::path modpath {argv[0]}, appdir {modpath.parent_path()};
+	const std::string ytdlp_fname {INTPTR_MAX == INT64_MAX ? "yt-dlp.exe" : "yt-dlp_x86.exe"};
 	std::error_code ec;
 	if(fs::exists(appdir / "7zxa.dll"))
 		fs::remove(appdir / "7zxa.dll", ec);
@@ -61,14 +62,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		}
 	}
 	LocalFree(argv);
-
-	nlohmann::json jconf;
+	CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
 
 	paint::image img {modpath};
 	API::window_icon_default(img, img);
 
-	if(fs::exists(appdir / "yt-dlp.exe"))
-		GUI::conf.ytdlp_path = appdir / "yt-dlp.exe";
+	if(fs::exists(appdir / "ytdl-patched-red.exe"))
+		GUI::conf.ytdlp_path = appdir / "ytdl-patched-red.exe";
+	else if(fs::exists(appdir / ytdlp_fname))
+		GUI::conf.ytdlp_path = appdir / ytdlp_fname;
 
 	fs::path confpath {util::get_sys_folder(FOLDERID_RoamingAppData) + L"\\ytdlp-interface.json"};
 	auto appdir_confpath {appdir / "ytdlp-interface.json"};
@@ -84,6 +86,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 	else if(fs::exists(appdir_confpath) && !fs::exists(confpath))
 		fs::copy_file(appdir_confpath, confpath, ec);
 
+	nlohmann::json jconf;
 	if(fs::exists(confpath))
 	{
 		std::ifstream f {confpath};
@@ -96,8 +99,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		}
 		if(!jconf.empty())
 		{
-			if(GUI::conf.ytdlp_path.empty())
-				GUI::conf.ytdlp_path = std::string {jconf["ytdlp_path"]};
+			GUI::conf.ytdlp_path = std::string {jconf["ytdlp_path"]};
+			if(GUI::conf.ytdlp_path.empty() || !fs::exists(GUI::conf.ytdlp_path))
+			{
+				if(fs::exists(appdir / "ytdl-patched-red.exe"))
+					GUI::conf.ytdlp_path = appdir / "ytdl-patched-red.exe";
+				else if(fs::exists(appdir / ytdlp_fname))
+					GUI::conf.ytdlp_path = appdir / ytdlp_fname;
+			}
 			GUI::conf.outpath = std::string {jconf["outpath"]};
 			GUI::conf.fmt1 = to_wstring(std::string {jconf["fmt1"]});
 			GUI::conf.fmt2 = to_wstring(std::string {jconf["fmt2"]});
@@ -241,4 +250,5 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		std::ofstream {confpath} << std::setw(4) << jconf;
 	});
 	nana::exec();
+	CoUninitialize();
 }

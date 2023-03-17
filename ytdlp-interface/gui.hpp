@@ -10,7 +10,8 @@
 #include "themed_form.hpp"
 
 namespace fs = std::filesystem;
-constexpr int YTDLP_DOWNLOAD = 0, YTDLP_POSTPROCESS = 1;
+constexpr int YTDLP_DOWNLOAD {0}, YTDLP_POSTPROCESS {1};
+constexpr bool X64 {INTPTR_MAX == INT64_MAX};
 
 class GUI : public themed_form
 {	
@@ -53,7 +54,8 @@ private:
 	std::thread thr, thr_releases, thr_versions, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v1.9.1"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/};
+	const std::string ver_tag {"v1.9.2"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
+		ytdlp_fname {X64 ? "yt-dlp.exe" : "yt-dlp_x86.exe"};
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
 	nana::timer tproc;
 
@@ -497,7 +499,7 @@ private:
 	void make_form();
 	bool apply_theme(bool dark);
 	void get_releases();
-	void get_releases_misc();
+	void get_releases_misc(bool ytdlp_only = false);
 	void get_versions();
 	bool is_ytlink(std::wstring text);
 	void change_field_attr(nana::place &plc, std::string field, std::string attr, unsigned new_val);

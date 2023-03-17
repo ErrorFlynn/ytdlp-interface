@@ -891,7 +891,7 @@ bool GUI::process_queue_item(std::wstring url)
 				if(i_taskbar && lbq.at(0).size() == 1)
 					i_taskbar->SetProgressState(hwnd, TBPF_NOPROGRESS);
 				btndl.enabled(true);
-				tbpipe.append(url, "\n[GUI] yt-dlp.exe process has exited\n");
+				tbpipe.append(url, "\n[GUI] " + conf.ytdlp_path.filename().string() + " process has exited\n");
 				if(tbpipe.current() == url)
 				{
 					ca = tbpipe.colored_area_access();
@@ -922,9 +922,10 @@ bool GUI::process_queue_item(std::wstring url)
 			bottom.dl_thread.join();
 		}
 		bottom.received_procmsg = false;
+		const auto fname {conf.ytdlp_path.filename().string()};
 		if(graceful_exit)
-			tbpipe.append(url, "\n[GUI] yt-dlp.exe process was ended gracefully via Ctrl+C signal\n");
-		else tbpipe.append(url, "\n[GUI] yt-dlp.exe process was ended forcefully via WM_CLOSE message\n");
+			tbpipe.append(url, "\n[GUI] " + fname + " process was ended gracefully via Ctrl+C signal\n");
+		else tbpipe.append(url, "\n[GUI] " + fname + " process was ended forcefully via WM_CLOSE message\n");
 		auto item {lbq.item_from_value(url)};
 		auto text {item.text(3)};
 		if(text.find('%') != -1)
@@ -2146,7 +2147,7 @@ void GUI::make_form()
 
 	apply_theme(::widgets::theme.is_dark());
 
-	btn_settings.image(arr_config16_ico);
+	btn_settings.image(arr_config16_ico, sizeof arr_config16_ico);
 	btn_settings.events().click([this] { dlg_settings(); });
 	btn_qact.tooltip("Pops up a menu with actions that can be performed on\nthe queue items (same as right-clicking on the queue).");
 
@@ -2240,61 +2241,61 @@ void GUI::dlg_settings()
 	using widgets::theme;
 
 	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize>{}};
-	if(cnlang) fm.center(640, 709);
-	else fm.center(595, 709);
+	if(cnlang) fm.center(656, 709);
+	else fm.center(611, 709);
 	fm.caption(title + " - settings");
 	fm.bgcolor(theme.fmbg);
 	if(cnlang) fm.div(R"(vert margin=20
-		<weight=25 <l_res weight=156> <weight=10> <com_res weight=56> <> <cbfps weight=220> <weight=52> > <weight=20>
+		<weight=25 <l_res weight=156> <weight=10> <com_res weight=56> <> <cbfps weight=228> <weight=52> > <weight=20>
 		<weight=25
 			<l_video weight=198> <weight=10> <com_video weight=61> <>
 			<l_audio weight=200> <weight=10> <com_audio weight=61>
 		>
 		<weight=20> <sep1 weight=3px> <weight=20>
-		<weight=25 <l_ytdlp weight=170> <weight=10> <l_path> > <weight=20>
+		<weight=25 <l_ytdlp weight=132> <weight=10> <l_path> > <weight=20>
 		<weight=25 <l_template weight=132> <weight=10> <tb_template> <weight=15> <btn_default weight=140>> <weight=20>
 		<weight=25 <l_playlist weight=132> <weight=10> <tb_playlist> <weight=15> <btn_playlist_default weight=140>> <weight=20>
-		<weight=25 <cb_zeropadding weight=315> <weight=20> <cb_playlist_folder>> <weight=20>
+		<weight=25 <cb_zeropadding weight=323> <weight=20> <cb_playlist_folder>> <weight=20>
 		<sep2 weight=3px> <weight=20>
-		<weight=25 <l_maxdl weight=216> <weight=10> <sb_maxdl weight=40> <> <cb_lengthyproc weight=310>> <weight=20>
-		<weight=25 <cb_autostart weight=500>> <weight=20>
-		<weight=25 <cb_common weight=400>> <weight=20>
-		<weight=25 <cb_queue_autostart weight=540>> <weight=20>
+		<weight=25 <l_maxdl weight=216> <weight=10> <sb_maxdl weight=40> <> <cb_lengthyproc weight=318>> <weight=20>
+		<weight=25 <cb_autostart weight=508>> <weight=20>
+		<weight=25 <cb_common weight=408>> <weight=20>
+		<weight=25 <cb_queue_autostart weight=548>> <weight=20>
 		<sep3 weight=3px> <weight=20>
-		<weight=25 <l_theme weight=100> <weight=20> <cbtheme_dark weight=57> <weight=20> 
-			<cbtheme_light weight=58> <weight=20> <cbtheme_system weight=170> > <weight=20>
+		<weight=25 <l_theme weight=100> <weight=20> <cbtheme_dark weight=65> <weight=20> 
+			<cbtheme_light weight=66> <weight=20> <cbtheme_system weight=178> > <weight=20>
 		<weight=25 <l_contrast weight=70> <weight=20> <slider> > <weight=20>
 		<sep4 weight=3px> <weight=21>
 		<weight=35 <> <btn_close weight=100> <weight=20> <btn_updater weight=150> <>>
 	)");
 
 	else fm.div(R"(vert margin=20
-		<weight=25 <l_res weight=148> <weight=10> <com_res weight=52> <> <cbfps weight=196> <weight=59> > <weight=20>
+		<weight=25 <l_res weight=148> <weight=10> <com_res weight=52> <> <cbfps weight=204> <weight=59> > <weight=20>
 		<weight=25
 			<l_video weight=184> <weight=10> <com_video weight=60> <>
 			<l_audio weight=185> <weight=10> <com_audio weight=60>
 		>
 		<weight=20> <sep1 weight=3px> <weight=20>
-		<weight=25 <l_ytdlp weight=158> <weight=10> <l_path> > <weight=20>
+		<weight=25 <l_ytdlp weight=122> <weight=10> <l_path> > <weight=20>
 		<weight=25 <l_template weight=122> <weight=10> <tb_template> <weight=15> <btn_default weight=140>> <weight=20>
 		<weight=25 <l_playlist weight=122> <weight=10> <tb_playlist> <weight=15> <btn_playlist_default weight=140>> <weight=20>
-		<weight=25 <cb_zeropadding weight=290> <weight=20> <cb_playlist_folder>> <weight=20>
+		<weight=25 <cb_zeropadding weight=298> <weight=20> <cb_playlist_folder>> <weight=20>
 		<sep2 weight=3px> <weight=20>
-		<weight=25 <l_maxdl weight=196> <weight=10> <sb_maxdl weight=40> <> <cb_lengthyproc weight=282>> <weight=20>
-		<weight=25 <cb_autostart weight=460>> <weight=20>
+		<weight=25 <l_maxdl weight=196> <weight=10> <sb_maxdl weight=40> <> <cb_lengthyproc weight=290>> <weight=20>
+		<weight=25 <cb_autostart weight=468>> <weight=20>
 		<weight=25 <cb_common weight=400>> <weight=20>
-		<weight=25 <cb_queue_autostart weight=485>> <weight=20>
+		<weight=25 <cb_queue_autostart weight=493>> <weight=20>
 		<sep3 weight=3px> <weight=20>
-		<weight=25 <l_theme weight=92> <weight=20> <cbtheme_dark weight=57> <weight=20> 
-			<cbtheme_light weight=58> <weight=20> <cbtheme_system weight=152> > <weight=20>
-		<weight=25 <l_contrast weight=64> <weight=20> <slider> > <weight=20>
+		<weight=25 <l_theme weight=92> <weight=20> <cbtheme_dark weight=65> <weight=20> 
+			<cbtheme_light weight=66> <weight=20> <cbtheme_system weight=160> > <weight=20>
+		<weight=25 <l_contrast weight=72> <weight=20> <slider> > <weight=20>
 		<sep4 weight=3px> <weight=21>
 		<weight=35 <> <btn_close weight=100> <weight=20> <btn_updater weight=150> <>>
 	)");
 
 	widgets::Label l_res {fm, "Preferred resolution:"}, l_latest {fm, "Latest version:"},
 		l_video {fm, "Preferred video container:"}, l_audio {fm, "Preferred audio container:"},
-		l_theme {fm, "Color theme:"}, l_contrast {fm, "Contrast:"}, l_ytdlp {fm, "Location of yt-dlp.exe:"},
+		l_theme {fm, "Color theme:"}, l_contrast {fm, "Contrast:"}, l_ytdlp {fm, "Path to yt-dlp:"},
 		l_template {fm, "Output template:"}, l_maxdl {fm, "Max concurrent downloads:"}, l_playlist {fm, "Playlist indexing:"};
 	widgets::path_label l_path {fm, &conf.ytdlp_path};
 	widgets::Textbox tb_template {fm}, tb_playlist {fm};
@@ -2308,9 +2309,17 @@ void GUI::dlg_settings()
 	widgets::Separator sep1 {fm}, sep2 {fm}, sep3 {fm}, sep4 {fm};
 	widgets::Button btn_close {fm, " Close"}, btn_updater {fm, " Updater"}, btn_default {fm, "Reset to default", true},
 		btn_playlist_default {fm, "Reset to default", true};
-	btn_updater.image(arr_updater_ico);
+	btn_updater.image(arr_updater_ico, sizeof arr_updater_ico);
 	btn_close.events().click([&] {fm.close(); });
-	btn_updater.events().click([&, this] {dlg_updater(fm); l_path.update_caption(); });
+	btn_updater.events().click([&, this]
+	{
+		dlg_updater(fm);
+		if(!conf.ytdlp_path.empty())
+		{
+			l_path.update_caption();
+			l_path.refresh_theme();
+		}
+	});
 	btn_default.tooltip(nana::to_utf8(conf.output_template_default));
 	btn_playlist_default.tooltip(nana::to_utf8(conf.playlist_indexing_default));
 	tb_template.multi_lines(false);
@@ -2510,15 +2519,16 @@ void GUI::dlg_settings()
 		if(!conf.ytdlp_path.empty())
 			fb.init_file(conf.ytdlp_path);
 		fb.allow_multi_select(false);
-		fb.add_filter("", "yt-dlp.exe");
-		fb.title("Locate and select yt-dlp.exe");
+		fb.add_filter("yt-dlp executable", ytdlp_fname + ";ytdl-patched-red.exe");
+		fb.title("Locate and select yt-dlp.exe or ytdl-patched-red.exe");
 		auto res {fb()};
 		if(res.size())
 		{
 			auto path {res.front()};
-			if(path.string().find("yt-dlp.exe") != -1)
+			auto fname {path.filename().string()};
+			if(fname == "yt-dlp.exe" || fname == "ytdl-patched-red.exe")
 			{
-				conf.ytdlp_path = res.front();
+				conf.ytdlp_path = path;
 				get_versions();
 				l_path.update_caption();
 				auto tmp {fs::path {conf.ytdlp_path}.replace_filename("ffmpeg.exe")};
@@ -2578,11 +2588,15 @@ void GUI::dlg_settings()
 	fm.collocate();
 
 	if(conf.ytdlp_path.empty())
+	{
 		l_path.caption("!!!  YT-DLP.EXE NOT FOUND IN PROGRAM FOLDER  !!!");
+		l_path.refresh_theme();
+	}
 	else if(!fs::exists(conf.ytdlp_path))
 	{
-		conf.ytdlp_path.clear();
 		l_path.caption("!!!  YT-DLP.EXE NOT FOUND AT ITS SAVED LOCATION  !!!");
+		conf.ytdlp_path.clear();
+		l_path.refresh_theme();
 	}
 	fm.show();
 	fm.modality();
@@ -2608,10 +2622,10 @@ void GUI::dlg_changes(nana::window parent)
 	fm.caption("ytdlp-interface - release notes");
 	fm.bgcolor(theme.fmbg);
 	if(cnlang) fm.div(R"(vert margin=20 <tb> <weight=20>
-					<weight=25 <> <l_history weight=180> <weight=10> <com_history weight=70> <weight=20> <cblogview weight=150> <> >)");
+					<weight=25 <> <l_history weight=180> <weight=10> <com_history weight=70> <weight=20> <cblogview weight=158> <> >)");
 
 	else fm.div(R"(vert margin=20 <tb> <weight=20>
-				<weight=25 <> <l_history weight=164> <weight=10> <com_history weight=65> <weight=20> <cblogview weight=132> <> >)");
+				<weight=25 <> <l_history weight=164> <weight=10> <com_history weight=65> <weight=20> <cblogview weight=140> <> >)");
 
 	widgets::Textbox tb {fm};
 	{
@@ -2820,16 +2834,64 @@ void GUI::get_releases()
 				releases.clear();
 				nana::msgbox mbox {*this, "ytdlp-interface JSON error"};
 				mbox.icon(nana::msgbox::icon_error);
-				if(jtext.size() > 700)
-					jtext.erase(700);
-				(mbox << "Got an unexpected response when checking GitHub for a new version:\n\n" << jtext
+				std::string str;
+				if(jtext.size() > 600)
+				{
+					jtext.erase(600);
+					str = " (showing the first 600 characters)";
+				}
+				(mbox << "Got an unexpected response when checking GitHub for a new version" + str + ":\n\n" << jtext
 					<< "\n\nError from the JSON parser:\n\n" << e.what())();
 				thr_releases.detach();
 				return;
 			}
-			std::string tag_name {releases[0]["tag_name"]};
-			if(is_tag_a_new_version(tag_name))
-				caption(title + "   (" + tag_name + " is available)");
+			if(releases.is_array())
+			{
+				if(releases[0].contains("tag_name"))
+				{
+					std::string tag_name {releases[0]["tag_name"]};
+					if(tag_name.size() < 4)
+					{
+						nana::msgbox mbox {*this, "ytdlp-interface error"};
+						mbox.icon(nana::msgbox::icon_error);
+						(mbox << "Got an unexpected response when checking GitHub for a new version. "
+							<< "The response is valid JSON and is properly formatted, but the value of the key \"tag_name\" "
+							<< "for the latest release is less that 4 characters in length: \"" << tag_name << "\"")();
+						releases.clear();
+					}
+					else if(is_tag_a_new_version(tag_name))
+						caption(title + "   (" + tag_name + " is available)");
+				}
+				else
+				{
+					nana::msgbox mbox {*this, "ytdlp-interface error"};
+					mbox.icon(nana::msgbox::icon_error);
+					std::string str;
+					if(jtext.size() > 600)
+					{
+						jtext.erase(600);
+						str = " (showing the first 600 characters)";
+					}
+					(mbox << "Got an unexpected response when checking GitHub for a new version" + str + ":\n\n" << jtext
+						<< "\n\nThe response is valid JSON and is formatted as an array (as expected), but the first element "
+						<< "does not contain the key \"tag_name\".")();
+					releases.clear();
+				}
+			}
+			else
+			{
+				nana::msgbox mbox {*this, "ytdlp-interface error"};
+				mbox.icon(nana::msgbox::icon_error);
+				std::string str;
+				if(jtext.size() > 600)
+				{
+					jtext.erase(600);
+					str = " (showing the first 600 characters)";
+				}
+				(mbox << "Got an unexpected response when checking GitHub for a new version" + str +":\n\n" << jtext
+					<< "\n\nThe response is valid JSON, but is not formatted as an array.")();
+				releases.clear();
+			}
 		}
 		thr_releases.detach();
 	}};
@@ -2837,11 +2899,11 @@ void GUI::get_releases()
 }
 
 
-void GUI::get_releases_misc()
+void GUI::get_releases_misc(bool ytdlp_only)
 {
 	using json = nlohmann::json;
 
-	thr_releases_ffmpeg = std::thread {[this]
+	if(!ytdlp_only) thr_releases_ffmpeg = std::thread {[this]
 	{
 		auto jtext {util::get_inet_res("https://api.github.com/repos/yt-dlp/FFmpeg-Builds/releases", &inet_error)};
 		if(!jtext.empty())
@@ -2865,7 +2927,7 @@ void GUI::get_releases_misc()
 				for(auto &el : json_ffmpeg[0]["assets"])
 				{
 					std::string url {el["browser_download_url"]};
-					if(url.find("win64-gpl.zip") != -1)
+					if(url.find(X64 ? "win64-gpl.zip" : "win32-gpl.zip") != -1)
 					{
 						url_latest_ffmpeg = url;
 						size_latest_ffmpeg = el["size"];
@@ -2884,7 +2946,13 @@ void GUI::get_releases_misc()
 
 	thr_releases_ytdlp = std::thread {[this]
 	{
-		auto jtext {util::get_inet_res("https://api.github.com/repos/yt-dlp/yt-dlp/releases", &inet_error)};
+		std::string jtext;
+		auto fname {conf.ytdlp_path.filename().string()};
+		if(fname.empty())
+			fname = ytdlp_fname;
+		if(fname == "yt-dlp.exe" || fname == "yt-dlp_x86.exe")
+			jtext = util::get_inet_res("https://api.github.com/repos/yt-dlp/yt-dlp/releases", &inet_error);
+		else jtext = util::get_inet_res("https://api.github.com/repos/ytdl-patched/ytdl-patched/releases", &inet_error);
 		if(!jtext.empty())
 		{
 			json json_ytdlp;
@@ -2906,7 +2974,7 @@ void GUI::get_releases_misc()
 				for(auto &el : json_ytdlp[0]["assets"])
 				{
 					std::string url {el["browser_download_url"]};
-					if(url.find("yt-dlp.exe") != -1)
+					if(url.find(fname) != -1)
 					{
 						url_latest_ytdlp = url;
 						size_latest_ytdlp = el["size"];
@@ -3023,7 +3091,7 @@ bool GUI::is_tag_a_new_version(std::string tag_name)
 void GUI::dlg_updater(nana::window parent)
 {
 	using widgets::theme;
-	themed_form fm {nullptr, parent, /*nana::API::make_center(parent, dpi_transform_size(610, 347))*/{}, appear::decorate<appear::minimize>{}};
+	themed_form fm {nullptr, parent, {}, appear::decorate<appear::minimize>{}};
 	if(cnlang) fm.center(645, 347);
 	else fm.center(610, 347);
 
@@ -3104,7 +3172,7 @@ void GUI::dlg_updater(nana::window parent)
 	{
 		static fs::path arc_path;
 		static bool btnffmpeg_state, btnytdlp_state;
-		arc_path = fs::temp_directory_path() / "ytdlp-interface.7z";
+		arc_path = fs::temp_directory_path() / (X64 ? "ytdlp-interface.7z" : "ytdlp-interface_x86.7z");
 		if(btn_update.caption() == "Update")
 		{
 			btn_update.caption("Cancel");
@@ -3116,8 +3184,18 @@ void GUI::dlg_updater(nana::window parent)
 			thr = std::thread {[&, this]
 			{
 				working = true;
-				unsigned arc_size {releases[0]["assets"][0]["size"]}, progval {0};
-				std::string arc_url {releases[0]["assets"][0]["browser_download_url"]};
+				if(!X64 && releases[0]["assets"].size() < 2)
+				{
+					nana::msgbox mbox {*this, "ytdlp-interface update error"};
+					mbox.icon(nana::msgbox::icon_error);
+					(mbox << "The latest release on GitHub doesn't seem to contain a 32-bit build!")();
+					btn_update.caption("Update");
+					btn_update.cancel_mode(false);
+					thr.detach();
+					return;
+				}
+				unsigned arc_size {releases[0]["assets"][X64 ? 0 : 1]["size"]}, progval {0};
+				std::string arc_url {releases[0]["assets"][X64 ? 0 : 1]["browser_download_url"]};
 				prog.amount(arc_size);
 				prog.value(0);
 				auto cb_progress = [&, this](unsigned prog_chunk)
@@ -3184,18 +3262,22 @@ void GUI::dlg_updater(nana::window parent)
 		if(releases.empty())
 		{
 			l_vertext.error_mode(true);
-			l_vertext.caption("failed to connect to GitHub!");
+			l_vertext.caption("failed to get from GitHub!");
 			if(!inet_error.empty())
 				l_vertext.tooltip(inet_error);
 		}
 		else
 		{
-			std::string tag_name {releases[0]["tag_name"]};
-			std::string vertext;
+			std::string tag_name {releases[0]["tag_name"]}, vertext;
 			if(is_tag_a_new_version(tag_name))
 			{
 				vertext = tag_name + " (new version)";
 				btn_update.enabled(true);
+				std::string url_latest;
+				if(X64) url_latest = releases[0]["assets"][0]["browser_download_url"];
+				else if(releases[0]["assets"].size() > 1)
+					url_latest = releases[0]["assets"][1]["browser_download_url"];
+				btn_update.tooltip(url_latest);
 			}
 			else vertext = tag_name + " (current)";
 			l_vertext.caption(vertext);
@@ -3236,7 +3318,7 @@ void GUI::dlg_updater(nana::window parent)
 		}
 		else
 		{
-			bool not_present {conf.ytdlp_path.empty() && !fs::exists(appdir / "yt-dlp.exe")};
+			bool not_present {conf.ytdlp_path.empty() && !fs::exists(appdir / ytdlp_fname)};
 			if(ver_ytdlp_latest > ver_ytdlp)
 			{
 				l_ytdlp_text.caption(ver_ytdlp_latest.string() + "  (current = " +
@@ -3270,8 +3352,10 @@ void GUI::dlg_updater(nana::window parent)
 			thr = std::thread {[&, ytdlp, target, this]
 			{
 				working = true;
-				auto arc_size {ytdlp ? size_latest_ytdlp : size_latest_ffmpeg}, progval {0u};
-				auto arc_url {ytdlp ? url_latest_ytdlp : url_latest_ffmpeg};
+				unsigned progval {0};
+				const auto arc_size {ytdlp ? size_latest_ytdlp : size_latest_ffmpeg};
+				const auto arc_url {ytdlp ? url_latest_ytdlp : url_latest_ffmpeg};
+				const auto fname {url_latest_ytdlp.substr(url_latest_ytdlp.rfind('/') + 1)};
 				prog_misc.amount(arc_size);
 				prog_misc.value(0);
 				auto cb_progress = [&, this](unsigned prog_chunk)
@@ -3279,7 +3363,7 @@ void GUI::dlg_updater(nana::window parent)
 					progval += prog_chunk;
 					auto total {util::int_to_filesize(arc_size, false)},
 						pct {std::to_string(progval / (arc_size / 100)) + '%'};
-					prog_misc.caption((ytdlp ? "yt-dlp.exe" : arc_path.filename().string()) + "  :  " + pct + " of " + total);
+					prog_misc.caption((ytdlp ? fname : arc_path.filename().string()) + "  :  " + pct + " of " + total);
 					prog_misc.value(progval);
 				};
 				std::string download_result;
@@ -3287,7 +3371,7 @@ void GUI::dlg_updater(nana::window parent)
 				if(ytdlp)
 				{
 					btn_update_ffmpeg.enabled(false);
-					download_result = util::dl_inet_res(arc_url, target / "yt-dlp.exe", &working, cb_progress);
+					download_result = util::dl_inet_res(arc_url, target / fname, &working, cb_progress);
 				}
 				else
 				{
@@ -3346,7 +3430,7 @@ void GUI::dlg_updater(nana::window parent)
 						}
 						else // yt-dlp downloaded
 						{
-							conf.ytdlp_path = target / "yt-dlp.exe";
+							conf.ytdlp_path = target / fname;
 							get_versions();
 							btnytdlp_state = false;
 							prog_misc.caption("yt-dlp update complete");
@@ -3503,7 +3587,17 @@ void GUI::dlg_updater(nana::window parent)
 		t2.start();
 	}
 	else display_version_ffmpeg();
-	if(!url_latest_ytdlp_relnotes.empty())
+
+	if(!url_latest_ytdlp.empty())
+	{
+		const auto fname {url_latest_ytdlp.substr(url_latest_ytdlp.rfind('/') + 1)};
+		if(fname != conf.ytdlp_path.filename().string())
+		{
+			get_releases_misc(true);
+			t2.start();
+		}
+	}
+	if(!url_latest_ytdlp_relnotes.empty() && fs::path{url_latest_ytdlp}.filename() == conf.ytdlp_path.filename())
 	{
 		nana::api::effects_edge_nimbus(l_ytdlp_text, nana::effects::edge_nimbus::over);
 		l_ytdlp_text.tooltip("Click to view release notes in web browser.");
@@ -3798,20 +3892,20 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 			<weight=25 <l_out weight=140> <l_outpath> > <weight=20>
 			<weight=25 
 				<l_rate weight=163> <tbrate weight=45> <weight=15> <com_rate weight=55> 
-				<> <cbchaps weight=145> <> <cbsplit weight=135> <> <cbkeyframes weight=205>
+				<> <cbchaps weight=153> <> <cbsplit weight=143> <> <cbkeyframes weight=213>
 			> <weight=20>
-			<weight=25 <cbtime weight=325> <> <cbthumb weight=160> <> <cbsubs weight=145> <> <cbmp3 weight=190>>
-			<weight=20> <weight=24 <cbargs weight=170> <weight=15> <com_args> <weight=10> <btnerase weight=24>>
+			<weight=25 <cbtime weight=333> <> <cbthumb weight=168> <> <cbsubs weight=153> <> <cbmp3 weight=198>>
+			<weight=20> <weight=24 <cbargs weight=178> <weight=15> <com_args> <weight=10> <btnerase weight=24>>
 		)");
 
 	else gpopt.div(R"(vert margin=20
 			<weight=25 <l_out weight=122> <weight=15> <l_outpath> > <weight=20>
 			<weight=25 
 				<l_rate weight=144> <weight=15> <tbrate weight=45> <weight=15> <com_rate weight=55> 
-				<> <cbchaps weight=133> <> <cbsplit weight=116> <> <cbkeyframes weight=186>
+				<> <cbchaps weight=141> <> <cbsplit weight=124> <> <cbkeyframes weight=194>
 			> <weight=20>
-			<weight=25 <cbtime weight=296> <> <cbthumb weight=144> <> <cbsubs weight=132> <> <cbmp3 weight=173>>
-			<weight=20> <weight=24 <cbargs weight=156> <weight=15> <com_args> <weight=10> <btnerase weight=24>>
+			<weight=25 <cbtime weight=304> <> <cbthumb weight=152> <> <cbsubs weight=140> <> <cbmp3 weight=181>>
+			<weight=20> <weight=24 <cbargs weight=164> <weight=15> <com_args> <weight=10> <btnerase weight=24>>
 		)");
 
 	gpopt["l_out"] << l_out;
@@ -3832,13 +3926,13 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 
 	if(API::screen_dpi(true) > 96)
 	{
-		btnerase.image(arr_erase22_ico);
-		btnerase.image_disabled(arr_erase22_disabled_ico);
+		btnerase.image(arr_erase22_ico, sizeof arr_erase22_ico);
+		btnerase.image_disabled(arr_erase22_disabled_ico, sizeof arr_erase22_disabled_ico);
 	}
 	else
 	{
-		btnerase.image(arr_erase16_ico);
-		btnerase.image_disabled(arr_erase16_disabled_ico);
+		btnerase.image(arr_erase16_ico, sizeof arr_erase16_ico);
+		btnerase.image_disabled(arr_erase16_disabled_ico, sizeof arr_erase16_disabled_ico);
 	}
 
 	tbrate.multi_lines(false);

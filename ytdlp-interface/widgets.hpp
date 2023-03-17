@@ -261,14 +261,9 @@ namespace widgets
 		void refresh_theme()
 		{
 			scheme().activated = theme.nimbus;
-			if(theme.is_dark())
-			{
-				fgcolor(is_path ? theme.path_fg : theme.path_link_fg);
-			}
-			else
-			{
-				fgcolor(is_path ? theme.path_fg : theme.path_link_fg);
-			}
+			if(is_path)
+				fgcolor(caption().find("!!!") == -1 ? theme.path_fg : theme.tbkw_special);
+			else fgcolor(theme.path_link_fg);
 		}
 	};
 
@@ -374,15 +369,15 @@ namespace widgets
 			}
 		}
 
-		void image(const void *data)
+		void image(const void *data, unsigned size)
 		{
-			img.open(data, sizeof data);
+			img.open(data, size);
 			if(enabled()) icon(img);
 		}
 
-		void image_disabled(const void *data)
+		void image_disabled(const void *data, unsigned size)
 		{
-			img_disabled.open(data, sizeof data);
+			img_disabled.open(data, size);
 			if(!enabled()) icon(img_disabled);
 		}
 
