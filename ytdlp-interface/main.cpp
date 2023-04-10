@@ -191,6 +191,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 					GUI::conf.dpi = jconf["window"]["dpi"];
 				else GUI::conf.dpi = API::screen_dpi(true);
 			}
+			if(jconf.contains("get_releases_at_startup")) // v2.0
+			{
+				GUI::conf.get_releases_at_startup = jconf["get_releases_at_startup"];
+				GUI::conf.col_format = jconf["queue_columns"]["format"];
+				GUI::conf.col_format_note = jconf["queue_columns"]["format_note"];
+				GUI::conf.col_ext = jconf["queue_columns"]["ext"];
+				GUI::conf.col_fsize = jconf["queue_columns"]["fsize"];
+				GUI::conf.col_adjust_width = jconf["queue_columns"]["adjust_window_width"];
+			}
 		}
 	}
 	else
@@ -247,6 +256,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			jconf["outpaths"].clear();
 		for(auto &path : GUI::conf.outpaths)
 			jconf["outpaths"].push_back(to_utf8(path));
+		jconf["get_releases_at_startup"] = GUI::conf.get_releases_at_startup;
+		jconf["queue_columns"]["format"] = GUI::conf.col_format;
+		jconf["queue_columns"]["format_note"] = GUI::conf.col_format_note;
+		jconf["queue_columns"]["ext"] = GUI::conf.col_ext;
+		jconf["queue_columns"]["fsize"] = GUI::conf.col_fsize;
+		jconf["queue_columns"]["adjust_window_width"] = GUI::conf.col_adjust_width;
+
 		std::ofstream {confpath} << std::setw(4) << jconf;
 	});
 	nana::exec();

@@ -403,6 +403,8 @@ namespace widgets
 
 	public:
 
+		index_pairs highlighted_lines;
+
 		Listbox(nana::window parent, bool hicontrast = false) : listbox {parent}, hicontrast {hicontrast}
 		{
 			refresh_theme();
@@ -427,37 +429,45 @@ namespace widgets
 
 		void refresh_theme()
 		{
+			using namespace nana;
 			bgcolor(theme.tbbg);
 			fgcolor(theme.tbfg);
-			dw.draw([](nana::paint::graphics &g) { g.rectangle(false, theme.border); });
+			dw.draw([](paint::graphics &g) { g.rectangle(false, theme.border); });
 
 			if(theme.is_dark())
 			{
 				borderless(true);
 				scheme().header_bgcolor = theme.lb_headerbg;
-				scheme().header_fgcolor = nana::colors::white;
+				scheme().header_fgcolor = colors::white;
 				scheme().cat_fgcolor = theme.nimbus;
-				scheme().item_selected = nana::color {"#AC4F44"};
-				scheme().item_selected_border = nana::color {"#B05348"}.blend(nana::colors::black, .15);
+				scheme().item_selected = color {"#AC4F44"};
+				scheme().item_selected_border = color {"#B05348"}.blend(colors::black, .15);
 				if(hicontrast)
-					scheme().item_highlighted = nana::color {"#544"}.blend(nana::colors::light_grey, .15 - theme.contrast()/2);
-				else scheme().item_highlighted = nana::color {"#544"};
+					scheme().item_highlighted = color {"#544"}.blend(colors::light_grey, .15 - theme.contrast()/2);
+				else scheme().item_highlighted = color {"#544"};
 			}
 			else
 			{
 				borderless(false);
-				scheme().header_bgcolor = nana::color {"#f1f2f4"};
-				scheme().header_fgcolor = nana::colors::black;
-				scheme().cat_fgcolor = nana::color {"#039"};
+				scheme().header_bgcolor = color {"#f1f2f4"};
+				scheme().header_fgcolor = colors::black;
+				scheme().cat_fgcolor = color {"#039"};
 				auto c {theme.contrast()};
-				scheme().item_selected = nana::color {"#c7dEe4"}.blend(nana::colors::grey, .1 - c);
-				scheme().item_selected_border = nana::color {"#a7cEd4"}.blend(nana::colors::grey, .1 - c);
-				scheme().item_highlighted = nana::color {"#eee"}.blend(nana::colors::dark_grey, .25 - c / 2);
+				scheme().item_selected = color {"#c7dEe4"}.blend(colors::grey, .1 - c);
+				scheme().item_selected_border = color {"#a7cEd4"}.blend(colors::grey, .1 - c);
+				scheme().item_highlighted = color {"#eee"}.blend(colors::dark_grey, .25 - c / 2);
 				dw.clear();
 			}
 
-			for(auto &item : at(0))
-				item.fgcolor(fgcolor());
+			for(const auto &ip : highlighted_lines)
+			{
+				try
+				{
+					at(ip).fgcolor(theme.is_dark() ? color {"#d4c6aa"} : colors::green);
+					at(ip).bgcolor(theme.tbbg.blend(theme.is_dark() ? color {"#eee"} : color {"#222"}, .06));
+				}
+				catch(...) {}
+			}
 		}
 	};
 
@@ -783,28 +793,26 @@ namespace widgets
 
 		Overlay() : label() {}
 
-		Overlay(nana::window parent, std::string_view text = "", bool visible = true) : label {parent, text, visible}
+		Overlay(nana::window parent, nana::widget *outbox, std::string_view text = "", bool visible = true) : label {parent, text, visible}
 		{
-			if(text.empty())
-				caption("output from yt-dlp.exe appears here\n\nclick to copy to clipboard"
-					"\n\nright-click to toggle keyword highlighting\n\ndouble-click to show queue");
-			fgcolor(theme.overlay_fg);
-			text_align(nana::align::center, nana::align_v::center);
-			typeface(nana::paint::font_info {"", 14, {700}});
-			nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
-			events().expose([this] { fgcolor(theme.overlay_fg); });
-			nana::drawing{*this}.draw([](nana::paint::graphics &g) { g.rectangle(false, theme.border); });
+			create(parent, outbox, text, visible);
 		}
 
-		void create(nana::window parent, bool visible = true)
+		void create(nana::window parent, nana::widget *outbox, std::string_view text = "", bool visible = true)
 		{
+			if(text.empty())
+				caption("output from yt-dlp.exe appears here\n\nright-click for options\n\ndouble-click to show queue");
 			label::create(parent, visible);
 			fgcolor(theme.overlay_fg);
 			text_align(nana::align::center, nana::align_v::center);
-			typeface(nana::paint::font_info {"", 14, {700}});
+			typeface(nana::paint::font_info {"", 15, {700}});
 			nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
 			events().expose([this] { fgcolor(theme.overlay_fg); });
 			nana::drawing {*this}.draw([](nana::paint::graphics &g) { g.rectangle(false, theme.border); });
+			events().mouse_up([outbox, this](const nana::arg_mouse &arg)
+			{
+				outbox->events().mouse_up.emit(arg, *this);
+			});
 		}
 	};
 
@@ -815,15 +823,21 @@ namespace widgets
 		{
 
 		public:
-			menu_renderer(const nana::pat::cloneable<renderer_interface> &rd) : reuse_(rd) {}
+			menu_renderer(const nana::pat::cloneable<renderer_interface> &rd) : reuse_ {rd}, crook_ {"menu_crook"}
+			{
+				crook_.check(nana::facade<nana::element::crook>::state::checked);
+			}
 
 		private:
 			void background(graph_reference graph, nana::window wd) override
 			{
-				auto bgclr {nana::color {"#33373e"}};
-				graph.rectangle(true, bgclr); // entire area
-				graph.rectangle({1,1,28,graph.height() - 2}, true, nana::color {"#43474e"}); // icon area
-				graph.rectangle(false, nana::color {"#A3A2A1"}); // border
+				const nana::color
+					bg_normal {theme.is_dark() ? "#33373e" : "#fff"},
+					clr_border {theme.is_dark() ? "#A3A2A1" : "#666"},
+					bg_icon_area {theme.is_dark() ? "#43474e" : "#f6f6f6"};
+				graph.rectangle(true, bg_normal); // entire area
+				graph.rectangle({1,1,28,graph.height() - 2}, true, bg_icon_area); // icon area
+				graph.rectangle(false, clr_border); // border
 			}
 
 			void item(graph_reference g, const nana::rectangle &r, const attr &attr) override
@@ -831,20 +845,56 @@ namespace widgets
 				if(!attr.enabled) return;
 				using namespace nana;
 				const unsigned margin {8};
-				const color fg_normal {"#e6e6e3"};
-				const color bg_normal {"#33373e"};
-				const color bg_hilighted {"#AC4F44"};
+				const color 
+					fg_normal {theme.is_dark() ? "#e6e6e3" : "#678"},
+					bg_normal {theme.is_dark() ? "#33373e" : "#fff"},
+					bg_hilighted {theme.is_dark() ? "#AC4F44" : "#d8eaf0"},
+					bg_icon_area {theme.is_dark() ? "#43474e" : "#f6f6f6"};
 
 				g.rectangle(r, true, bg_normal);				
 				if(attr.item_state == state::active)
 				{
-					g.rectangle(r, false, bg_hilighted.blend(colors::white, .1));
-					g.rectangle(rectangle {r}.pare_off(1), false, bg_hilighted.blend(colors::black, .4));
+					g.rectangle(r, false, bg_hilighted.blend(theme.is_dark() ? colors::white : colors::black, .1));
+					g.rectangle(rectangle {r}.pare_off(1), false, bg_hilighted.blend(theme.is_dark() ? colors::black : colors::white, .4));
 					g.palette(false, bg_normal);
 					paint::draw {g}.corner(r, 1);
-					g.gradual_rectangle(rectangle {r}.pare_off(2), bg_hilighted, bg_hilighted.blend(colors::black, .3), true);
+					if(theme.is_dark())
+						g.gradual_rectangle(rectangle {r}.pare_off(2), bg_hilighted, bg_hilighted.blend(colors::black, .3), true);
+					else g.gradual_rectangle(rectangle {r}.pare_off(2), bg_hilighted, bg_hilighted.blend(colors::white, .5), true);
+					g.set_pixel(r.x, r.y, bg_icon_area);
+					g.set_pixel(r.x, r.y+r.height-1, bg_icon_area);
 				}
-				else g.rectangle({1,r.y,28,r.height}, true, color {"#43474e"}); // icon area
+				else g.rectangle({1,r.y,28,r.height}, true, bg_icon_area); // icon area
+
+				if(attr.checked)
+				{
+					auto scale = [](int val)
+					{
+						const static double dpi {static_cast<double>(API::screen_dpi(true))};
+						if(dpi != 96)
+							val = round(val * dpi / 96);
+						return val;
+					};
+
+					int sx {(28 - scale(8)) / 2},
+						sy {r.y + (static_cast<int>(r.height) - scale(4)) / 2};
+
+					g.palette(false, fg_normal);
+
+					for(int i {0}; i < scale(3); i++)
+					{
+						sx++;
+						sy++;
+						g.line({sx, sy}, {sx, sy + scale(2)});
+					}
+
+					for(int i {0}; i < scale(5); i++)
+					{
+						sx++;
+						sy--;
+						g.line({sx, sy}, {sx, sy + scale(2)});
+					}
+				}
 			}
 
 			void item_image(graph_reference graph, const nana::point &pos, unsigned image_px, const nana::paint::image &img) override
@@ -855,7 +905,9 @@ namespace widgets
 			void item_text(graph_reference g, const nana::point &pos, const std::string &text, unsigned pixels, const attr &attr) override
 			{
 				auto size {g.text_extent_size(text)};
-				g.string(pos, text, attr.enabled ? nana::colors::white : nana::color {"#aaa"});
+				if(theme.is_dark())
+					g.string(pos, text, attr.enabled ? nana::colors::white : nana::color {"#aaa"});
+				else g.string(pos, text, attr.enabled ? nana::colors::black : nana::colors::gray_border);
 			}
 
 			void item_text(graph_reference graph, const nana::point &pos, std::u8string_view text, unsigned pixels, const attr &atr) override
@@ -865,17 +917,23 @@ namespace widgets
 
 			void sub_arrow(graph_reference graph, const nana::point &pos, unsigned pixels, const attr &atr) override
 			{
-				reuse_->sub_arrow(graph, pos, pixels, atr);
+				using namespace nana;
+				facade<element::arrow> arrow {"hollow_triangle"};
+				arrow.direction(direction::east);
+				arrow.draw(graph, {}, theme.is_dark() ? colors::light_grey : colors::black,
+					{pos.x, pos.y + static_cast<int>(pixels - 16) / 2, 16, 16}, element_state::normal);
 			}
+
 		private:
 			nana::pat::cloneable<renderer_interface> reuse_;
+			nana::facade<nana::element::crook> crook_;
 		};
 
 	public:
 
 		Menu()
 		{
-			if(theme.is_dark())
+			//if(theme.is_dark())
 				renderer(menu_renderer {renderer()});
 		}
 	};

@@ -1,5 +1,6 @@
 #include <thread>
 #include <sstream>
+#include <algorithm>
 #include <unordered_set>
 #include <iostream>
 #include <atlbase.h> // CComPtr
@@ -8,6 +9,9 @@
 
 #include "widgets.hpp"
 #include "themed_form.hpp"
+
+#undef min
+#undef max
 
 namespace fs = std::filesystem;
 constexpr int YTDLP_DOWNLOAD {0}, YTDLP_POSTPROCESS {1};
@@ -34,7 +38,8 @@ public:
 		bool cbsplit {false}, cbchaps {false}, cbsubs {false}, cbthumb {false}, cbtime {true}, cbkeyframes {false}, cbmp3 {false},
 			cbargs {false}, kwhilite {true}, pref_fps {true}, cb_lengthyproc {true}, common_dl_options {true}, cb_autostart {true},
 			cb_queue_autostart {false}, gpopt_hidden {false}, open_dialog_origin {false}, cb_zeropadding {true}, cb_playlist_folder {true},
-			zoomed {false};
+			zoomed {false}, get_releases_at_startup {true}, col_format {false}, col_format_note {false}, col_ext {false}, col_fsize {false},
+			col_adjust_width {true};
 		nana::rectangle winrect;
 		int dpi {96};
 	}
@@ -45,7 +50,6 @@ private:
 	nlohmann::json releases;
 	fs::path self_path, appdir, ffmpeg_loc;
 	std::string inet_error, url_latest_ffmpeg, url_latest_ytdlp, url_latest_ytdlp_relnotes;
-	std::wstring clipboard_buffer;
 	std::wstringstream multiple_url_text;
 	long minw {0}, minh {0};
 	unsigned size_latest_ffmpeg {0}, size_latest_ytdlp {0}, number_of_processors {4};
@@ -54,7 +58,7 @@ private:
 	std::thread thr, thr_releases, thr_versions, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v1.9.2"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
+	const std::string ver_tag {"v2.0.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 4)},
 		ytdlp_fname {X64 ? "yt-dlp.exe" : "yt-dlp_x86.exe"};
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
 	nana::timer tproc;
@@ -87,6 +91,57 @@ private:
 		}
 	}
 	ver_ffmpeg, ver_ffmpeg_latest, ver_ytdlp, ver_ytdlp_latest;
+
+	struct semver_t
+	{
+		int major {0}, minor {0}, patch {0};
+		semver_t() = default;
+		semver_t(int maj, int min, int pat) : major {maj}, minor {min}, patch {pat} {}
+		semver_t(std::string ver_tag)
+		{
+			if(!ver_tag.empty())
+			{
+				std::string strmajor, strminor, strpatch;
+				if(ver_tag[0] == 'v')
+					ver_tag.erase(0, 1);
+				auto pos {ver_tag.find('.')};
+				if(pos != -1)
+				{
+					strmajor = ver_tag.substr(0, pos++);
+					auto pos2 {ver_tag.find('.', pos)};
+					if(pos2 != -1)
+					{
+						strminor = ver_tag.substr(pos, pos2++ - pos);
+						strpatch = ver_tag.substr(pos2);
+					}
+				}
+				
+				try
+				{
+					major = std::stoi(strmajor);
+					minor = std::stoi(strminor);
+					patch = std::stoi(strpatch);
+				}
+				catch(...) {}
+			}
+		}
+
+		bool operator > (const semver_t &o)
+		{
+			return major > o.major || major == o.major && minor > o.minor || major == o.major && minor == o.minor && patch > o.patch;
+		}
+
+		bool operator < (const semver_t &o)
+		{
+			return major < o.major || major == o.major && minor < o.minor || major == o.major && minor == o.minor && patch < o.patch;
+		}
+
+		bool operator == (const semver_t &o)
+		{
+			return major == o.major && minor == o.minor && patch == o.patch;
+		}
+	}
+	cur_ver {ver_tag};
 
 
 	class gui_bottom : public nana::panel<true>
@@ -301,6 +356,8 @@ private:
 	{
 		std::map<std::wstring, std::string> buffers {{L"", ""}};
 		std::wstring current_;
+		std::thread thr;
+		bool working {false};
 		GUI *pgui {nullptr};
 
 	public:
@@ -310,6 +367,15 @@ private:
 		Outbox(GUI *parent, bool visible = true)
 		{
 			create(parent, visible);
+		}
+
+		~Outbox()
+		{
+			if(thr.joinable())
+			{
+				working = false;
+				thr.join();
+			}
 		}
 
 		void create(GUI *parent, bool visible = true)
@@ -323,50 +389,93 @@ private:
 			typeface(nana::paint::font_info {"Arial", 10});
 			nana::API::effects_edge_nimbus(*this, nana::effects::edge_nimbus::none);
 
-			events().click([&, this]
-			{
-				pgui->clipboard_buffer = util::get_clipboard_text();
-				select(true);
-				copy();
-				select(false);
-			});
-
 			events().dbl_click([&, this] (const nana::arg_mouse &arg)
 			{
 				if(arg.is_left_button())
 				{
-					util::set_clipboard_text(pgui->hwnd, pgui->clipboard_buffer);
 					pgui->show_queue();
 				}
 			});
 
 			events().mouse_up([&, this](const nana::arg_mouse &arg)
 			{
-				if(arg.button == nana::mouse::right_button)
+				using namespace nana;
+				using ::widgets::theme;
+
+				if(arg.button == mouse::right_button)
 				{
-					conf.kwhilite = !conf.kwhilite;
-					highlight(conf.kwhilite);
-					const auto &text {buffers[current_]};
-					if(!text.empty())
+					::widgets::Menu m;
+					m.item_pixels(pgui->dpi_transform(24));
+
+					m.append("Copy to clipboard", [&, this](menu::item_proxy)
 					{
-						auto ca {colored_area_access()};
-						ca->clear();
-						if(conf.kwhilite)
+						SendMessageA(pgui->hwnd, WM_SETREDRAW, FALSE, 0);
+						select(true);
+						copy();
+						select(false);
+						SendMessageA(pgui->hwnd, WM_SETREDRAW, TRUE, 0);
+						if(!thr.joinable()) thr = std::thread([this]
 						{
-							auto p {ca->get(0)};
-							p->count = 1;
-							p->fgcolor = widgets::theme.is_dark() ? widgets::theme.path_link_fg : nana::color {"#569"};
-							if(text.find("[GUI] ") != text.rfind("[GUI] "))
+							working = true;
+							auto bgclr {bgcolor()};
+							auto blendclr {theme.is_dark() ? colors::dark_orange : colors::orange};
+							std::vector<color> blended_colors;
+							for(auto n {.1}; n > 0; n -= .01)
+								blended_colors.push_back(bgcolor().blend(blendclr, n));
+							int n {0};
+							if(theme.is_dark())
 							{
-								p = ca->get(text_line_count() - 2);
-								p->count = 1;
-								if(text.rfind("WM_CLOSE") == -1)
-									p->fgcolor = widgets::theme.is_dark() ? widgets::theme.path_link_fg : nana::color {"#569"};
-								else p->fgcolor = widgets::theme.is_dark() ? nana::color {"#f99"} : nana::color {"#832"};
+								for(auto i {blended_colors.size()/2}; i < blended_colors.size(); i++)
+								{
+									bgcolor(blended_colors[i]);
+									Sleep(90 - n);
+									n += 18;
+								}
 							}
+							else for(const auto &clr : blended_colors)
+							{
+								bgcolor(clr);
+								Sleep(80 - n);
+								n += 8;
+							}
+							bgcolor(bgclr);
+							if(working)
+							{
+								working = false;
+								if(thr.joinable())
+									thr.detach();
+							}
+						});
+					}).enabled(arg.window_handle == handle());
+
+					m.append("Keyword highlighting", [&, this](menu::item_proxy)
+					{
+						conf.kwhilite = !conf.kwhilite;
+						highlight(conf.kwhilite);
+						const auto &text {buffers[current_]};
+						if(!text.empty())
+						{
+							auto ca {colored_area_access()};
+							ca->clear();
+							if(conf.kwhilite)
+							{
+								auto p {ca->get(0)};
+								p->count = 1;
+								p->fgcolor = theme.is_dark() ? theme.path_link_fg : color {"#569"};
+								if(text.find("[GUI] ") != text.rfind("[GUI] "))
+								{
+									p = ca->get(text_line_count() - 2);
+									p->count = 1;
+									if(text.rfind("WM_CLOSE") == -1)
+										p->fgcolor = theme.is_dark() ? theme.path_link_fg : color {"#569"};
+									else p->fgcolor = theme.is_dark() ? color {"#f99"} : color {"#832"};
+								}
+							}
+							nana::API::refresh_window(*this);
 						}
-						nana::API::refresh_window(*this);
-					}
+					}).checked(conf.kwhilite);
+
+					m.popup_await(*this, arg.pos.x, arg.pos.y);
 				}
 			});
 		}
@@ -479,7 +588,7 @@ private:
 
 	gui_bottoms bottoms {this};
 	Outbox outbox {this};
-	widgets::Overlay overlay {*this};
+	widgets::Overlay overlay {*this, &outbox};
 	nana::panel<false> queue_panel {*this};
 	nana::place plc_queue {queue_panel};
 	widgets::Listbox lbq {queue_panel};
@@ -491,6 +600,7 @@ private:
 	void dlg_sections();
 	void dlg_playlist();
 	void pop_queue_menu(int x, int y);
+	void make_columns_menu(nana::menu *m = nullptr);
 	void make_queue_listbox();
 	void dlg_formats();
 	bool process_queue_item(std::wstring url);
@@ -503,7 +613,7 @@ private:
 	void get_versions();
 	bool is_ytlink(std::wstring text);
 	void change_field_attr(nana::place &plc, std::string field, std::string attr, unsigned new_val);
-	bool is_tag_a_new_version(std::string tag_name);
+	bool is_tag_a_new_version(std::string tag_name) { return semver_t {tag_name} > semver_t {ver_tag}; }
 	void dlg_updater(nana::window parent);
 	void show_queue(bool freeze_redraw = true);
 	void show_output();
@@ -512,11 +622,30 @@ private:
 	void on_btn_dl(std::wstring url);
 	void remove_queue_item(std::wstring url);
 	std::wstring next_startable_url(std::wstring current_url = L"current");
-	void adjust_lbq_headers()
+
+	void adjust_lbq_headers(bool resize_window = false)
 	{
-		auto zero {dpi_transform(30)};
-		auto one {dpi_transform(120) + dpi_transform(16 * lbq.scroll_operation()->visible(true))};
-		auto three {dpi_transform(116)};
-		lbq.column_at(2).width(lbq.size().width - (zero + one + three) - dpi_transform(9));
+		auto zero  {dpi_transform(30)},
+		     one   {dpi_transform(120) + dpi_transform(16 * lbq.scroll_operation()->visible(true))},
+		     two   {dpi_transform(600)},
+		     three {dpi_transform(116)},
+		     four  {dpi_transform(130) * lbq.column_at(4).visible()},
+		     five  {dpi_transform(160) * lbq.column_at(5).visible()},
+		     six   {dpi_transform(60) * lbq.column_at(6).visible()},
+		     seven {dpi_transform(90) * lbq.column_at(7).visible()};
+		
+		const bool extra_colums {four || five || six || seven};
+		if(extra_colums)
+			lbq.column_at(2).width(std::max(unsigned(two), lbq.size().width - (zero+one+three+four+five+six+seven) - dpi_transform(9)));
+		else lbq.column_at(2).width(lbq.size().width - (zero + one + three) - dpi_transform(9));
+		unsigned new_width {unsigned(dpi_transform(49)) + zero + one + (extra_colums ? two : dpi_transform(685)) + three + four + five + six + seven};
+		
+		if(resize_window)
+		{
+			const unsigned min_width {unsigned(dpi_transform(1000))};
+			if(new_width < min_width)
+				new_width = min_width;
+			size({new_width, size().height});
+		}
 	}
 };
