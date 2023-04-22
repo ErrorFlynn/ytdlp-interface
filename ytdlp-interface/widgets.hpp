@@ -39,7 +39,7 @@ namespace widgets
 
 	public:
 		nana::color nimbus, fmbg, Label_fg, Text_fg, Text_fg_error, cbox_fg, btn_bg, btn_fg, path_bg, path_fg, path_link_fg, 
-			sep_bg, tbfg, tbbg, tbkw, tbkw_special, tbkw_warning, tbkw_error, gpbg, lb_headerbg, title_fg, overlay_fg, border,
+			sep_bg, tbfg, tbbg, tbkw, tbkw_id, tbkw_special, tbkw_warning, tbkw_error, gpbg, lb_headerbg, title_fg, overlay_fg, border,
 			tb_selbg, tb_selbg_unfocused, expcol_fg;
 		std::string gpfg;
 
@@ -64,6 +64,7 @@ namespace widgets
 			gpfg = "0x81544F";
 			title_fg = color {"#789"};
 			tbkw = color {"#272"};
+			tbkw_id = color {"#777"};
 			tbkw_special = color {"#722"};
 			tbkw_warning = color {"#B96C00"};
 			tbkw_error = color {"#aa2222"};;
@@ -95,6 +96,7 @@ namespace widgets
 			title_fg = nana::color {"#cde"};
 			path_link_fg = color {"#E4D6BA"};
 			tbkw = color {"#b5c5d5"};
+			tbkw_id = color {"#ccc"};
 			tbkw_special = color {"#F0B0A0"};
 			tbkw_warning = color {"#EEBF00"};
 			tbkw_error = color {"#CA86E3"};
@@ -710,9 +712,9 @@ namespace widgets
 			set_keywords("error", true, true, {"ERROR:"});
 		}
 
-		void set_keyword(std::string name)
+		void set_keyword(std::string name, std::string category = "general")
 		{
-			set_keywords("general", true, true, {name});
+			set_keywords(category, true, true, {name});
 		}
 
 		void highlight(bool enable)
@@ -720,6 +722,7 @@ namespace widgets
 			highlighted = enable;
 			if(enable)
 			{
+				set_highlight("id", theme.tbkw_id, theme.tbbg);
 				set_highlight("general", theme.tbkw, theme.tbbg);
 				set_highlight("special", theme.tbkw_special, theme.tbbg);
 				set_highlight("warning", theme.tbkw_warning, theme.tbbg);
@@ -727,6 +730,7 @@ namespace widgets
 			}
 			else
 			{
+				erase_highlight("id");
 				erase_highlight("general");
 				erase_highlight("special");
 				erase_highlight("warning");

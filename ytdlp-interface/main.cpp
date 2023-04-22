@@ -200,6 +200,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				GUI::conf.col_fsize = jconf["queue_columns"]["fsize"];
 				GUI::conf.col_adjust_width = jconf["queue_columns"]["adjust_window_width"];
 			}
+			if(jconf.contains("output_template_bandcamp")) // v2.1
+			{
+				GUI::conf.output_template_bandcamp = to_wstring(std::string {jconf["output_template_bandcamp"]});
+			}
 		}
 	}
 	else
@@ -208,6 +212,18 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 	}
 
 	GUI gui;
+	if(jconf.contains("playsel_strings"))
+	{
+		for(auto &el : jconf["unfinished_queue_items"])
+		{
+			const std::string url {el};
+			const auto wurl {to_wstring(url)};
+			auto &bot {gui.botref().at(wurl)};
+			if(jconf["playsel_strings"].contains(url))
+				bot.playsel_string = to_wstring(std::string {jconf["playsel_strings"][url]});
+		}
+	}
+
 	gui.events().unload([&]
 	{
 		jconf["ytdlp_path"] = GUI::conf.ytdlp_path;
@@ -262,6 +278,17 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["queue_columns"]["ext"] = GUI::conf.col_ext;
 		jconf["queue_columns"]["fsize"] = GUI::conf.col_fsize;
 		jconf["queue_columns"]["adjust_window_width"] = GUI::conf.col_adjust_width;
+		jconf["output_template_bandcamp"] = to_utf8(GUI::conf.output_template_bandcamp);
+
+		if(jconf.contains("playsel_strings"))
+			jconf.erase("playsel_strings");
+		for(auto &el : jconf["unfinished_queue_items"])
+		{
+			const std::string url {el};
+			auto &bot {gui.botref().at(url)};
+			if(!bot.playsel_string.empty())
+				jconf["playsel_strings"][url] = std::string {bot.playlist_info["entries"][0]["id"]} + "|" + to_utf8(bot.playsel_string);
+		}
 
 		std::ofstream {confpath} << std::setw(4) << jconf;
 	});

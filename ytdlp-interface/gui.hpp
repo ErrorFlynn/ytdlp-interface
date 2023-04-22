@@ -26,10 +26,13 @@ public:
 	static struct settings_t
 	{
 		fs::path ytdlp_path, outpath;
-		const std::wstring output_template_default {L"%(title)s.%(ext)s"}, playlist_indexing_default {L"%(playlist_index)d - "};
-		std::wstring fmt1, fmt2, output_template {output_template_default}, playlist_indexing {playlist_indexing_default};
+		const std::wstring output_template_default {L"%(title)s.%(ext)s"}, playlist_indexing_default {L"%(playlist_index)d - "},
+			output_template_default_bandcamp {L"%(artist)s - %(album)s - %(track_number)02d - %(track)s.%(ext)s"};
+		std::wstring fmt1, fmt2, output_template {output_template_default}, playlist_indexing {playlist_indexing_default},
+			output_template_bandcamp {output_template_default_bandcamp};
 		std::vector<std::string> argsets, unfinished_queue_items;
 		std::unordered_set<std::wstring> outpaths;
+		std::map<std::wstring, std::string> playsel_strings;
 		double ratelim {0}, contrast {.1};
 		unsigned ratelim_unit {1}, pref_res {2}, pref_video {1}, pref_audio {1}, cbtheme {2}, max_argsets {10}, max_outpaths {10}, 
 			max_concurrent_downloads {1};
@@ -58,8 +61,9 @@ private:
 	std::thread thr, thr_releases, thr_versions, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.0.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 4)},
+	const std::string ver_tag {"v2.1.0"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
 		ytdlp_fname {X64 ? "yt-dlp.exe" : "yt-dlp_x86.exe"};
+	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
 	nana::timer tproc;
 
@@ -67,7 +71,7 @@ private:
 
 	const std::vector<std::wstring>
 		com_res_options {L"2160", L"1440", L"1080", L"720", L"480", L"360"},
-		com_audio_options {L"none", L"m4a", L"mp3", L"ogg", L"webm"},
+		com_audio_options {L"none", L"m4a", L"mp3", L"ogg", L"webm", L"flac"},
 		com_video_options {L"none", L"mp4", L"webm"};
 
 	struct version_t
@@ -151,7 +155,7 @@ private:
 		gui_bottom(GUI &gui, bool visible = false);
 
 		bool is_ytlink {false}, use_strfmt {false}, working {false}, graceful_exit {false}, working_info {true}, received_procmsg {false},
-			is_ytplaylist {false}, is_ytchan {false};
+			is_ytplaylist {false}, is_ytchan {false}, is_bcplaylist {false}, is_bclink {false};
 		fs::path outpath, merger_path, download_path, printed_path;
 		nlohmann::json vidinfo, playlist_info;
 		std::vector<bool> playlist_selection;
@@ -175,7 +179,8 @@ private:
 		widgets::Expcol expcol;
 
 		void show_btncopy(bool show);
-		void show_btnytfmt(bool show);
+		void show_btnfmt(bool show);
+		bool btnfmt_visible() { return plc.field_visible("btn_ytfmtlist"); }
 		fs::path file_path();
 
 		bool started() { return btndl.caption().find("Stop") == 0; }
@@ -186,6 +191,64 @@ private:
 			for(auto el : playlist_selection)
 				if(el) cnt++;
 			return cnt;
+		}
+
+		auto vidinfo_contains(std::string key)
+		{
+			if(vidinfo.contains(key) && vidinfo[key] != nullptr)
+				return true;
+			return false;
+		}
+
+		void apply_playsel_string()
+		{
+			auto &str {playsel_string};
+			playlist_selection.assign(playlist_info["entries"].size(), false);
+			auto pos0 {str.find('|')};
+			std::wstring id_first_then {str.substr(0, pos0)};
+			str.erase(0, pos0 + 1);
+			
+			int idx_offset {0};
+			for(const auto &entry : playlist_info["entries"])
+			{
+				if(nana::to_wstring(std::string {entry["id"]}) == id_first_then)
+					break;
+				idx_offset++;
+			}
+
+			int a {0}, b {0};
+			size_t pos {0}, pos1 {0};
+			pos1 = str.find_first_of(L",:", pos);
+			if(pos1 == -1)
+				playlist_selection[stoi(str) - 1] = true;
+			while(pos1 != -1)
+			{
+				a = stoi(str.substr(pos, pos1 - pos)) - 1 + idx_offset;
+				pos = pos1 + 1;
+				if(str[pos1] == ',')
+				{
+					playlist_selection[a] = true;
+					pos1 = str.find_first_of(L",:", pos);
+					if(pos1 == -1)
+						playlist_selection[stoi(str.substr(pos)) - 1 + idx_offset] = true;
+				}
+				else // ':'
+				{
+					pos1 = str.find(',', pos);
+					if(pos1 != -1)
+					{
+						b = stoi(str.substr(pos, pos1 - pos)) - 1 + idx_offset;
+						pos = pos1 + 1;
+						pos1 = str.find_first_of(L",:", pos);
+						if(pos1 == -1)
+							playlist_selection[stoi(str.substr(pos)) - 1 + idx_offset] = true;
+					}
+					else b = stoi(str.substr(pos)) - 1 + idx_offset;
+
+					for(auto n {a}; n <= b; n++)
+						playlist_selection[n] = true;
+				}
+			}
 		}
 	};
 
@@ -200,6 +263,7 @@ private:
 		gui_bottoms(GUI *g) : gui {g} {}
 		auto contains(std::wstring key) { return bottoms.contains(key); }
 		gui_bottom &at(std::wstring key) { return *bottoms.at(key); }
+		gui_bottom &at(std::string key) { return *bottoms.at(nana::to_wstring(key)); }
 		gui_bottom &at(int idx)
 		{
 			int i {0};
@@ -276,6 +340,8 @@ private:
 				pbot->is_ytplaylist = pbot->is_ytlink && (url.find(L"?list=") != -1 || url.find(L"&list=") != -1);
 				pbot->is_ytchan = url.find(L"www.youtube.com/c/") != -1 || url.find(L"www.youtube.com/@") != -1 ||
 					url.find(L"www.youtube.com/channel/") != -1 || url.find(L"www.youtube.com/user/") != -1;
+				pbot->is_bcplaylist = url.find(L"bandcamp.com/album/") != -1;
+				pbot->is_bclink = url.find(L"bandcamp.com") != -1;
 				if(gui->conf.gpopt_hidden && !gui->no_draw_freeze)
 				{
 					pbot->expcol.operate(true);
@@ -496,9 +562,12 @@ private:
 				caption(text);
 				if(scroll_operation()->visible(true))
 				{
-					editable(true);
-					caret_pos({0, static_cast<unsigned>(text_line_count() - 1)});
-					editable(false);
+					if(text.substr(0, 5) != "[json")
+					{
+						editable(true);
+						caret_pos({0, static_cast<unsigned>(text_line_count() - 1)});
+						editable(false);
+					}
 				}
 				if(!text.empty())
 				{
@@ -648,4 +717,7 @@ private:
 			size({new_width, size().height});
 		}
 	}
+
+	public:
+		gui_bottoms &botref() { return bottoms; }
 };

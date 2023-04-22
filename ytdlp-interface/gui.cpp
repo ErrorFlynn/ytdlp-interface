@@ -77,7 +77,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 		{
 			restore();
 			bring_top(true);
-			center(1000, 800 - bottoms.current().expcol.collapsed() * dpi_transform(240));
+			center(1000, 800 - bottoms.current().expcol.collapsed() * 240);
 		}
 		return true;
 	});
@@ -108,7 +108,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 		else if(wparam == VK_NUMPAD0 && GetAsyncKeyState(VK_CONTROL) & 0xff00)
 		{
 			if(is_zoomed(true)) restore();
-			center(1000, 800 - bottoms.current().expcol.collapsed() * dpi_transform(240));
+			center(1000, 800 - bottoms.current().expcol.collapsed() * 240);
 		}
 		else if(wparam == VK_DELETE)
 		{
@@ -259,7 +259,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 	if(conf.cb_queue_autostart && lbq.at(0).size())
 		on_btn_dl(lbq.at(0).at(0).value<std::wstring>());
 
-	center(1000, 800);
+	center(MINW, MINH);
 	show_queue(false);
 	if(conf.gpopt_hidden)
 	{
@@ -317,7 +317,7 @@ void GUI::dlg_formats()
 	auto &vidinfo {bottom.vidinfo};
 
 	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize>{}};
-	fm.caption(title + " - YouTube video manual selection of formats");
+	fm.caption(title + " - manual selection of formats");
 	fm.bgcolor(theme.fmbg);
 	fm.div(R"(
 			vert margin=20 <weight=180px 
@@ -424,41 +424,61 @@ void GUI::dlg_formats()
 
 	btnok.enabled(false);
 
-	auto it {std::find_if(vidinfo["thumbnails"].begin(), vidinfo["thumbnails"].end(), [](const auto &el)
+	std::string thumb_url, title {vidinfo["title"]};
+	if(bottom.is_bclink)
 	{
-		return std::string{el["url"]}.rfind("mqdefault.jpg") != -1;
-	})};
+		if(vidinfo.contains("thumbnail"))
+			thumb_url = vidinfo["thumbnail"];
+		thumb.stretchable(true);
+		thumb.transparent(true);
+		thumb.align(align::center, align_v::center);
+		lbformats.column_at(2).visible(false);
+		lbformats.column_at(4).visible(false);
+		lbformats.column_at(5).visible(false);
+	}
+	else
+	{
+		auto it {std::find_if(vidinfo["thumbnails"].begin(), vidinfo["thumbnails"].end(), [](const auto &el)
+		{
+			return std::string{el["url"]}.rfind("mqdefault.jpg") != -1;
+		})};
 
-	if(it == vidinfo["thumbnails"].end())
-		it = std::find_if(vidinfo["thumbnails"].begin(), vidinfo["thumbnails"].end(), [](const auto &el)
+		if(it == vidinfo["thumbnails"].end())
+			it = std::find_if(vidinfo["thumbnails"].begin(), vidinfo["thumbnails"].end(), [](const auto &el)
 		{
 			return std::string {el["url"]}.rfind("mqdefault_live.jpg") != -1;
 		});
 
-	std::string thumb_url, title {vidinfo["title"]};
-	if(it != vidinfo["thumbnails"].end())
-		thumb_url = (*it)["url"];
+		if(it != vidinfo["thumbnails"].end())
+			thumb_url = (*it)["url"];
+	}
+
 	l_title.caption(title);
 
 	int dur {0};
-	if(bottom.vidinfo.contains("is_live") && bottom.vidinfo["is_live"] ||
-	   bottom.vidinfo.contains("live_status") && bottom.vidinfo["live_status"] == "is_live")
-	{
-		if(lbformats.size_categ() == 3)
-		{
-			lbformats.erase(1);
-			lbformats.erase(1);
-		}
-	}
+	if(bottom.is_bclink)
+		lbformats.append("Audio only");
 	else
 	{
-		dur = vidinfo["duration"];
-		if(lbformats.size_categ() == 1)
-			lbformats.append({"Audio only", "Video only"});
+		if(bottom.vidinfo_contains("is_live") && bottom.vidinfo["is_live"] ||
+			bottom.vidinfo_contains("live_status") && bottom.vidinfo["live_status"] == "is_live")
+		{
+			if(lbformats.size_categ() == 3)
+			{
+				lbformats.erase(1);
+				lbformats.erase(1);
+			}
+		}
+		else
+		{
+			dur = vidinfo["duration"];
+			if(lbformats.size_categ() == 1)
+				lbformats.append({"Audio only", "Video only"});
+		}
 	}
 	int hr {(dur/60)/60}, min {(dur/60)%60}, sec {dur%60};
 	if(dur < 60) sec = dur;
-	std::string durstr {"live"};
+	std::string durstr {bottom.is_bclink ? "---" : "live"};
 	if(dur)
 	{
 		std::stringstream ss;
@@ -476,6 +496,8 @@ void GUI::dlg_formats()
 		ss << sec;
 		durstr += ':' + ss.str();
 	}
+	else if(vidinfo.contains("duration_string"))
+		durstr = vidinfo["duration_string"];
 	l_durtext.caption(durstr);
 
 	auto strchap {std::to_string(vidinfo["chapters"].size())};
@@ -504,7 +526,7 @@ void GUI::dlg_formats()
 	});	
 
 	std::string format_id1, format_id2;
-	if(vidinfo.contains("format_id"))
+	if(bottom.vidinfo_contains("format_id"))
 	{
 		std::string format_id {vidinfo["format_id"]};
 		auto pos(format_id.find('+'));
@@ -576,7 +598,7 @@ void GUI::dlg_formats()
 		fm.system_theme(true);
 	else fm.dark_theme(conf.cbtheme == 0);
 
-	fm.center(1000, std::max(384.0 + lbformats.item_count() * (cnlang ? 22.4 : 20.4), double(800)));
+	fm.center(1000, std::max(384.0 + lbformats.item_count() * (cnlang ? 22.4 : 20.4), double(600)));
 
 	fm.collocate();
 	fm.show();
@@ -698,7 +720,7 @@ bool GUI::process_queue_item(std::wstring url)
 		cmd += L"--exec \"before_dl:\\\"" + self_path.wstring() + L"\\\" ytdlp_status " + std::to_wstring(YTDLP_DOWNLOAD)
 			+ L" " + strhwnd + L" \\\"" + url + L"\\\"\" ";
 		fs::path tempfile;
-		if(!bottom.is_ytplaylist && !bottom.is_ytchan)
+		if(!bottom.is_ytplaylist && !bottom.is_ytchan && !bottom.is_bcplaylist)
 		{
 			tempfile = fs::temp_directory_path() / std::tmpnam(nullptr);
 			cmd += L"--print-to-file after_move:filepath " + tempfile.wstring();
@@ -736,6 +758,12 @@ bool GUI::process_queue_item(std::wstring url)
 				}
 				else cmd2 += L" -o \"" + folder + conf.output_template + L'\"';
 			}
+			else if(bottom.is_bcplaylist)
+			{
+				if(conf.cb_playlist_folder)
+					folder = L"%(artist)s\\%(album)s\\";
+				cmd2 += L" -o \"" + folder + conf.output_template_bandcamp + L'\"';
+			}
 			else if(bottom.is_ytchan)
 			{
 				if(conf.cb_playlist_folder)
@@ -751,7 +779,7 @@ bool GUI::process_queue_item(std::wstring url)
 			}
 			else cmd2 += L" -o \"" + conf.output_template + L'\"';
 		}
-		if(bottom.is_ytplaylist && !bottom.playsel_string.empty())
+		if((bottom.is_ytplaylist || bottom.is_bcplaylist) && !bottom.playsel_string.empty())
 			cmd2 += L" -I " + bottom.playsel_string + L" --compat-options no-youtube-unavailable-videos";
 		cmd2 += L" \"" + url + L'\"';
 		display_cmd += cmd2;
@@ -893,6 +921,14 @@ bool GUI::process_queue_item(std::wstring url)
 				std::error_code ec;
 				fs::remove(tempfile, ec);
 			}
+			else if(bottom.is_ytplaylist)
+			{
+				bottom.printed_path = bottom.outpath / std::string {bottom.playlist_info["title"]};
+			}
+			else if(bottom.is_bcplaylist)
+			{
+				// todo
+			}
 
 			if(working)
 			{
@@ -1031,20 +1067,37 @@ void GUI::add_url(std::wstring url)
 					custom_fmtarg += L' ';
 				}
 			}
-			std::string media_info, media_website, media_title, format_id {"---"}, format_note {"---"}, ext {"---"}, filesize {"---"};
-
-			if(bottom.is_ytlink)
+			std::string media_info, media_website {"---"}, media_title, format_id {"---"}, format_note {"---"}, ext {"---"}, filesize {"---"};
+			auto json_error = [&](const nlohmann::detail::exception &e)
 			{
-				if(bottom.is_ytplaylist)
+				media_title = "Can't parse the JSON data produced by yt-dlp! See output for details.";
+				lbq.item_from_value(url).text(3, "error");
+				outbox.caption(e.what() + std::string {"\n\n"} + media_info, url);
+				if(outbox.current() == url)
 				{
-					lbq.item_from_value(url).text(1, "youtube.com");
-					lbq.item_from_value(url).text(2, "[playlist] ...");
+					auto ca {outbox.colored_area_access()};
+					ca->clear();
+					auto p {ca->get(0)};
+					p->fgcolor = widgets::theme.is_dark() ? widgets::theme.path_link_fg : nana::color {"#569"};
+				}
+				if(!queue_panel.visible() && overlay.visible())
+				{
+					outbox.widget::show();
+					overlay.hide();
+				}
+			};
+
+			if(bottom.is_ytlink || bottom.is_bcplaylist)
+			{
+				if(bottom.is_ytplaylist || bottom.is_bcplaylist)
+				{
 					media_info = util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + 
 						L" --no-warnings --flat-playlist --compat-options no-youtube-unavailable-videos -J \"" + url + L'\"', &bottom.working_info);
 					try { bottom.playlist_info = nlohmann::json::parse(media_info); }
 					catch(nlohmann::detail::exception e)
 					{
 						bottom.playlist_info.clear();
+						json_error(e);
 					}
 					if(!bottom.playlist_info.empty())
 					{
@@ -1055,12 +1108,16 @@ void GUI::add_url(std::wstring url)
 						catch(nlohmann::detail::exception e)
 						{
 							bottom.vidinfo.clear();
+							json_error(e);
 						}
 						if(!bottom.vidinfo.empty())
 						{
-							bottom.show_btnytfmt(true);
-							get_place().collocate();
-							nana::api::update_window(*this);
+							bottom.show_btnfmt(true);
+							if(bottom.is_bcplaylist)
+							{
+								if(bottom.playlist_info["entries"].size() < 2)
+									bottom.is_bcplaylist = false;
+							}
 						}
 					}
 				}
@@ -1101,6 +1158,7 @@ void GUI::add_url(std::wstring url)
 							catch(nlohmann::detail::exception e)
 							{
 								bottom.vidinfo.clear();
+								json_error(e);
 							}
 						}
 					}
@@ -1114,11 +1172,12 @@ void GUI::add_url(std::wstring url)
 				catch(nlohmann::detail::exception e)
 				{
 					bottom.playlist_info.clear();
+					json_error(e);
 				}
 				if(!bottom.playlist_info.empty())
 				{
 					std::string tab {"[whole channel] "};
-					std::vector<std::string> tabs {"videos", "featured", "playlists", "shorts", "streams", "community"};
+					std::vector<std::string> tabs {"videos", "featured", "playlists", "shorts", "streams", "community", "podcasts"};
 					for(const auto &t : tabs)
 						if(url.rfind(L"/" + nana::to_wstring(t)) == url.size() - t.size() - 1)
 						{
@@ -1148,7 +1207,7 @@ void GUI::add_url(std::wstring url)
 					media_info.erase(pos + 1);
 				if(bottom.working_info)
 				{
-					auto pos {media_info.find("{\"id\":")};
+					auto pos {media_info.find('{')};
 					if(pos != -1)
 					{
 						media_info.erase(0, pos);
@@ -1156,6 +1215,7 @@ void GUI::add_url(std::wstring url)
 						catch(nlohmann::detail::exception e)
 						{
 							bottom.vidinfo.clear();
+							json_error(e);
 						}
 					}
 				}
@@ -1164,13 +1224,17 @@ void GUI::add_url(std::wstring url)
 			{
 				if(media_info[0] == '{')
 				{
-					if(bottom.is_ytplaylist)
+					if(bottom.is_ytplaylist || bottom.is_bcplaylist)
 					{
 						if(!bottom.playlist_info.empty())
 						{
-							int playlist_size {bottom.playlist_info["playlist_count"]};
-							bottom.playlist_selection.assign(playlist_size, true);
-							media_website = bottom.playlist_info["webpage_url_domain"];
+							auto playlist_size {bottom.playlist_info["entries"].size()};
+							if(bottom.playsel_string.size())
+								bottom.apply_playsel_string();
+							else bottom.playlist_selection.assign(playlist_size, true);
+							if(bottom.is_bcplaylist)
+								media_website = "bandcamp.com";
+							else media_website = bottom.playlist_info["webpage_url_domain"];
 							media_title = "[playlist] " + std::string {bottom.playlist_info["title"]};
 							if(vidsel_item.m && lbq.item_from_value(url).selected())
 							{
@@ -1178,43 +1242,61 @@ void GUI::add_url(std::wstring url)
 								auto pos {vidsel_item.pos};
 								m->enabled(pos, true);
 								auto str {std::to_string(playlist_size)};
-								m->text(pos, "Select videos (" + str + '/' + str + ")");
+								if(bottom.playsel_string.empty())
+									m->text(pos, (bottom.is_ytplaylist ? "Select videos (" : "Select songs (") + str + '/' + str + ")");
+								else m->text(pos, (bottom.is_ytplaylist ? "Select videos (" : "Select songs (") + std::to_string(bottom.playlist_selected()) + '/' + str + ")");
 								nana::api::refresh_window(m->handle());
 								m = nullptr;
+							}
+							for(const auto &entry : bottom.playlist_info["entries"])
+							{
+								if(entry.contains("id") && entry["id"] != nullptr)
+								{
+									std::string idstr {entry["id"]};
+									outbox.set_keyword(idstr + ':', "id");
+								}
 							}
 						}
 					}
 					else if(!bottom.vidinfo.empty())
 					{
-						media_website = bottom.vidinfo["webpage_url_domain"];
+						if(bottom.is_bclink)
+							media_website = "bandcamp.com";
+						else media_website = bottom.vidinfo["webpage_url_domain"];
 						media_title = bottom.vidinfo["title"];
-						if(bottom.vidinfo.contains("is_live") && bottom.vidinfo["is_live"] ||
-							bottom.vidinfo.contains("live_status") && bottom.vidinfo["live_status"] == "is_live")
+						if(bottom.vidinfo_contains("is_live") && bottom.vidinfo["is_live"] ||
+							bottom.vidinfo_contains("live_status") && bottom.vidinfo["live_status"] == "is_live")
 							media_title = "[live] " + media_title;
-						if(bottom.vidinfo.contains("format_id"))
+						if(bottom.vidinfo_contains("format_id"))
 							format_id = bottom.vidinfo["format_id"];
-						if(bottom.vidinfo.contains("format_note"))
-							format_note = bottom.vidinfo["format_note"];
-						else if(bottom.vidinfo.contains("resolution"))
-							format_note = bottom.vidinfo["resolution"];
-						if(bottom.vidinfo.contains("ext"))
+						if(bottom.is_ytlink)
+						{
+							if(bottom.vidinfo_contains("format_note"))
+								format_note = bottom.vidinfo["format_note"];
+							else if(bottom.vidinfo_contains("resolution"))
+								format_note = bottom.vidinfo["resolution"];
+						}
+						else
+						{
+							if(bottom.vidinfo_contains("resolution"))
+								format_note = bottom.vidinfo["resolution"];
+							else if(bottom.vidinfo_contains("format_note"))
+								format_note = bottom.vidinfo["format_note"];
+						}
+						if(bottom.vidinfo_contains("ext"))
 							ext = bottom.vidinfo["ext"];
-						if(bottom.vidinfo.contains("filesize"))
+						if(bottom.vidinfo_contains("filesize"))
 						{
 							unsigned fsize {bottom.vidinfo["filesize"]};
 							filesize = util::int_to_filesize(fsize, false);
 						}
-						else if(bottom.vidinfo.contains("filesize_approx"))
+						else if(bottom.vidinfo_contains("filesize_approx"))
 						{
 							unsigned fsize {bottom.vidinfo["filesize_approx"]};
 							filesize = util::int_to_filesize(fsize, false);
 						}
-						if(bottom.is_ytlink)
-						{
-							bottom.show_btnytfmt(true);
-							get_place().collocate();
-							nana::api::update_window(*this);
-						}
+						if(bottom.is_ytlink || bottom.is_bclink)
+							bottom.show_btnfmt(true);
 					}
 
 					lbq.item_from_value(url).text(1, media_website);
@@ -1226,6 +1308,12 @@ void GUI::add_url(std::wstring url)
 
 					if(!bottom.file_path().empty())
 						lbq.item_from_value(url).text(3, "done");
+
+					if(bottom.vidinfo_contains("id"))
+					{
+						std::string idstr {bottom.vidinfo["id"]};
+						outbox.set_keyword(idstr + ':', "id");
+					}
 				}
 				else
 				{
@@ -1277,7 +1365,9 @@ void GUI::dlg_playlist()
 		<weight=35 <> <btnclose weight=100> <>>
 	)");
 
-	::widgets::Title l_title {fm, "Select which videos to download from the playlist"};
+	auto &bottom {bottoms.current()};
+	::widgets::Title l_title {fm, bottom.is_bcplaylist ? "Select which songs to download from the album" : 
+		"Select which videos to download from the playlist"};
 	::widgets::Button btnall {fm, "Select all", true}, btnnone {fm, "Select none", true}, btnclose {fm, "Close"}, 
 		btnrange {fm, "Select range", true};
 	::widgets::Listbox lbv {fm, true};
@@ -1298,7 +1388,6 @@ void GUI::dlg_playlist()
 	fm["btnrange"] << btnrange;
 	fm["btnclose"] << btnclose;
 
-	auto &bottom {bottoms.current()};
 	int min {1}, max {static_cast<int>(bottom.playlist_selection.size())};
 
 	slfirst.maximum(max-1);
@@ -1370,7 +1459,7 @@ void GUI::dlg_playlist()
 
 		const string title {entry["title"]};
 		lbv.at(0).append({"", std::to_string(idx), title, durstr});
-		if(!dur)
+		if(!dur && !bottom.is_bcplaylist)
 			bottom.playlist_selection[idx - 1] = false;
 		else lbv.at(0).back().check(bottom.playlist_selection[idx - 1]);
 		idx++;
@@ -1755,8 +1844,8 @@ void GUI::pop_queue_menu(int x, int y)
 		auto item_name {"item #" + item.text(0)};
 		auto url {item.value<std::wstring>()};
 		auto &bottom {bottoms.current()};
-		const auto is_live {bottom.vidinfo.contains("is_live") && bottom.vidinfo["is_live"] ||
-						   bottom.vidinfo.contains("live_status") && bottom.vidinfo["live_status"] == "is_live"};
+		const auto is_live {bottom.vidinfo_contains("is_live") && bottom.vidinfo["is_live"] ||
+						   bottom.vidinfo_contains("live_status") && bottom.vidinfo["live_status"] == "is_live"};
 		static std::vector<drawerbase::listbox::item_proxy> stoppable, startable;
 		static std::vector<std::wstring> completed;
 		stoppable.clear();
@@ -1787,12 +1876,16 @@ void GUI::pop_queue_menu(int x, int y)
 			remove_queue_item(url);
 		});
 
-		fs::path file {bottom.file_path()};
-		if(!file.empty())
+		fs::path file;
+		if(!bottom.is_ytplaylist && !bottom.is_bcplaylist)
 		{
-			if(fs::exists(file))
-				m.append_splitter();
-			else file.clear();
+			file = bottom.file_path();
+			if(!file.empty())
+			{
+				if(fs::exists(file))
+					m.append_splitter();
+				else file.clear();
+			}
 		}
 
 		m.append("Open folder of " + item_name, [&, file, this](menu::item_proxy)
@@ -1809,7 +1902,12 @@ void GUI::pop_queue_menu(int x, int y)
 				}
 				else ShellExecuteW(NULL, L"open", bottom.outpath.wstring().data(), NULL, NULL, SW_NORMAL);
 			}
-			else ShellExecuteW(NULL, L"open", bottom.outpath.wstring().data(), NULL, NULL, SW_NORMAL);
+			else 
+			{
+				if(bottom.is_ytplaylist && fs::exists(bottom.printed_path))
+					ShellExecuteW(NULL, L"open", bottom.printed_path.wstring().data(), NULL, NULL, SW_NORMAL);
+				else ShellExecuteW(NULL, L"open", bottom.outpath.wstring().data(), NULL, NULL, SW_NORMAL);
+			}
 		});
 
 		if(!file.empty()) m.append("Open file of " + item_name, [&, file, this](menu::item_proxy)
@@ -1817,16 +1915,19 @@ void GUI::pop_queue_menu(int x, int y)
 			ShellExecuteW(NULL, L"open", file.wstring().data(), NULL, NULL, SW_NORMAL);
 		});
 
-		if(bottom.is_ytplaylist)
+		if((completed.size() < lbq.at(0).size() || lbq.at(0).size() == 1 || bottom.btnfmt_visible()) && !bottom.is_ytchan)
+			m.append_splitter();
+
+		if(bottom.is_ytplaylist || bottom.is_bcplaylist)
 		{
 			auto count {bottom.playlist_selection.size()};
-			m.append_splitter();
-			auto item = m.append("Select videos (" + (count ? std::to_string(bottom.playlist_selected()) + '/' + std::to_string(count) + ")" :
-													  "getting data...)"), [this](menu::item_proxy)
+			std::string item_text {(bottom.is_ytplaylist ? "Select videos (" : "Select songs (") + (count && !bottom.playlist_info.empty() ? 
+				std::to_string(bottom.playlist_selected()) + '/' + std::to_string(count) + ")" : "getting data...)")};
+			auto item = m.append(item_text, [this](menu::item_proxy)
 			{
 				dlg_playlist();
 			});
-			if(!count)
+			if(!count || bottom.playlist_info.empty())
 			{
 				item.enabled(false);
 				vidsel_item = {&m, item.index()};
@@ -1834,9 +1935,17 @@ void GUI::pop_queue_menu(int x, int y)
 		}
 		else if(!bottom.is_ytchan && !is_live && item.text(2).find("[live event scheduled to begin in") != 0)
 		{
-			m.append("Download sections for " + item_name, [this](menu::item_proxy)
+			m.append("Download sections", [this](menu::item_proxy)
 			{
 				dlg_sections();
+			});
+		}
+
+		if(bottom.btnfmt_visible())
+		{
+			m.append("Select formats", [this](menu::item_proxy)
+			{
+				dlg_formats();
 			});
 		}
 
@@ -1893,7 +2002,6 @@ void GUI::pop_queue_menu(int x, int y)
 						{
 							if(!menu_working) break;
 							auto url {item.value<std::wstring>()};
-							std::cout << "stopping url: " << to_utf8(url) << "\n";
 							on_btn_dl(url);
 						}
 						if(menu_working)
@@ -2301,6 +2409,8 @@ void GUI::make_form()
 			auto item {lbq.item_from_value(text)};
 			if(item == lbq.at(0).end())
 			{
+				if(text.size() > 300)
+					text.erase(0, text.size() - 300);
 				qurl = text;
 				l_url.update_caption();
 			}
@@ -2454,20 +2564,31 @@ void GUI::dlg_settings()
 			l_path.refresh_theme();
 		}
 	});
-	btn_default.tooltip(nana::to_utf8(conf.output_template_default));
+
+	const auto &bottom {bottoms.current()};
+	auto &output_template_default {bottom.is_bcplaylist ? conf.output_template_default_bandcamp : conf.output_template_default};
+	auto &output_template {bottom.is_bcplaylist ? conf.output_template_bandcamp : conf.output_template};
+	btn_default.tooltip(nana::to_utf8(output_template_default));
 	btn_playlist_default.tooltip(nana::to_utf8(conf.playlist_indexing_default));
 	tb_template.multi_lines(false);
 	tb_template.padding(0, 5, 0, 5);
-	tb_template.caption(conf.output_template);
+	tb_template.caption(output_template);
 	tb_template.typeface(nana::paint::font_info {"Tahoma", 10});
 	tb_playlist.multi_lines(false);
 	tb_playlist.padding(0, 5, 0, 5);
 	tb_playlist.caption(conf.playlist_indexing);
 	tb_playlist.typeface(nana::paint::font_info {"Tahoma", 10});
+	if(bottom.is_bcplaylist)
+	{
+		l_playlist.enabled(false);
+		tb_playlist.enabled(false);
+		btn_playlist_default.enabled(false);
+		cb_zeropadding.enabled(false);
+	}
 	btn_default.events().click([&, this]
 	{
-		tb_template.caption(conf.output_template_default);
-		conf.output_template = conf.output_template_default;
+		tb_template.caption(output_template_default);
+		output_template = output_template_default;
 	});
 	btn_playlist_default.events().click([&, this]
 	{
@@ -2595,7 +2716,8 @@ void GUI::dlg_settings()
 
 	cb_playlist_folder.tooltip("Put playlist videos in a subfolder of the output folder, using the\nplaylist title as the name of "
 	"the subfolder.\n\nThis works by automatically prepending <bold>\"%(playlist_title)s\\\"</> to the\noutput template defined above, "
-	"whenever a playlist is downloaded\n\nSince v1.9, this setting also applies to channels and channel tabs.");
+	"whenever a playlist is downloaded\n\nSince v1.9, this setting also applies to channels and channel tabs.\n\n"
+	"Since v2.1, this setting also applies to Bandcamp albums (prepends\n<bold>\"%(artist)s\\%(album)s\\\"</> to the output template).");
 
 	const auto res_tip {"Download the best video with the largest resolution available that is\n"
 		"not higher than the selected value. Resolution is determined using the\n"
@@ -2678,7 +2800,7 @@ void GUI::dlg_settings()
 		conf.pref_video = com_video.option();
 		conf.pref_audio = com_audio.option();
 		conf.pref_fps = cbfps.checked();
-		conf.output_template = tb_template.caption_wstring();
+		output_template = tb_template.caption_wstring();
 		conf.playlist_indexing = tb_playlist.caption_wstring();
 		conf.max_concurrent_downloads = sb_maxdl.to_int();
 		conf.cb_lengthyproc = cb_lengthyproc.checked();
@@ -2742,7 +2864,7 @@ void GUI::dlg_changes(nana::window parent)
 	using widgets::theme;
 
 	themed_form fm {nullptr, parent, {}, appear::decorate<appear::sizable>{}};
-	fm.center(1030, 465);
+	fm.center(1030, 543);
 	fm.theme_callback([&, this](bool dark)
 	{
 		apply_theme(dark);
@@ -2927,6 +3049,7 @@ void GUI::show_queue(bool freeze_redraw)
 		plc.field_display("separator", true);
 		plc.collocate();
 	}
+	outbox.highlight(false);
 	outbox.hide();
 	overlay.hide();
 	queue_panel.show();
@@ -2949,6 +3072,7 @@ void GUI::show_output()
 	plc.collocate();
 	queue_panel.hide();
 	outbox.show(curbot.url);
+	outbox.highlight(conf.kwhilite);
 	SendMessageA(hwnd, WM_SETREDRAW, TRUE, 0);
 }
 
@@ -3391,6 +3515,7 @@ void GUI::dlg_updater(nana::window parent)
 							fs::remove(tempself);
 						try
 						{
+							prog.caption("Unpacking archive and restarting...");
 							fs::copy_file(self_path, tempself);
 							auto temp_7zlib {fs::temp_directory_path() / "7z.dll"};
 							std::error_code ec;
@@ -3857,11 +3982,13 @@ void GUI::gui_bottom::show_btncopy(bool show)
 }
 
 
-void GUI::gui_bottom::show_btnytfmt(bool show)
+void GUI::gui_bottom::show_btnfmt(bool show)
 {
 	plc.field_display("btn_ytfmtlist", show);
 	plc.field_display("ytfm_spacer", show);
 	plc.collocate();
+	pgui->get_place().collocate();
+	nana::api::update_window(*pgui);
 }
 
 fs::path GUI::gui_bottom::file_path()
@@ -3884,7 +4011,7 @@ fs::path GUI::gui_bottom::file_path()
 				if(fs::exists(printed_path))
 					return printed_path;
 			}
-			if(vidinfo.contains("ext"))
+			if(vidinfo_contains("ext"))
 			{
 				std::string ext {vidinfo["ext"]};
 				printed_path.replace_extension(ext);
@@ -3900,7 +4027,7 @@ fs::path GUI::gui_bottom::file_path()
 		return download_path;
 
 	fs::path file;
-	if(vidinfo.contains("filename"))
+	if(vidinfo_contains("filename"))
 		file = fs::u8path(std::string {vidinfo["filename"]});
 	
 	if(!file.empty())
@@ -4072,7 +4199,7 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 	plc.field_display("separator", true);
 	plc.field_display("btncopy", false);
 	plc.field_display("btncopy_spacer", false);
-	show_btnytfmt(false);
+	show_btnfmt(false);
 
 	prog.amount(1000);
 	prog.caption("");
