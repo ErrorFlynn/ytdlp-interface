@@ -12,6 +12,8 @@
 #include <nana/gui/widgets/slider.hpp>
 #include <nana/gui/widgets/menu.hpp>
 #include <nana/gui/widgets/spinbox.hpp>
+#include <nana/gui/widgets/treebox.hpp>
+#include <nana/paint/text_renderer.hpp>
 
 #include <variant>
 #include <iostream>
@@ -40,7 +42,8 @@ namespace widgets
 	public:
 		nana::color nimbus, fmbg, Label_fg, Text_fg, Text_fg_error, cbox_fg, btn_bg, btn_fg, path_bg, path_fg, path_link_fg, 
 			sep_bg, tbfg, tbbg, tbkw, tbkw_id, tbkw_special, tbkw_warning, tbkw_error, gpbg, lb_headerbg, title_fg, overlay_fg, border,
-			tb_selbg, tb_selbg_unfocused, expcol_fg;
+			tb_selbg, tb_selbg_unfocused, expcol_fg, tree_selbg, tree_selfg, tree_hilitebg, tree_hilitefg, tree_selhilitebg, tree_selhilitefg,
+			tree_parent_node, tree_expander, tree_expander_hovered, tree_bg, tree_key_fg, tree_val_fg;
 		std::string gpfg;
 
 		void make_light()
@@ -72,6 +75,18 @@ namespace widgets
 			border = color {"#9CB6C5"};
 			tb_selbg = color {"#5695D3"};
 			tb_selbg_unfocused = tb_selbg.blend(nana::colors::white, .3);
+			tree_selbg = color {"#eaf0f6"};
+			tree_selfg = color {"#97aeb4"};
+			tree_hilitebg = color {"#e7eef4"};
+			tree_hilitefg = color {"#d7dee4"};
+			tree_selhilitebg = tree_selbg.blend(colors::gray, .1);
+			tree_selhilitefg = color {"#B6E6FB"};
+			tree_parent_node = color {"#909090"};
+			tree_expander = colors::black;
+			tree_expander_hovered = colors::deep_sky_blue;
+			tree_bg = fmbg;
+			tree_key_fg = color {"#459"};
+			tree_val_fg = color {"#474"};
 		}
 
 		void make_dark()
@@ -102,7 +117,19 @@ namespace widgets
 			tbkw_error = color {"#CA86E3"};
 			overlay_fg = border = color {"#666"};
 			tb_selbg = color {"#95443B"};
-			tb_selbg_unfocused = tb_selbg.blend(nana::colors::black , .3);
+			tb_selbg_unfocused = tb_selbg.blend(nana::colors::black, .3);
+			tree_selbg = color {"#354F5C"};
+			tree_selfg = color {"#569EBD"};
+			tree_hilitebg = color {"#28353D"};
+			tree_hilitefg = color {"#48606A"};
+			tree_selhilitebg = color {"#253F4C"};
+			tree_selhilitefg = color {"#468EAD"};
+			tree_parent_node = color {"#ddd"};
+			tree_expander = colors::white;
+			tree_expander_hovered = color {"#ade"};
+			tree_bg = gpbg;
+			tree_key_fg = color {"#ebebe3"};
+			tree_val_fg = color {"#d8e8ff"};
 		}
 
 		bool is_dark() { return dark; }
@@ -1051,4 +1078,360 @@ namespace widgets
 		}
 	};
 
+
+	class JSON_Tree : public nana::treebox
+	{
+		using json = nlohmann::json;
+		using item_proxy = nana::treebox::item_proxy;
+
+		const json *jptr {nullptr};
+		bool no_nulls {false};
+
+		class jtree_renderer : public nana::treebox::renderer_interface
+		{
+			using clonable_renderer = nana::pat::cloneable<renderer_interface>;
+			clonable_renderer renderer_; // wraps a pointer to the library's internal renderer
+
+		public:
+			jtree_renderer(const clonable_renderer &rd) : renderer_(rd) {}
+
+		private:
+
+			nana::window htree_ {nullptr}; // treebox window handle
+
+			// this function is called whenever a paint operation begins
+			void begin_paint(nana::widget &wdg) override
+			{
+				htree_ = wdg.handle();
+				renderer_->begin_paint(wdg);
+			}
+
+			// paints the background for each item
+			void bground(graph_reference graph, const compset_interface *compset) const override
+			{
+				renderer_->bground(graph, compset);
+			}
+
+			// paints the node operator for each item
+			void expander(graph_reference graph, const compset_interface *compset) const override
+			{
+				using namespace nana;
+				comp_attribute_t attr;
+				if(compset->comp_attribute(component::expander, attr))
+				{
+					facade<element::arrow> arrow("solid_triangle");
+					arrow.direction(direction::southeast);
+					if(!compset->item_attribute().expended)
+					{
+						arrow.switch_to("hollow_triangle");
+						arrow.direction(direction::east);
+					}
+					auto r = attr.area;
+					r.y += (attr.area.height - 16) / 2;
+					r.width = r.height = 16;
+					auto clr {attr.mouse_pointed ? theme.tree_expander_hovered : theme.tree_expander};
+					arrow.draw(graph, api::bgcolor(htree_), clr, r, element_state::normal);
+				}
+			}
+
+			// paints the checkbox for each item (if the checkable mode is enabled)
+			void crook(graph_reference graph, const compset_interface *compset) const override
+			{
+				renderer_->crook(graph, compset);
+			}
+
+			// paints the icon for each item (if the node has an icon scheme set)
+			virtual void icon(graph_reference graph, const compset_interface *compset) const override
+			{
+				renderer_->icon(graph, compset);
+			}
+
+			// paints the text for each item
+			virtual void text(graph_reference graph, const compset_interface *compset) const override
+			{
+				auto iattr {compset->item_attribute()};
+				comp_attribute_t cattr;
+				compset->comp_attribute(component::text, cattr);
+				auto tf {graph.typeface()};
+				if(iattr.has_children)
+					graph.typeface({tf.name(), tf.size(), {800}});
+
+				auto tsize {graph.text_extent_size(iattr.text)};
+				auto gsize {cattr.area.dimension()};
+				nana::point tpos {cattr.area.position()};
+				if(tsize.height < gsize.height)
+					tpos.y += gsize.height / 2 - tsize.height / 2;
+
+				if(iattr.has_children)
+				{
+					graph.string(tpos, iattr.text, theme.tree_parent_node);
+					graph.typeface(tf);
+				}
+				else
+				{
+					auto pos {iattr.text.find(':')};
+					if(pos != -1)
+					{
+						std::string strkey {iattr.text.substr(0, pos + 3)}, strval {iattr.text.substr(pos + 3)};
+						//auto pos1 {strval.find('\n')};
+						//if(pos1 != -1)
+							//strval = strval.substr(0, pos1);
+						graph.string(tpos, strkey, theme.tree_key_fg);
+						tpos.x += graph.text_extent_size(strkey).width;
+						graph.string(tpos, strval, theme.tree_val_fg);
+						//nana::paint::text_renderer tr {graph};
+						//tr.render(tpos, nana::to_wstring(strval), graph.width()-tpos.x, nana::paint::text_renderer::mode::truncate_letter_with_ellipsis);
+					}
+					else graph.string(tpos, iattr.text, theme.tree_parent_node);
+				}
+			}
+		};
+
+		class jtree_placer : public nana::treebox::compset_placer_interface
+		{
+			using clonable_placer = nana::pat::cloneable<nana::treebox::compset_placer_interface>;
+			clonable_placer placer_; // wraps a pointer to the library's internal placer
+
+		public:
+			jtree_placer(const clonable_placer &r) : placer_(r) {}
+
+		private:
+
+			// called when certain features are toggled:
+			// - when the checkable mode is toggled (treebox::checkable())
+			// - when an icon scheme is added or erased (treebox::icon() and treebox::icon_erase())
+			virtual void enable(component_t comp, bool enabled) override
+			{
+				if(comp == component_t::icon) // an icon scheme is being added or erased
+				{
+					// the bool parameter indicates which is the case
+				}
+				else if(comp == component_t::crook) // the checkable mode is being toggled
+				{
+					// the bool parameter indicates whether it's toggled on or off
+				}
+
+				// the library's placer must be called, otherwise the toggling won't work
+				placer_->enable(comp, enabled);
+			}
+
+			// returns whether a feature is on or off
+			virtual bool enabled(component_t comp) const override
+			{
+				return placer_->enabled(comp);
+			}
+
+			// returns the height of an item, which is dependent on the size of
+			// the font used by the `graph` object, and the size of the checkbox
+			virtual unsigned item_height(graph_reference graph) const override
+			{
+				return placer_->item_height(graph);
+			}
+
+			// returns the width of an item, which is dependent of font size, 
+			// checkbox and icon presence, checkbox and icon size, and text offset
+			virtual unsigned item_width(graph_reference graph, const item_attribute_t &attr) const override
+			{
+				if(attr.has_children) // if the item has children, calc width using bold font
+				{
+					auto tf {graph.typeface()};
+					graph.typeface({tf.name(), tf.size(), {800}}); // bold font
+					auto result {placer_->item_width(graph, attr)};
+					graph.typeface(tf); // restore original font
+					return result;
+				}
+				return placer_->item_width(graph, attr);
+			}
+
+			// locates a component (returns true if the component is present, and writes the position
+			// and dimensions of the component to the rectangle object pointed to by the `r` parameter)
+			virtual bool locate(component_t comp, const item_attribute_t &attr, nana::rectangle *r) const override
+			{
+				return placer_->locate(comp, attr, r);
+			}
+		};
+
+	public:
+
+		JSON_Tree() : treebox() {}
+
+		JSON_Tree(nana::window parent, const json &data, bool hide_null = false)
+		{
+			create(parent, data, hide_null);
+		}
+
+		auto jdata() { return jptr; }
+
+		void create(nana::window parent, const json &data, bool hide_null = false)
+		{
+			unsigned icon_size {16};
+			double dpi {static_cast<double>(nana::API::screen_dpi(true))};
+			if(dpi != 96)
+				icon_size = round(icon_size * dpi / 96);
+
+			jptr = &data;
+			no_nulls = hide_null;
+			treebox::create(parent);
+			use_entire_line(true);
+			scheme().text_offset = 5;
+			scheme().icon_size = icon_size;
+			scheme().indent_displacement = 33;
+			typeface(nana::paint::font_info {"", 12});
+			placer(jtree_placer {placer()});
+			renderer(jtree_renderer {renderer()});
+			icon("json_light").normal.open(arr_json_light_ico, sizeof arr_json_light_ico);
+			icon("array_light").normal.open(arr_array_light_ico, sizeof arr_array_light_ico);
+			icon("object_light").normal.open(arr_object_light_ico, sizeof arr_object_light_ico);
+			icon("text_light").normal.open(arr_text_light_ico, sizeof arr_text_light_ico);
+			icon("number_light").normal.open(arr_number_light_ico, sizeof arr_number_light_ico);
+			icon("bool_light").normal.open(arr_bool_light_ico, sizeof arr_bool_light_ico);
+			icon("null_light").normal.open(arr_null_light_ico, sizeof arr_null_light_ico);
+			icon("json_dark").normal.open(arr_json_dark_ico, sizeof arr_json_dark_ico);
+			icon("array_dark").normal.open(arr_array_dark_ico, sizeof arr_array_dark_ico);
+			icon("object_dark").normal.open(arr_object_dark_ico, sizeof arr_object_dark_ico);
+			icon("text_dark").normal.open(arr_text_dark_ico, sizeof arr_text_dark_ico);
+			icon("number_dark").normal.open(arr_number_dark_ico, sizeof arr_number_dark_ico);
+			icon("bool_dark").normal.open(arr_bool_dark_ico, sizeof arr_bool_dark_ico);
+			icon("null_dark").normal.open(arr_null_dark_ico, sizeof arr_null_dark_ico);
+			events().expose([this] { refresh_theme(); });
+			populate();
+		}
+
+		void refresh_theme()
+		{
+			bgcolor(theme.tree_bg);
+			fgcolor(theme.tbfg);
+			scheme().item_bg_selected = theme.tree_selbg;
+			scheme().item_fg_selected = theme.tree_selfg;
+			scheme().item_bg_highlighted = theme.tree_hilitebg;
+			scheme().item_fg_highlighted = theme.tree_hilitefg;
+			scheme().item_bg_selected_and_highlighted = theme.tree_selhilitebg;
+			scheme().item_fg_selected_and_highlighted = theme.tree_selhilitefg;
+
+			auto root {find("root")};
+			if(!root.empty())
+			{
+				std::string icon_object {"object_light"}, icon_array {"array_light"}, icon_text {"text_light"}, icon_number {"number_light"}, 
+					icon_bool {"bool_light"}, icon_null {"null_light"};
+				if(theme.is_dark())
+				{
+					icon_object = "object_dark";
+					icon_array = "array_dark";
+					icon_text = "text_dark";
+					icon_number = "number_dark";
+					icon_bool = "bool_dark";
+					icon_null = "null_dark";
+				}
+
+				std::function<void(item_proxy)> recfn = [&, this](item_proxy parent)
+				{
+					for(auto node : parent)
+					{
+						if(node.size())
+						{
+							if(node.icon().find("array") != -1)
+								node.icon(icon_array);
+							else if(node.icon().find("object") != -1)
+								node.icon(icon_object);
+							recfn(node);
+						}
+						else if(node.icon().find("text") != -1)
+							node.icon(icon_text);
+						else if(node.icon().find("number") != -1)
+							node.icon(icon_number);
+						else if(node.icon().find("bool") != -1)
+							node.icon(icon_bool);
+						else if(node.icon().find("null") != -1)
+							node.icon(icon_null);
+					}
+				};
+
+				if(theme.is_dark())
+				{
+					if(root.icon().find("dark") == -1)
+					{
+						root.icon("json_dark");
+						auto_draw(false);
+						recfn(root);
+						auto_draw(true);
+					}
+				}
+				else if(root.icon().find("light") == -1)
+				{
+					root.icon("json_light");
+					auto_draw(false);
+					recfn(root);
+					auto_draw(true);
+				}
+			}
+		}
+
+	private:
+
+		void populate()
+		{
+			if(jptr == nullptr) return;
+			clear();
+			const auto dark {theme.is_dark()};
+			auto root {insert("root", "JSON").expand(true).icon(dark ? "json_dark" : "json_light")};
+
+			std::function<void(item_proxy, json)> recpop = [&, this](item_proxy parent, const json &j)
+			{
+				for(const auto &el : j.items())
+				{
+					auto key {el.key()};
+					auto val {el.value()};
+
+					if(val.is_object())
+					{
+						auto node {parent.append(key, key)};
+						node.icon(dark ? "object_dark" : "object_light");
+						recpop(node, el.value());
+					}
+					else if(val.is_array())
+					{
+						auto node {parent.append(key, key)};
+						node.icon(dark ? "array_dark" : "array_light");
+						recpop(node, el.value());
+					}
+					else if(val.is_string())
+					{
+						auto node {parent.append(key, key + ":  \"" + val.get<std::string>() + '\"')};
+						node.icon(dark ? "text_dark" : "text_light");
+					}
+					else if(val.is_boolean())
+					{
+						auto node {parent.append(key, key + ":  " + (val.get<bool>() ? "true" : "false"))};
+						node.icon(dark ? "bool_dark" : "bool_light");
+					}
+					else if(val.is_number_unsigned())
+					{
+						auto node {parent.append(key, key + ":  " + std::to_string(val.get<unsigned>()))};
+						node.icon(dark ? "number_dark" : "number_light");
+					}
+					else if(val.is_number_integer())
+					{
+						auto node {parent.append(key, key + ":  " + std::to_string(val.get<int>()))};
+						node.icon(dark ? "number_dark" : "number_light");
+					}
+					else if(val.is_number_float())
+					{
+						auto node {parent.append(key, key + ":  " + std::to_string(val.get<float>()))};
+						node.icon(dark ? "number_dark" : "number_light");
+					}
+					else if(val.is_null())
+					{
+						auto node {parent.append(key, key + ":  null")};
+						node.icon(dark ? "null_dark" : "null_light");
+						if(no_nulls)
+							node.hide(true);
+					}
+				}
+			};
+
+			auto_draw(false);
+			recpop(root, *jptr);
+			auto_draw(true);
+		}		
+	};
 }

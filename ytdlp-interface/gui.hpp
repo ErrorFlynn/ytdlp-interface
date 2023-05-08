@@ -34,15 +34,15 @@ public:
 		std::unordered_set<std::wstring> outpaths;
 		std::map<std::wstring, std::string> playsel_strings;
 		double ratelim {0}, contrast {.1};
-		unsigned ratelim_unit {1}, pref_res {2}, pref_video {1}, pref_audio {1}, cbtheme {2}, max_argsets {10}, max_outpaths {10}, 
+		unsigned ratelim_unit {1}, pref_res {0}, pref_video {0}, pref_audio {0}, cbtheme {2}, max_argsets {10}, max_outpaths {10}, 
 			max_concurrent_downloads {1};
 		std::chrono::milliseconds max_proc_dur {3000};
 		size_t com_args {0};
 		bool cbsplit {false}, cbchaps {false}, cbsubs {false}, cbthumb {false}, cbtime {true}, cbkeyframes {false}, cbmp3 {false},
-			cbargs {false}, kwhilite {true}, pref_fps {true}, cb_lengthyproc {true}, common_dl_options {true}, cb_autostart {true},
+			cbargs {false}, kwhilite {true}, pref_fps {false}, cb_lengthyproc {true}, common_dl_options {true}, cb_autostart {true},
 			cb_queue_autostart {false}, gpopt_hidden {false}, open_dialog_origin {false}, cb_zeropadding {true}, cb_playlist_folder {true},
 			zoomed {false}, get_releases_at_startup {true}, col_format {false}, col_format_note {false}, col_ext {false}, col_fsize {false},
-			col_adjust_width {true};
+			col_adjust_width {true}, json_hide_null {false};
 		nana::rectangle winrect;
 		int dpi {96};
 	}
@@ -61,7 +61,7 @@ private:
 	std::thread thr, thr_releases, thr_versions, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.1.0"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
+	const std::string ver_tag {"v2.2.0"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
 		ytdlp_fname {X64 ? "yt-dlp.exe" : "yt-dlp_x86.exe"};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
@@ -70,7 +70,7 @@ private:
 	struct { nana::menu *m {nullptr}; std::size_t pos {0}; } vidsel_item;
 
 	const std::vector<std::wstring>
-		com_res_options {L"2160", L"1440", L"1080", L"720", L"480", L"360"},
+		com_res_options {L"none", L"4320", L"2160", L"1440", L"1080", L"720", L"480", L"360"},
 		com_audio_options {L"none", L"m4a", L"mp3", L"ogg", L"webm", L"flac"},
 		com_video_options {L"none", L"mp4", L"webm"};
 
@@ -155,12 +155,12 @@ private:
 		gui_bottom(GUI &gui, bool visible = false);
 
 		bool is_ytlink {false}, use_strfmt {false}, working {false}, graceful_exit {false}, working_info {true}, received_procmsg {false},
-			is_ytplaylist {false}, is_ytchan {false}, is_bcplaylist {false}, is_bclink {false};
+			is_ytplaylist {false}, is_ytchan {false}, is_bcplaylist {false}, is_bclink {false}, is_bcchan {false};
 		fs::path outpath, merger_path, download_path, printed_path;
 		nlohmann::json vidinfo, playlist_info;
 		std::vector<bool> playlist_selection;
 		std::vector<std::pair<std::wstring, std::wstring>> sections;
-		std::wstring url, strfmt, fmt1, fmt2, playsel_string;
+		std::wstring url, strfmt, fmt1, fmt2, playsel_string, cmdinfo, playlist_vid_cmdinfo;
 		std::thread dl_thread, info_thread;
 		int index {0};
 
@@ -184,6 +184,7 @@ private:
 		fs::path file_path();
 
 		bool started() { return btndl.caption().find("Stop") == 0; }
+		bool using_custom_fmt() {return cbargs.checked() && com_args.caption_wstring().find(L"-f ") != -1;}
 
 		auto playlist_selected()
 		{
@@ -342,6 +343,8 @@ private:
 					url.find(L"www.youtube.com/channel/") != -1 || url.find(L"www.youtube.com/user/") != -1;
 				pbot->is_bcplaylist = url.find(L"bandcamp.com/album/") != -1;
 				pbot->is_bclink = url.find(L"bandcamp.com") != -1;
+				pbot->is_bcchan = url.find(L".bandcamp.com/music") != -1 || url.rfind(L".bandcamp.com") == url.size() - 13
+					|| url.rfind(L".bandcamp.com/") == url.size() - 14;
 				if(gui->conf.gpopt_hidden && !gui->no_draw_freeze)
 				{
 					pbot->expcol.operate(true);
@@ -395,8 +398,8 @@ private:
 					{
 						for(int n {0}; n < srcbot.com_args.the_number_of_options(); n++)
 							bot.com_args.push_back(srcbot.com_args.text(n));
-						bot.com_args.caption(srcbot.com_args.caption());
 					}
+					bot.com_args.caption(srcbot.com_args.caption());
 				}
 			}
 		}
@@ -665,7 +668,8 @@ private:
 	std::wstring qurl;
 	widgets::path_label l_url {queue_panel, &qurl};
 
-
+	void dlg_settings_info(nana::window owner);
+	void dlg_json();
 	void dlg_sections();
 	void dlg_playlist();
 	void pop_queue_menu(int x, int y);
@@ -720,4 +724,5 @@ private:
 
 	public:
 		gui_bottoms &botref() { return bottoms; }
+		unsigned res_options_size() { return com_res_options.size(); }
 };

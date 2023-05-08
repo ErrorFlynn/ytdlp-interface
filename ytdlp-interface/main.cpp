@@ -108,8 +108,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 					GUI::conf.ytdlp_path = appdir / ytdlp_fname;
 			}
 			GUI::conf.outpath = std::string {jconf["outpath"]};
-			GUI::conf.fmt1 = to_wstring(std::string {jconf["fmt1"]});
-			GUI::conf.fmt2 = to_wstring(std::string {jconf["fmt2"]});
+			GUI::conf.fmt1 = to_wstring(jconf["fmt1"].get<std::string>());
+			GUI::conf.fmt2 = to_wstring(jconf["fmt2"].get<std::string>());
 			GUI::conf.ratelim = jconf["ratelim"];
 			GUI::conf.ratelim_unit = jconf["ratelim_unit"];
 			if(jconf.contains("cbsplit")) // v1.1
@@ -124,7 +124,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			}
 			if(jconf.contains("pref_res")) // v1.2
 			{
-				GUI::conf.pref_res = jconf["pref_res"];
+				if(!jconf.contains("json_hide_null")) // v2.2 added two options at the top
+					GUI::conf.pref_res = jconf["pref_res"] + 2;
+				else GUI::conf.pref_res = jconf["pref_res"];
 				GUI::conf.pref_video = jconf["pref_video"];
 				GUI::conf.pref_audio = jconf["pref_audio"];
 				GUI::conf.pref_fps = jconf["pref_fps"];
@@ -152,14 +154,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			}
 			if(jconf.contains("output_template")) // v1.6
 			{
-				GUI::conf.output_template = to_wstring(std::string {jconf["output_template"]});
+				GUI::conf.output_template = to_wstring(jconf["output_template"].get<std::string>());
 				GUI::conf.max_concurrent_downloads = jconf["max_concurrent_downloads"];
 				GUI::conf.cb_lengthyproc = jconf["cb_lengthyproc"];
-				GUI::conf.max_proc_dur = std::chrono::milliseconds {static_cast<int>(jconf["max_proc_dur"])};
+				GUI::conf.max_proc_dur = std::chrono::milliseconds {jconf["max_proc_dur"].get<int>()};
 				for(auto &el : jconf["unfinished_queue_items"])
 					GUI::conf.unfinished_queue_items.push_back(el);
 				for(auto &el : jconf["outpaths"])
-					GUI::conf.outpaths.insert(to_wstring(std::string {el}));
+					GUI::conf.outpaths.insert(to_wstring(el.get<std::string>()));
 				GUI::conf.common_dl_options = jconf["common_dl_options"];
 				GUI::conf.cb_autostart = jconf["cb_autostart"];
 			}
@@ -176,7 +178,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			{
 				GUI::conf.gpopt_hidden = jconf["gpopt_hidden"];
 				GUI::conf.open_dialog_origin = jconf["open_dialog_origin"];
-				GUI::conf.playlist_indexing = to_wstring(std::string {jconf["playlist_indexing"]});
+				GUI::conf.playlist_indexing = to_wstring(jconf["playlist_indexing"].get<std::string>());
 			}
 			if(jconf.contains("cb_zeropadding")) // v1.8
 			{
@@ -202,7 +204,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			}
 			if(jconf.contains("output_template_bandcamp")) // v2.1
 			{
-				GUI::conf.output_template_bandcamp = to_wstring(std::string {jconf["output_template_bandcamp"]});
+				GUI::conf.output_template_bandcamp = to_wstring(jconf["output_template_bandcamp"].get<std::string>());
+			}
+			if(jconf.contains("json_hide_null")) // v2.2
+			{
+				GUI::conf.json_hide_null = jconf["json_hide_null"];
 			}
 		}
 	}
@@ -220,7 +226,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			const auto wurl {to_wstring(url)};
 			auto &bot {gui.botref().at(wurl)};
 			if(jconf["playsel_strings"].contains(url))
-				bot.playsel_string = to_wstring(std::string {jconf["playsel_strings"][url]});
+				bot.playsel_string = to_wstring(jconf["playsel_strings"][url].get<std::string>());
 		}
 	}
 
@@ -279,6 +285,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["queue_columns"]["fsize"] = GUI::conf.col_fsize;
 		jconf["queue_columns"]["adjust_window_width"] = GUI::conf.col_adjust_width;
 		jconf["output_template_bandcamp"] = to_utf8(GUI::conf.output_template_bandcamp);
+		jconf["json_hide_null"] = GUI::conf.json_hide_null;
 
 		if(jconf.contains("playsel_strings"))
 			jconf.erase("playsel_strings");

@@ -96,28 +96,37 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 
 	msg.make_after(WM_KEYDOWN, [&](UINT, WPARAM wparam, LPARAM, LRESULT *)
 	{
-		if(wparam == 'V' && GetAsyncKeyState(VK_CONTROL) & 0xff00)
+		if(wparam == 'V')
 		{
-			if(api::focus_window() != bottoms.current().com_args)
+			if(GetAsyncKeyState(VK_CONTROL) & 0xff00)
 			{
-				l_url.events().mouse_up.emit({}, l_url);
-				if(!queue_panel.visible())
-					show_queue(true);
+				if(api::focus_window() != bottoms.current().com_args)
+				{
+					l_url.events().mouse_up.emit({}, l_url);
+					if(!queue_panel.visible())
+						show_queue(true);
+				}
 			}
 		}
-		else if(wparam == VK_NUMPAD0 && GetAsyncKeyState(VK_CONTROL) & 0xff00)
+		else if(wparam == VK_NUMPAD0)
 		{
-			if(is_zoomed(true)) restore();
-			center(1000, 800 - bottoms.current().expcol.collapsed() * 240);
+			if(GetAsyncKeyState(VK_CONTROL) & 0xff00)
+			{
+				if(is_zoomed(true)) restore();
+				center(1000, 800 - bottoms.current().expcol.collapsed() * 240);
+			}
 		}
 		else if(wparam == VK_DELETE)
 		{
-			auto fwnd {api::focus_window()};
-			auto &bottom {bottoms.current()};
-			if(fwnd != bottom.com_args && fwnd != bottom.tbrate && !lbq.selected().empty())
+			if(queue_panel.visible())
 			{
-				outbox.clear();
-				remove_queue_item(bottom.url);
+				auto fwnd {api::focus_window()};
+				auto &bottom {bottoms.current()};
+				if(fwnd != bottom.com_args && fwnd != bottom.tbrate && !lbq.selected().empty())
+				{
+					outbox.clear();
+					remove_queue_item(bottom.url);
+				}
 			}
 		}
 		else if(wparam == VK_APPS)
@@ -287,6 +296,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 			api::window_outline_size(*this, sz);
 		}
 	}
+	else center(1000, 800);
 	bring_top(true);
 	if(conf.zoomed) zoom(true);
 	no_draw_freeze = false;
@@ -362,7 +372,7 @@ void GUI::dlg_formats()
 	fm["btnok"] << btnok;
 
 	lbformats.enable_single(true, true);
-	lbformats.append_header("format", dpi_transform(240));
+	lbformats.append_header("format", dpi_transform(280));
 	lbformats.append_header("acodec", dpi_transform(90));
 	lbformats.append_header("vcodec", dpi_transform(90));
 	lbformats.append_header("ext", dpi_transform(50));
@@ -423,18 +433,17 @@ void GUI::dlg_formats()
 	});
 
 	btnok.enabled(false);
+	thumb.transparent(true);
 
-	std::string thumb_url, title {vidinfo["title"]};
-	if(bottom.is_bclink)
+	std::string thumb_url, title {"[title missing]"};
+	if(bottom.vidinfo_contains("title"))
+		title = vidinfo["title"];
+	if(!bottom.is_ytlink)
 	{
-		if(vidinfo.contains("thumbnail"))
+		if(bottom.vidinfo_contains("thumbnail"))
 			thumb_url = vidinfo["thumbnail"];
 		thumb.stretchable(true);
-		thumb.transparent(true);
 		thumb.align(align::center, align_v::center);
-		lbformats.column_at(2).visible(false);
-		lbformats.column_at(4).visible(false);
-		lbformats.column_at(5).visible(false);
 	}
 	else
 	{
@@ -454,31 +463,16 @@ void GUI::dlg_formats()
 	}
 
 	l_title.caption(title);
+	lbformats.append({"Audio only", "Video only"});
 
 	int dur {0};
-	if(bottom.is_bclink)
-		lbformats.append("Audio only");
-	else
-	{
-		if(bottom.vidinfo_contains("is_live") && bottom.vidinfo["is_live"] ||
-			bottom.vidinfo_contains("live_status") && bottom.vidinfo["live_status"] == "is_live")
-		{
-			if(lbformats.size_categ() == 3)
-			{
-				lbformats.erase(1);
-				lbformats.erase(1);
-			}
-		}
-		else
-		{
-			dur = vidinfo["duration"];
-			if(lbformats.size_categ() == 1)
-				lbformats.append({"Audio only", "Video only"});
-		}
-	}
+	bool live {bottom.vidinfo_contains("is_live") && bottom.vidinfo["is_live"] ||
+			bottom.vidinfo_contains("live_status") && bottom.vidinfo["live_status"] == "is_live"};
+	if(!live && bottom.vidinfo_contains("duration"))
+		dur = vidinfo["duration"];
 	int hr {(dur/60)/60}, min {(dur/60)%60}, sec {dur%60};
 	if(dur < 60) sec = dur;
-	std::string durstr {bottom.is_bclink ? "---" : "live"};
+	std::string durstr {live ? "live" : "---"};
 	if(dur)
 	{
 		std::stringstream ss;
@@ -496,34 +490,47 @@ void GUI::dlg_formats()
 		ss << sec;
 		durstr += ':' + ss.str();
 	}
-	else if(vidinfo.contains("duration_string"))
+	else if(bottom.vidinfo_contains("duration_string"))
 		durstr = vidinfo["duration_string"];
 	l_durtext.caption(durstr);
 
-	auto strchap {std::to_string(vidinfo["chapters"].size())};
-	if(strchap == "0") l_chaptext.caption("none");
+	std::string strchap;
+	if(bottom.vidinfo_contains("chapters"))
+		strchap = std::to_string(vidinfo["chapters"].size());
+	if(strchap.empty() || strchap == "0") 
+		l_chaptext.caption("none");
 	else l_chaptext.caption(strchap);
 
-	l_upltext.caption(std::string {vidinfo["uploader"]});
+	if(bottom.vidinfo_contains("uploader"))
+		l_upltext.caption(std::string {vidinfo["uploader"]});
+	else l_upltext.caption("---");
 
-	auto strdate {std::string {vidinfo["upload_date"]}};
-	l_datetext.caption(strdate.substr(0, 4) + '-' + strdate.substr(4, 2) + '-' + strdate.substr(6, 2));
-
-	thr_thumb = std::thread([&]
+	std::string strdate {"---"};
+	if(bottom.vidinfo_contains("upload_date"))
 	{
-		thumbthr_working = true;
-		auto thumb_jpg {util::get_inet_res(thumb_url)};
-		if(!thumb_jpg.empty())
+		strdate = vidinfo["upload_date"];
+		strdate = strdate.substr(0, 4) + '-' + strdate.substr(4, 2) + '-' + strdate.substr(6, 2);
+	}
+	l_datetext.caption(strdate);
+
+	if(!thumb_url.empty())
+	{
+		thr_thumb = std::thread([&]
 		{
-			paint::image img;
-			img.open(thumb_jpg.data(), thumb_jpg.size());
-			if(thumbthr_working)
-				thumb.load(img);
-			thumbthr_working = false;
-			if(thr_thumb.joinable())
-				thr_thumb.detach();
-		}
-	});	
+			thumbthr_working = true;
+			auto thumb_jpg {util::get_inet_res(thumb_url)};
+			if(!thumb_jpg.empty())
+			{
+				paint::image img;
+				img.open(thumb_jpg.data(), thumb_jpg.size());
+				if(thumbthr_working)
+					thumb.load(img);
+				thumbthr_working = false;
+				if(thr_thumb.joinable())
+					thr_thumb.detach();
+			}
+		});
+	}
 
 	std::string format_id1, format_id2;
 	if(bottom.vidinfo_contains("format_id"))
@@ -538,22 +545,46 @@ void GUI::dlg_formats()
 		else format_id1 = format_id;
 	}
 
+	auto get_int = [](const nlohmann::json &j, const std::string &key) -> std::string
+	{
+		if(j.contains(key))
+		{
+			if(j[key] == nullptr)
+				return "null";
+			else return std::to_string(unsigned(j[key]));
+		}
+		else return "---";
+	};
+
+	auto get_string = [](const nlohmann::json &j, const std::string &key) -> std::string
+	{
+		if(j.contains(key))
+		{
+			if(j[key] == nullptr)
+				return "null";
+			else return std::string {j[key]};
+		}
+		else return "---";
+	};
+
 	for(auto &fmt : vidinfo["formats"])
 	{
-		std::string format {fmt["format"]}, acodec {fmt["acodec"]}, vcodec {fmt["vcodec"]}, ext {fmt["ext"]},
-			fps {"null"}, vbr {"none"}, abr {"none"}, asr {"null"}, filesize {"null"};
+		std::string format {fmt["format"]}, acodec, vcodec, ext, fps, vbr, abr, asr, filesize;
 		if(format.find("storyboard") == -1)
 		{
-			if(fmt.contains("abr"))
-				abr = std::to_string(unsigned(fmt["abr"]));
-			if(fmt.contains("vbr"))
-				vbr = std::to_string(unsigned(fmt["vbr"]));
-			if(fmt["asr"] != nullptr)
-				asr = std::to_string(unsigned(fmt["asr"]));
-			if(fmt["fps"] != nullptr)
-				fps = std::to_string(unsigned(fmt["fps"]));
-			if(fmt["filesize"] != nullptr)
-				filesize = util::int_to_filesize(fmt["filesize"]);
+			abr = get_int(fmt, "abr");
+			vbr = get_int(fmt, "vbr");
+			asr = get_int(fmt, "asr");
+			fps = get_int(fmt, "fps");
+			ext = get_string(fmt, "ext");
+			acodec = get_string(fmt, "acodec");
+			vcodec = get_string(fmt, "vcodec");
+			if(fmt.contains("filesize"))
+			{
+				if(fmt["filesize"] != nullptr)
+					filesize = util::int_to_filesize(fmt["filesize"]);
+			}
+			else filesize = "---";
 			unsigned catidx {0};
 			if(acodec == "none")
 				catidx = 2; // video only
@@ -571,12 +602,27 @@ void GUI::dlg_formats()
 			else if(idstr == conf.fmt1 || idstr == conf.fmt2)
 				lbformats.at(catidx).back().select(true);
 			if(!format_id1.empty() && format_id1 == to_utf8(idstr))
-				lbformats.highlighted_lines.push_back(item.to_display());
+				item.text(0, format + " *");
 			if(!format_id2.empty() && format_id2 == to_utf8(idstr))
-				lbformats.highlighted_lines.push_back(item.to_display());
+				item.text(0, format + " *");
 		}
 	}
 	lbformats.refresh_theme();
+	if(lbformats.size_categ() == 3)
+	{
+		if(lbformats.at(2).size() == 0)
+		{
+			lbformats.erase(2);
+			if(lbformats.at(0).size() == 0)
+			{
+				lbformats.column_at(2).visible(false);
+				lbformats.column_at(4).visible(false);
+				lbformats.column_at(5).visible(false);
+			}
+		}
+		if(lbformats.at(1).size() == 0)
+			lbformats.erase(1);
+	}
 
 	fm.events().unload([&]
 	{
@@ -662,15 +708,41 @@ bool GUI::process_queue_item(std::wstring url)
 		}
 
 		std::wstring cmd {L'\"' + conf.ytdlp_path.wstring() + L'\"'};
-		if(bottom.use_strfmt) cmd += L" -f " + bottom.strfmt;
-		cmd += L" -S \"res:" + com_res_options[conf.pref_res];
-		if(conf.pref_video)
-			cmd += L",vext:" + com_video_options[conf.pref_video];
-		if(conf.pref_audio)
-			cmd += L",aext:" + com_audio_options[conf.pref_audio];
-		if(conf.pref_fps)
-			cmd += L",fps";
-		cmd += L"\" ";
+
+		if(!bottom.using_custom_fmt())
+		{
+			if(bottom.use_strfmt)
+				cmd += L" -f " + bottom.strfmt;
+			else
+			{
+				std::wstring strpref {L" -S \""};
+				if(conf.pref_res)
+					strpref += L"res:" + com_res_options[conf.pref_res];
+				if(conf.pref_video)
+				{
+					if(strpref.size() > 5)
+						strpref += ',';
+					strpref += L"vext:" + com_video_options[conf.pref_video];
+				}
+				if(conf.pref_audio)
+				{
+					if(strpref.size() > 5)
+						strpref += ',';
+					strpref += L"aext:" + com_audio_options[conf.pref_audio];
+				}
+				if(conf.pref_fps)
+				{
+					if(strpref.size() > 5)
+						strpref += ',';
+					strpref += L"fps";
+				}
+				if(strpref.size() > 5)
+					cmd += strpref + L"\" ";
+			}
+		}
+
+		if(cmd.back() != ' ')
+			cmd.push_back(' ');
 
 		if(conf.cbchaps && argset.find(L"--embed-chapters") == -1)
 			cmd += L"--embed-chapters ";
@@ -1044,29 +1116,30 @@ void GUI::add_url(std::wstring url)
 			}
 			active_threads++;
 
-			std::wstring fmt_args {L" -S \"res:" + com_res_options[conf.pref_res]};
+			std::wstring fmt_sort {' '}, strpref {L" -S \""};
+			if(conf.pref_res)
+				strpref += L"res:" + com_res_options[conf.pref_res];
 			if(conf.pref_video)
-				fmt_args += L",vext:" + com_video_options[conf.pref_video];
-			if(conf.pref_audio)
-				fmt_args += L",aext:" + com_audio_options[conf.pref_audio];
-			if(conf.pref_fps)
-				fmt_args += L",fps\" ";
-			else fmt_args += L"\" ";
-
-			std::wstring custom_fmtarg;
-			const auto argset {bottom.com_args.caption_wstring()};
-			if(bottom.cbargs.checked())
 			{
-				auto pos {argset.find(L"-f ")};
-				if(pos != -1)
-				{
-					custom_fmtarg = L"-f ";
-					auto pos2 {pos + 3};
-					while(pos2 < argset.size() && !iswblank(argset[pos2]))
-						custom_fmtarg += argset[pos2++];
-					custom_fmtarg += L' ';
-				}
+				if(strpref.size() > 5)
+					strpref += ',';
+				strpref += L"vext:" + com_video_options[conf.pref_video];
 			}
+			if(conf.pref_audio)
+			{
+				if(strpref.size() > 5)
+					strpref += ',';
+				strpref += L"aext:" + com_audio_options[conf.pref_audio];
+			}
+			if(conf.pref_fps)
+			{
+				if(strpref.size() > 5)
+					strpref += ',';
+				strpref += L"fps";
+			}
+			if(strpref.size() > 5)
+				fmt_sort = strpref + L"\" ";
+
 			std::string media_info, media_website {"---"}, media_title, format_id {"---"}, format_note {"---"}, ext {"---"}, filesize {"---"};
 			auto json_error = [&](const nlohmann::detail::exception &e)
 			{
@@ -1091,41 +1164,53 @@ void GUI::add_url(std::wstring url)
 			{
 				if(bottom.is_ytplaylist || bottom.is_bcplaylist)
 				{
-					media_info = util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + 
-						L" --no-warnings --flat-playlist --compat-options no-youtube-unavailable-videos -J \"" + url + L'\"', &bottom.working_info);
-					try { bottom.playlist_info = nlohmann::json::parse(media_info); }
-					catch(nlohmann::detail::exception e)
+					std::wstring compat_options {bottom.is_ytplaylist ? L" --compat-options no-youtube-unavailable-videos" : L""},
+					             cmd {L" --no-warnings --flat-playlist -J" + compat_options + L" \"" + url + L'\"'};
+					bottom.cmdinfo = conf.ytdlp_path.filename().wstring() + cmd;
+					media_info = util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + cmd, &bottom.working_info);
+					if(media_info.front() == '{')
 					{
-						bottom.playlist_info.clear();
-						json_error(e);
-					}
-					if(!bottom.playlist_info.empty())
-					{
-						std::string url {bottom.playlist_info["entries"][0]["url"]}, vidinfo {util::run_piped_process(L'\"' + 
-							conf.ytdlp_path.wstring() + L'\"' + L" --no-warnings -j " + fmt_args + custom_fmtarg +
-							nana::to_wstring(url), &bottom.working_info)};
-						try { bottom.vidinfo = nlohmann::json::parse(vidinfo); }
+						try { bottom.playlist_info = nlohmann::json::parse(media_info); }
 						catch(nlohmann::detail::exception e)
 						{
-							bottom.vidinfo.clear();
-							json_error(e);
+							bottom.playlist_info.clear();
+							if(lbq.item_from_value(url) != lbq.at(0).end())
+								json_error(e);
 						}
-						if(!bottom.vidinfo.empty())
+						if(!bottom.playlist_info.empty())
 						{
-							bottom.show_btnfmt(true);
-							if(bottom.is_bcplaylist)
+							std::string URL {bottom.playlist_info["entries"][0]["url"]};
+							cmd = L" --no-warnings -j " + fmt_sort + nana::to_wstring(URL);
+							media_info = {util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + cmd, &bottom.working_info)};
+							if(media_info.front() == '{')
 							{
-								if(bottom.playlist_info["entries"].size() < 2)
-									bottom.is_bcplaylist = false;
+								try { bottom.vidinfo = nlohmann::json::parse(media_info); }
+								catch(nlohmann::detail::exception e)
+								{
+									bottom.vidinfo.clear();
+									if(lbq.item_from_value(url) != lbq.at(0).end())
+										json_error(e);
+								}
+								if(!bottom.vidinfo.empty())
+								{
+									bottom.show_btnfmt(true);
+									if(bottom.is_bcplaylist)
+									{
+										if(bottom.playlist_info["entries"].size() < 2)
+											bottom.is_bcplaylist = false;
+									}
+								}
 							}
+							else bottom.playlist_vid_cmdinfo = conf.ytdlp_path.filename().wstring() + cmd;
 						}
 					}
 				}
-				else
+				else // YouTube video
 				{
-					media_info = util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + L" --no-warnings -j " + 
-						(conf.output_template.empty() ? L"" : L"-o \"" + conf.output_template + L'\"') + fmt_args + custom_fmtarg + 
-						L'\"' + url + L'\"', &bottom.working_info);
+					std::wstring cmd {L" --no-warnings -j " + (conf.output_template.empty() ? L"" : L"-o \"" + conf.output_template + L'\"') + 
+						fmt_sort + L'\"' + url + L'\"'};
+					bottom.cmdinfo = conf.ytdlp_path.filename().wstring() + cmd;
+					media_info = util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + cmd, &bottom.working_info);
 					if(media_info.find("ERROR:") == 0)
 					{
 						auto pos {media_info.find("This live event will begin in ")};
@@ -1158,39 +1243,55 @@ void GUI::add_url(std::wstring url)
 							catch(nlohmann::detail::exception e)
 							{
 								bottom.vidinfo.clear();
-								json_error(e);
+								if(lbq.item_from_value(url) != lbq.at(0).end())
+									json_error(e);
 							}
 						}
 					}
 				}
 			}
-			else if(bottom.is_ytchan)
+			else if(bottom.is_ytchan || bottom.is_bcchan)
 			{
-				media_info = util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() +
-					L"\" --no-warnings --flat-playlist -I :0 -J \"" + url + L'\"', &bottom.working_info);
+				std::wstring cmd {L" --no-warnings --flat-playlist -I :0 -J \"" + url + L'\"'};
+				bottom.cmdinfo = conf.ytdlp_path.filename().wstring() + cmd;
+				media_info = util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + cmd, &bottom.working_info);
 				try { bottom.playlist_info = nlohmann::json::parse(media_info); }
 				catch(nlohmann::detail::exception e)
 				{
 					bottom.playlist_info.clear();
-					json_error(e);
+					if(lbq.item_from_value(url) != lbq.at(0).end())
+						json_error(e);
 				}
 				if(!bottom.playlist_info.empty())
 				{
-					std::string tab {"[whole channel] "};
+					std::string tab {bottom.is_bcchan ? "[user page] " : "[whole channel] "};
 					std::vector<std::string> tabs {"videos", "featured", "playlists", "shorts", "streams", "community", "podcasts"};
-					for(const auto &t : tabs)
-						if(url.rfind(L"/" + nana::to_wstring(t)) == url.size() - t.size() - 1)
-						{
-							tab = "[channel tab] ";
-							break;
-						}
-					lbq.item_from_value(url).text(1, "youtube.com");
+					if(bottom.is_ytchan)
+						for(const auto &t : tabs)
+							if(url.rfind(L"/" + nana::to_wstring(t)) == url.size() - t.size() - 1)
+							{
+								tab = "[channel tab] ";
+								break;
+							}
+					lbq.item_from_value(url).text(1, bottom.is_bcchan ? "bandcamp.com" : "youtube.com");
 					lbq.item_from_value(url).text(2, tab + std::string {bottom.playlist_info["title"]});
 					lbq.item_from_value(url).text(4, "---");
 					lbq.item_from_value(url).text(5, "---");
 					lbq.item_from_value(url).text(6, "---");
 					lbq.item_from_value(url).text(7, "---");
 					bottom.vidinfo.clear();
+					if(vidsel_item.m && lbq.item_from_value(url).selected())
+					{
+						auto &m {*vidsel_item.m};
+						for(int n {0}; n < m.size(); n++)
+						{
+							m.enabled(n, true);
+							if(m.text(n) == "Select formats" && !bottom.btnfmt_visible())
+								m.erase(n--);
+						}
+						nana::api::refresh_window(m.handle());
+						vidsel_item.m = nullptr;
+					}
 					active_threads--;
 					if(bottom.working_info)
 						bottom.info_thread.detach();
@@ -1199,9 +1300,10 @@ void GUI::add_url(std::wstring url)
 			}
 			else // not YouTube
 			{
-				media_info = util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + L" --no-warnings -j " +
-					(conf.output_template.empty() ? L"" : L"-o \"" + conf.output_template + L'\"') + fmt_args + custom_fmtarg + 
-					L'\"' + url + L'\"', &bottom.working_info);
+				std::wstring cmd {L" --no-warnings -j " + (conf.output_template.empty() ? L"" : L"-o \"" + conf.output_template + L'\"') + 
+					fmt_sort + L'\"' + url + L'\"'};
+				bottom.cmdinfo = conf.ytdlp_path.filename().wstring() + cmd;
+				media_info = util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + cmd, &bottom.working_info);
 				auto pos {media_info.rfind('}')};
 				if(pos != -1)
 					media_info.erase(pos + 1);
@@ -1215,7 +1317,8 @@ void GUI::add_url(std::wstring url)
 						catch(nlohmann::detail::exception e)
 						{
 							bottom.vidinfo.clear();
-							json_error(e);
+							if(lbq.item_from_value(url) != lbq.at(0).end())
+								json_error(e);
 						}
 					}
 				}
@@ -1238,23 +1341,17 @@ void GUI::add_url(std::wstring url)
 							media_title = "[playlist] " + std::string {bottom.playlist_info["title"]};
 							if(vidsel_item.m && lbq.item_from_value(url).selected())
 							{
-								auto m {vidsel_item.m};
+								auto &m {*vidsel_item.m};
 								auto pos {vidsel_item.pos};
-								m->enabled(pos, true);
 								auto str {std::to_string(playlist_size)};
 								if(bottom.playsel_string.empty())
-									m->text(pos, (bottom.is_ytplaylist ? "Select videos (" : "Select songs (") + str + '/' + str + ")");
-								else m->text(pos, (bottom.is_ytplaylist ? "Select videos (" : "Select songs (") + std::to_string(bottom.playlist_selected()) + '/' + str + ")");
-								nana::api::refresh_window(m->handle());
-								m = nullptr;
+									m.text(pos, (bottom.is_ytplaylist ? "Select videos (" : "Select songs (") + str + '/' + str + ")");
+								else m.text(pos, (bottom.is_ytplaylist ? "Select videos (" : "Select songs (") + std::to_string(bottom.playlist_selected()) + '/' + str + ")");
 							}
 							for(const auto &entry : bottom.playlist_info["entries"])
 							{
 								if(entry.contains("id") && entry["id"] != nullptr)
-								{
-									std::string idstr {entry["id"]};
-									outbox.set_keyword(idstr + ':', "id");
-								}
+									outbox.set_keyword(entry["id"].get<std::string>() + ':', "id");
 							}
 						}
 					}
@@ -1295,7 +1392,8 @@ void GUI::add_url(std::wstring url)
 							unsigned fsize {bottom.vidinfo["filesize_approx"]};
 							filesize = util::int_to_filesize(fsize, false);
 						}
-						if(bottom.is_ytlink || bottom.is_bclink)
+
+						if(bottom.vidinfo_contains("formats"))
 							bottom.show_btnfmt(true);
 					}
 
@@ -1318,15 +1416,16 @@ void GUI::add_url(std::wstring url)
 				else
 				{
 					auto stridx {lbq.item_from_value(url).text(0)};
-					lbq.item_from_value(url).text(1, "error");
+					lbq.item_from_value(url).text(1, "");
 					lbq.item_from_value(url).text(2, "yt-dlp failed to get info (see output)");
 					lbq.item_from_value(url).text(3, "error");
 					lbq.item_from_value(url).text(4, "");
 					lbq.item_from_value(url).text(5, "");
 					lbq.item_from_value(url).text(6, "");
 					lbq.item_from_value(url).text(7, "");
-					outbox.caption("GUI: yt-dlp is unable to process queue item #" + stridx +
-												" (output below)\n\n" + media_info + "\n", url);
+
+					auto cmdline {bottom.playlist_vid_cmdinfo.empty() ? nana::to_utf8(bottom.cmdinfo) : nana::to_utf8(bottom.playlist_vid_cmdinfo)};
+					outbox.caption("[GUI] got error executing command line: " + cmdline + "\n\n" + media_info + "\n", url);
 					if(outbox.current() == url)
 					{
 						auto ca {outbox.colored_area_access()};
@@ -1339,7 +1438,38 @@ void GUI::add_url(std::wstring url)
 						outbox.widget::show();
 						overlay.hide();
 					}
+					if(vidsel_item.m && lbq.item_from_value(url).selected())
+					{
+						auto &m {*vidsel_item.m};
+						for(int n {0}; n < m.size(); n++)
+						{
+							if(!m.enabled(n))
+								m.erase(n--);
+						}
+						for(int n {0}; n < m.size(); n++)
+						{
+							if(m.text(n).empty() && n < m.size() - 1 && m.text(n + 1).empty())
+							{
+								m.erase(n);
+								break;
+							}
+						}						
+						nana::api::refresh_window(m.handle());
+						vidsel_item.m = nullptr;
+					}
 				}
+			}
+			if(vidsel_item.m && lbq.item_from_value(url).selected())
+			{
+				auto &m {*vidsel_item.m};
+				for(int n {0}; n < m.size(); n++)
+				{
+					m.enabled(n, true);
+					if(m.text(n) == "Select formats" && !bottom.btnfmt_visible())
+						m.erase(n--);
+				}
+				nana::api::refresh_window(m.handle());
+				vidsel_item.m = nullptr;
 			}
 			active_threads--;
 			if(bottom.working_info)
@@ -1427,7 +1557,7 @@ void GUI::dlg_playlist()
 	lbv.scheme().item_height_ex = 8;
 	lbv.append_header("", dpi_transform(25));
 	lbv.append_header("#", dpi_transform(33));
-	lbv.append_header("Video title", dpi_transform(theme.is_dark() ? 752 : 747));
+	lbv.append_header(bottom.is_bcplaylist ? "Song title" : "Video title", dpi_transform(theme.is_dark() ? 752 : 747));
 	lbv.append_header("Duration", dpi_transform(75));
 	lbv.column_movable(false);
 	lbv.column_resizable(false);
@@ -1739,7 +1869,6 @@ void GUI::dlg_sections()
 		"in the \"to\" field or leave it blank. \n\nWARNING: your input is not validated in any way, what you "
 		"enter is what is passed to yt-dlp. The downloading of sections is done through FFmpeg (which is significantly slower), "
 		"and each section is downloaded to its own file."};
-	l_help.caption(std::regex_replace(helptext, std::regex {"\\b(0x)"}, theme.is_dark() ? "0xf5c040" : "0x4C4C9C"));
 
 	for(auto &val : bottom.sections)
 	{
@@ -1817,6 +1946,7 @@ void GUI::dlg_sections()
 	{
 		apply_theme(dark);
 		fm.bgcolor(theme.fmbg);
+		l_help.caption(std::regex_replace(helptext, std::regex {"\\b(0x)"}, theme.is_dark() ? "0xf5c040" : "0x4C4C9C"));
 		return false;
 	});
 
@@ -1873,7 +2003,7 @@ void GUI::pop_queue_menu(int x, int y)
 		});
 		m.append("Remove " + item_name, [url, this](menu::item_proxy)
 		{
-			remove_queue_item(url);
+			std::thread {[url, this] {remove_queue_item(url); }}.detach();
 		});
 
 		fs::path file;
@@ -1915,38 +2045,49 @@ void GUI::pop_queue_menu(int x, int y)
 			ShellExecuteW(NULL, L"open", file.wstring().data(), NULL, NULL, SW_NORMAL);
 		});
 
-		if((completed.size() < lbq.at(0).size() || lbq.at(0).size() == 1 || bottom.btnfmt_visible()) && !bottom.is_ytchan)
+		if(item.text(3) != "error")
+		{
 			m.append_splitter();
-
-		if(bottom.is_ytplaylist || bottom.is_bcplaylist)
-		{
-			auto count {bottom.playlist_selection.size()};
-			std::string item_text {(bottom.is_ytplaylist ? "Select videos (" : "Select songs (") + (count && !bottom.playlist_info.empty() ? 
-				std::to_string(bottom.playlist_selected()) + '/' + std::to_string(count) + ")" : "getting data...)")};
-			auto item = m.append(item_text, [this](menu::item_proxy)
+			if(bottom.is_ytplaylist || bottom.is_bcplaylist)
 			{
-				dlg_playlist();
-			});
-			if(!count || bottom.playlist_info.empty())
-			{
-				item.enabled(false);
-				vidsel_item = {&m, item.index()};
+				auto count {bottom.playlist_selection.size()};
+				std::string item_text {(bottom.is_ytplaylist ? "Select videos (" : "Select songs (") + (count && !bottom.playlist_info.empty() ?
+					std::to_string(bottom.playlist_selected()) + '/' + std::to_string(count) + ")" : "getting data...)")};
+				auto item = m.append(item_text, [this](menu::item_proxy)
+				{
+					dlg_playlist();
+				});
+				if(!count || bottom.playlist_info.empty())
+				{
+					item.enabled(false);
+					vidsel_item = {&m, item.index()};
+				}
 			}
-		}
-		else if(!bottom.is_ytchan && !is_live && item.text(2).find("[live event scheduled to begin in") != 0)
-		{
-			m.append("Download sections", [this](menu::item_proxy)
+			else if(!bottom.is_ytchan && !bottom.is_bcchan && !is_live && item.text(2).find("[live event scheduled to begin in") != 0)
 			{
-				dlg_sections();
-			});
-		}
+				m.append("Download sections", [this](menu::item_proxy)
+				{
+					dlg_sections();
+				});
+			}
 
-		if(bottom.btnfmt_visible())
-		{
-			m.append("Select formats", [this](menu::item_proxy)
+			if(item.text(2) == "...")
+				m.append("Select formats", [this](menu::item_proxy) { dlg_formats(); }).enabled(false);
+			else if(bottom.btnfmt_visible())
 			{
-				dlg_formats();
+				m.append("Select formats", [this](menu::item_proxy)
+				{
+					dlg_formats();
+				});
+			}
+
+			auto jitem = m.append("View JSON data", [this](menu::item_proxy)
+			{
+				dlg_json();
 			});
+			jitem.enabled(!bottom.vidinfo.empty() || !bottom.playlist_info.empty());
+			if(!jitem.enabled())
+				vidsel_item = {&m, vidsel_item.pos};
 		}
 
 		if(lbq.at(0).size() > 1)
@@ -2480,6 +2621,247 @@ void GUI::make_form()
 }
 
 
+void GUI::dlg_settings_info(nana::window owner)
+{
+	using namespace nana;
+	using ::widgets::theme;
+
+	themed_form fm {nullptr, owner, {}, appear::decorate{}};
+	fm.caption(title + " - format sorting info");
+	fm.bgcolor(theme.fmbg);
+	fm.center(621 + 40 * (nana::API::screen_dpi(true) >= 144), 680);
+	fm.div("vert margin=20 <weight=284 <> <pic weight=581> <>> <weight=20> <p>");
+
+	paint::image imgdark, imglight;
+	imgdark.open(arr_settings_info_dark_png, sizeof arr_settings_info_dark_png);
+	imglight.open(arr_settings_info_light_png, sizeof arr_settings_info_light_png);
+
+	picture pic {fm};
+	pic.stretchable(true);
+	pic.transparent(true);
+	pic.align(align::center, align_v::center);
+
+	::widgets::Label p {fm, ""};
+
+	p.typeface(paint::font_info {"Tahoma", 10});
+	p.text_align(align::left, align_v::top);
+	p.format(true);
+
+	std::string ptext {R"(By default (when you don't explicitly request a specific format), yt-dlp downloads the best audio/video
+formats, which it judges according to certain parameters. For example, the main criteria that determine the "best" YouTube video format are quality, resolution, and framerate (prioritized in that order).
+
+The four settings pictured above allow you to change what yt-dlp considers "the best" in each of those categories, at the same time reordering how the categories are prioritised. For example, if you
+select "1080" for the preferred resolution, then yt-dlp will consider 1080p to be the best resolution, instead of the highest available. With the preferences configured like in the above picture, yt-dlp will first identify all the video formats with 1080p resolution, then out of those, all with .mp4 extension, and out of those, all with the highest framerate, and so on until one format is chosen.
+
+Of course, this is all optional – you can select "none" for each of these settings to let yt-dlp use its default priorities. Also, the program only uses these settings when you don't request a specific format
+(like <bold color=0x>-f 303+251</>, or <bold color=0x>-f ba</>).
+
+The program lets you manually select formats from a list, but it should be clear that you don't have to
+do that. That feature can be useful in certain cases, but yt-dlp does a good job of automatically selecting the best formats for whatever you're downloading. The four preferences discussed here
+(which the program communicates to yt-dlp with the <bold color=0x>-S</> argument) should be enough to ensure that in most cases, you can just click the download button without worrying about formats.)"};
+
+	fm["pic"] << pic;
+	fm["p"] << p;
+
+	drawing {fm}.draw([&](paint::graphics &g)
+	{
+		if(api::is_window(pic))
+			g.rectangle(rectangle {pic.pos(), pic.size()}.pare_off(-1), false, theme.border);
+	});
+
+	fm.theme_callback([&, this](bool dark)
+	{
+		apply_theme(dark);
+		fm.bgcolor(theme.fmbg);
+		pic.load(dark ? imgdark : imglight);
+		p.caption(std::regex_replace(ptext, std::regex {"\\b(0x)"}, theme.is_dark() ? "0xd0c0b0" : "0x708099"));
+		return false;
+	});
+
+	if(conf.cbtheme == 2)
+		fm.system_theme(true);
+	else fm.dark_theme(conf.cbtheme == 0);
+
+	fm.collocate();
+	fm.show();
+	fm.modality();
+}
+
+
+void GUI::dlg_json()
+{
+	using widgets::theme;
+	using namespace nana;
+
+	themed_form fm {nullptr, *this, {}, appear::decorate<appear::sizable, appear::minimize, appear::maximize>{}};
+	fm.center(1000, 1006);
+	fm.caption(title + " - JSON viewer");
+	fm.bgcolor(theme.fmbg);
+
+	fm.div("vert margin=20 <tree> <weight=20> <label weight=48>");
+
+	auto &bottom {bottoms.current()};
+	::widgets::JSON_Tree t {fm, bottom.playlist_info.empty() ? bottom.vidinfo : bottom.playlist_info, conf.json_hide_null};
+	::widgets::Label lcmd {fm, ""};
+
+	fm["tree"] << t;
+	fm["label"] << lcmd;
+
+	lcmd.typeface(paint::font_info {"Tahoma", 10});
+	lcmd.text_align(align::left, align_v::top);
+	lcmd.format(true);
+
+	std::string lcmd_text_dark {"<color=0xb0b0b0>The data was obtained from yt-dlp using this command line:</>\n"
+		"<bold color=0xa09080>" + to_utf8(bottom.cmdinfo) + "</>"};
+	std::string lcmd_text_light {"<color=0x707070>The data was obtained from yt-dlp using this command line:</>\n"
+		"<bold color=0x8090a0>" + to_utf8(bottom.cmdinfo) + "</>"};
+	lcmd.events().expose([&]
+	{
+		lcmd.caption(theme.is_dark() ? lcmd_text_dark : lcmd_text_light);
+	});
+
+	t.events().mouse_up([&](const arg_mouse &arg)
+	{
+		if(arg.button == mouse::right_button && t.jdata())
+		{
+			auto file_selector = [&, this] (std::string desc, std::string filter) -> fs::path
+			{
+				filebox fb {fm, false};
+				fb.init_path(bottom.outpath);
+				std::string strname;
+				if(bottom.vidinfo_contains("filename"))
+					strname = bottom.vidinfo["filename"];
+				else if(bottom.vidinfo_contains("_filename"))
+					strname = bottom.vidinfo["_filename"];
+				if(!strname.empty())
+				{
+					strname = strname.substr(0, strname.rfind('.'));
+					fb.init_file(strname);
+				}
+				fb.allow_multi_select(false);
+				fb.add_filter(desc, filter);
+				fb.title("Save as");
+				auto res {fb()};
+				if(res.size())
+					return res.front();
+				return {};
+			};
+
+			::widgets::Menu m;
+			m.item_pixels(dpi_transform(24));
+
+			auto selitem {t.selected()};
+			if(!selitem.empty())
+			{
+				auto seltext {selitem.text()};
+				auto pos {seltext.find(':')};
+				if(pos != -1)				
+				{
+					pos += 3;
+					if(seltext[pos] == '\"')
+					{
+						pos++;
+						seltext.pop_back();
+					}
+					auto val {seltext.substr(pos)};
+					m.append("Copy selected value", [val, this](menu::item_proxy ip)
+					{
+						util::set_clipboard_text(hwnd, to_wstring(val));
+					});
+					m.append_splitter();
+				}
+			}
+
+			m.append("Save as .txt", [&, this](menu::item_proxy ip)
+			{
+				auto path {file_selector("Text file", "*.txt")};
+				if(!path.empty())
+				{
+					std::string text {"Text version of the JSON data for URL: " + to_utf8(bottom.url) + "\n\n"};
+					std::function<void(treebox::item_proxy)> recfn = [&, this](treebox::item_proxy parent)
+					{
+						for(auto node : parent)
+						{
+							if(node.hidden()) continue;
+							auto line {node.text()};
+							if(node.size())
+								line += ':';
+							text += std::string(node.level() - 2, '\t') + line + '\n';
+							if(node.size())
+								recfn(node);
+						}
+					};
+					recfn(t.find("root"));
+					std::ofstream {path} << text;
+				}
+			});
+
+			m.append("Save as .json", [&, this](menu::item_proxy ip)
+			{
+				auto path {file_selector("JSON data format", "*.json")};
+				if(!path.empty())
+					std::ofstream {path} << *t.jdata();
+			});
+
+			m.append("Save as .json (prettified)", [&, this](menu::item_proxy ip)
+			{
+				auto path {file_selector("JSON data format", "*.json")};
+				if(!path.empty())
+					std::ofstream {path} << std::setw(4) << *t.jdata();
+			});
+
+			m.append_splitter();
+
+			m.append("Hide null values", [&, this](menu::item_proxy ip)
+			{
+				conf.json_hide_null = !conf.json_hide_null;
+				ip.checked(conf.json_hide_null);
+
+				std::function<void(treebox::item_proxy)> recfn = [&, this](treebox::item_proxy parent)
+				{
+					for(auto node : parent)
+					{
+						if(node.size())
+							recfn(node);
+						else if(node.text().find(":  null") != -1)
+							node.hide(conf.json_hide_null);
+					}
+				};
+
+				t.auto_draw(false);
+				recfn(t.find("root"));
+				t.auto_draw(true);
+			}).checked(conf.json_hide_null);
+
+			m.popup_await(t, arg.pos.x, arg.pos.y);
+		}
+	});
+
+	drawing {fm}.draw([&](paint::graphics &g)
+	{
+		if(api::is_window(t))
+			g.rectangle(rectangle {t.pos(), t.size()}.pare_off(-1), false, theme.border);
+	});
+
+	fm.events().resized([&] { api::refresh_window(fm); });
+
+	fm.theme_callback([&, this](bool dark)
+	{
+		apply_theme(dark);
+		fm.bgcolor(theme.fmbg);
+		return false;
+	});
+
+	if(conf.cbtheme == 2)
+		fm.system_theme(true);
+	else fm.dark_theme(conf.cbtheme == 0);
+
+	fm.collocate();
+	fm.show();
+	fm.modality();
+}
+
+
 void GUI::dlg_settings()
 {
 	using widgets::theme;
@@ -2510,7 +2892,7 @@ void GUI::dlg_settings()
 			<cbtheme_light weight=66> <weight=20> <cbtheme_system weight=178> > <weight=20>
 		<weight=25 <l_contrast weight=70> <weight=20> <slider> > <weight=20>
 		<sep4 weight=3px> <weight=21>
-		<weight=35 <> <btn_close weight=100> <weight=20> <btn_updater weight=150> <>>
+		<weight=35 <> <btn_close weight=100> <weight=20> <btn_updater weight=150> <weight=20> <btn_info weight=100> <>>
 	)");
 
 	else fm.div(R"(vert margin=20
@@ -2534,7 +2916,7 @@ void GUI::dlg_settings()
 			<cbtheme_light weight=66> <weight=20> <cbtheme_system weight=160> > <weight=20>
 		<weight=25 <l_contrast weight=72> <weight=20> <slider> > <weight=20>
 		<sep4 weight=3px> <weight=21>
-		<weight=35 <> <btn_close weight=100> <weight=20> <btn_updater weight=150> <>>
+		<weight=35 <> <btn_close weight=100> <weight=20> <btn_updater weight=150> <weight=20> <btn_info weight=100> <>>
 	)");
 
 	widgets::Label l_res {fm, "Preferred resolution:"}, l_latest {fm, "Latest version:"},
@@ -2552,7 +2934,10 @@ void GUI::dlg_settings()
 		cb_zeropadding {fm, "Pad the indexed filenames with zeroes"}, cb_playlist_folder {fm, "Put playlists in their own folders"};
 	widgets::Separator sep1 {fm}, sep2 {fm}, sep3 {fm}, sep4 {fm};
 	widgets::Button btn_close {fm, " Close"}, btn_updater {fm, " Updater"}, btn_default {fm, "Reset to default", true},
-		btn_playlist_default {fm, "Reset to default", true};
+		btn_playlist_default {fm, "Reset to default", true}, btn_info {fm, "Info"};
+
+	btn_info.image(arr_info22_ico, sizeof arr_info22_ico);
+	btn_info.events().click([&, this] {dlg_settings_info(fm); });
 	btn_updater.image(arr_updater_ico, sizeof arr_updater_ico);
 	btn_close.events().click([&] {fm.close(); });
 	btn_updater.events().click([&, this]
@@ -2690,6 +3075,7 @@ void GUI::dlg_settings()
 	fm["gpupdate"] << gpupdate;
 	fm["sep3"] << sep3;
 	fm["btn_close"] << btn_close;
+	fm["btn_info"] << btn_info;
 	fm["btn_updater"] << btn_updater;
 	fm["l_maxdl"] << l_maxdl;
 	fm["sb_maxdl"] << sb_maxdl;
@@ -4604,6 +4990,9 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 		if(conf.common_dl_options && cbargs == api::focus_window())
 			gui.bottoms.propagate_cb_options(*this);
 	});
+
+	if(conf.common_dl_options && gui.bottoms.size())
+		com_args.caption(gui.bottoms.at(0).com_args.caption());
 
 	gui.queue_panel.focus();
 	plc.collocate();
