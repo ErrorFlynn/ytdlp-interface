@@ -123,10 +123,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 				auto fwnd {api::focus_window()};
 				auto &bottom {bottoms.current()};
 				if(fwnd != bottom.com_args && fwnd != bottom.tbrate && !lbq.selected().empty())
-				{
-					outbox.clear();
 					remove_queue_item(bottom.url);
-				}
 			}
 		}
 		else if(wparam == VK_APPS)
@@ -2003,7 +2000,14 @@ void GUI::pop_queue_menu(int x, int y)
 		});
 		m.append("Remove " + item_name, [url, this](menu::item_proxy)
 		{
-			std::thread {[url, this] {remove_queue_item(url); }}.detach();
+			static timer t;
+			t.interval(std::chrono::milliseconds {10});
+			t.elapse([url, this]
+			{
+				t.stop();
+				remove_queue_item(url);
+			});
+			t.start();
 		});
 
 		fs::path file;
