@@ -61,7 +61,7 @@ private:
 	std::thread thr, thr_releases, thr_versions, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.2.1"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
+	const std::string ver_tag {"v2.2.2"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
 		ytdlp_fname {X64 ? "yt-dlp.exe" : "yt-dlp_x86.exe"};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
@@ -672,7 +672,7 @@ private:
 	void dlg_json();
 	void dlg_sections();
 	void dlg_playlist();
-	void pop_queue_menu(int x, int y);
+	std::wstring pop_queue_menu(int x, int y);
 	void make_columns_menu(nana::menu *m = nullptr);
 	void make_queue_listbox();
 	void dlg_formats();

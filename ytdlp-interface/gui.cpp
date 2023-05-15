@@ -131,7 +131,13 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 			auto curpos {api::cursor_position()};
 			api::calc_window_point(*this, curpos); 
 			auto pos {btn_qact.pos()};
-			pop_queue_menu(pos.x, pos.y);
+			auto url {pop_queue_menu(pos.x, pos.y)};
+			if(!url.empty())
+			{
+				lbq.auto_draw(false);
+				remove_queue_item(url);
+				lbq.auto_draw(true);
+			}
 		}
 		return true;
 	});
@@ -580,6 +586,7 @@ void GUI::dlg_formats()
 			{
 				if(fmt["filesize"] != nullptr)
 					filesize = util::int_to_filesize(fmt["filesize"]);
+				else filesize = "null";
 			}
 			else filesize = "---";
 			unsigned catidx {0};
@@ -1958,10 +1965,11 @@ void GUI::dlg_sections()
 }
 
 
-void GUI::pop_queue_menu(int x, int y)
+std::wstring GUI::pop_queue_menu(int x, int y)
 {
 	using namespace nana;
 
+	std::wstring url_of_item_to_delete;
 	::widgets::Menu m;
 	m.item_pixels(dpi_transform(24));
 	auto sel {lbq.selected()};
@@ -1998,16 +2006,9 @@ void GUI::pop_queue_menu(int x, int y)
 			on_btn_dl(url);
 			api::refresh_window(bottom.btndl);
 		});
-		m.append("Remove " + item_name, [url, this](menu::item_proxy)
+		m.append("Remove " + item_name, [&, url, this](menu::item_proxy)
 		{
-			static timer t;
-			t.interval(std::chrono::milliseconds {10});
-			t.elapse([url, this]
-			{
-				t.stop();
-				remove_queue_item(url);
-			});
-			t.start();
+			url_of_item_to_delete = url;
 		});
 
 		fs::path file;
@@ -2199,6 +2200,7 @@ void GUI::pop_queue_menu(int x, int y)
 	make_columns_menu(m.create_sub_menu(m.append("Extra columns").index()));
 	m.popup_await(lbq, x, y);
 	vidsel_item.m = nullptr;
+	return url_of_item_to_delete;
 }
 
 
@@ -2494,7 +2496,15 @@ void GUI::make_queue_listbox()
 		if(arg.is_left_button() && dragging)
 			dragstop_fn();
 		else if(arg.button == mouse::right_button)
-			pop_queue_menu(arg.pos.x, arg.pos.y);
+		{
+			auto url {pop_queue_menu(arg.pos.x, arg.pos.y)};
+			if(!url.empty())
+			{
+				lbq.auto_draw(false);
+				remove_queue_item(url);
+				lbq.auto_draw(true);
+			}
+		}
 	});
 
 	lbq.events().mouse_leave([this]
@@ -2618,7 +2628,13 @@ void GUI::make_form()
 
 	btn_qact.events().click([this]
 	{
-		pop_queue_menu(btn_qact.pos().x, btn_qact.pos().y + btn_qact.size().height);
+		auto url {pop_queue_menu(btn_qact.pos().x, btn_qact.pos().y + btn_qact.size().height)};
+		if(!url.empty())
+		{
+			lbq.auto_draw(false);
+			remove_queue_item(url);
+			lbq.auto_draw(true);
+		}
 	});
 
 	plc.collocate();
