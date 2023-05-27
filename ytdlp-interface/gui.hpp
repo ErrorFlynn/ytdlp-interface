@@ -41,8 +41,8 @@ public:
 		bool cbsplit {false}, cbchaps {false}, cbsubs {false}, cbthumb {false}, cbtime {true}, cbkeyframes {false}, cbmp3 {false},
 			cbargs {false}, kwhilite {true}, pref_fps {false}, cb_lengthyproc {true}, common_dl_options {true}, cb_autostart {true},
 			cb_queue_autostart {false}, gpopt_hidden {false}, open_dialog_origin {false}, cb_zeropadding {true}, cb_playlist_folder {true},
-			zoomed {false}, get_releases_at_startup {true}, col_format {false}, col_format_note {false}, col_ext {false}, col_fsize {false},
-			col_adjust_width {true}, json_hide_null {false};
+			zoomed {false}, get_releases_at_startup {true}, col_format {false}, col_format_note {true}, col_ext {true}, col_fsize {false},
+			json_hide_null {false}, col_site_icon {true}, col_site_text {false}, ytdlp_nightly {false}, audio_multistreams {false};
 		nana::rectangle winrect;
 		int dpi {96};
 	}
@@ -61,7 +61,7 @@ private:
 	std::thread thr, thr_releases, thr_versions, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.2.2"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
+	const std::string ver_tag {"v2.3.0"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
 		ytdlp_fname {X64 ? "yt-dlp.exe" : "yt-dlp_x86.exe"};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
@@ -92,6 +92,18 @@ private:
 			auto self {std::chrono::days{day} + std::chrono::months{month} + std::chrono::years{year}};
 			auto other {std::chrono::days{o.day} + std::chrono::months{o.month} + std::chrono::years{o.year}};
 			return self > other;
+		}
+		bool operator == (const version_t &o)
+		{
+			auto self {std::chrono::days{day} + std::chrono::months{month} + std::chrono::years{year}};
+			auto other {std::chrono::days{o.day} + std::chrono::months{o.month} + std::chrono::years{o.year}};
+			return self == other;
+		}
+		bool operator != (const version_t &o)
+		{
+			auto self {std::chrono::days{day} + std::chrono::months{month} + std::chrono::years{year}};
+			auto other {std::chrono::days{o.day} + std::chrono::months{o.month} + std::chrono::years{o.year}};
+			return self != other;
 		}
 	}
 	ver_ffmpeg, ver_ffmpeg_latest, ver_ytdlp, ver_ytdlp_latest;
@@ -146,6 +158,67 @@ private:
 		}
 	}
 	cur_ver {ver_tag};
+
+
+	struct favicon_t
+	{
+		using image = nana::paint::image;
+		using callback = std::function<void(image&)>;
+
+		favicon_t() = default;
+
+		void add(std::string favicon_url, callback fn)
+		{
+			if(img.empty())
+			{
+				std::lock_guard<std::mutex> lock {mtx};
+				callbacks.push_back(std::move(fn));
+				if(!thr.joinable())
+					thr = std::thread {[favicon_url, this]
+					{
+						working = true;
+						if(!favicon_url.empty())
+						{
+							std::string res, error;
+							res = util::get_inet_res(favicon_url.data(), &error);
+							if(working)
+							{
+								std::lock_guard<std::mutex> lock {mtx};
+								if(!img.open(res.data(), res.size()))
+									img.open(arr_url22_png, sizeof arr_url22_png);
+								while(!callbacks.empty())
+								{
+									callbacks.back()(img);
+									callbacks.pop_back();
+								}
+								working = false;
+								if(thr.joinable())
+									thr.detach();
+							}
+						}
+					}};
+			}
+			else fn(img);
+		}
+
+		~favicon_t()
+		{
+			if(thr.joinable())
+			{
+				working = false;
+				thr.join();
+			}
+		}
+
+		operator const image &() const { return img; }
+
+	private:
+		image img;
+		std::thread thr;
+		std::mutex mtx;
+		bool working {false};
+		std::vector<callback> callbacks;
+	};
 
 
 	class gui_bottom : public nana::panel<true>
@@ -471,6 +544,8 @@ private:
 				using namespace nana;
 				using ::widgets::theme;
 
+				const auto &text {buffers[current_]};
+
 				if(arg.button == mouse::right_button)
 				{
 					::widgets::Menu m;
@@ -478,11 +553,8 @@ private:
 
 					m.append("Copy to clipboard", [&, this](menu::item_proxy)
 					{
-						SendMessageA(pgui->hwnd, WM_SETREDRAW, FALSE, 0);
-						select(true);
-						copy();
-						select(false);
-						SendMessageA(pgui->hwnd, WM_SETREDRAW, TRUE, 0);
+						util::set_clipboard_text(pgui->hwnd, to_wstring(text));
+
 						if(!thr.joinable()) thr = std::thread([this]
 						{
 							working = true;
@@ -516,6 +588,22 @@ private:
 							}
 						});
 					}).enabled(arg.window_handle == handle());
+
+					if(!current_.empty() && pgui->lbq.at(pgui->lbq.selected().front()).text(3) != "error")
+					{
+						m.append("Copy command only", [&, this](menu::item_proxy)
+						{
+							auto pos {text.find_first_of("\r\n")};
+							if(pos != -1)
+							{
+								auto pos2 {text.find(':') + 2};
+								auto cmd {to_wstring(text.substr(pos2, pos-pos2))};
+								util::set_clipboard_text(pgui->hwnd, cmd);
+							}
+						}).enabled(arg.window_handle == handle());
+
+						m.append_splitter();
+					}
 
 					m.append("Keyword highlighting", [&, this](menu::item_proxy)
 					{
@@ -667,6 +755,7 @@ private:
 	widgets::Button btn_qact {queue_panel, "Queue actions", true}, btn_settings {queue_panel, "Settings", true};
 	std::wstring qurl;
 	widgets::path_label l_url {queue_panel, &qurl};
+	std::unordered_map<std::string, favicon_t> favicons;
 
 	void dlg_settings_info(nana::window owner);
 	void dlg_json();
@@ -682,7 +771,9 @@ private:
 	void make_form();
 	bool apply_theme(bool dark);
 	void get_releases();
-	void get_releases_misc(bool ytdlp_only = false);
+	void get_latest_ffmpeg();
+	void get_latest_ytdlp();
+	//void get_releases_misc(bool ytdlp_only = false);
 	void get_versions();
 	bool is_ytlink(std::wstring text);
 	void change_field_attr(nana::place &plc, std::string field, std::string attr, unsigned new_val);
@@ -696,30 +787,40 @@ private:
 	void remove_queue_item(std::wstring url);
 	std::wstring next_startable_url(std::wstring current_url = L"current");
 
-	void adjust_lbq_headers(bool resize_window = false)
+	bool lbq_has_scrollbar()
 	{
-		auto zero  {dpi_transform(30)},
-		     one   {dpi_transform(120) + dpi_transform(16 * lbq.scroll_operation()->visible(true))},
-		     two   {dpi_transform(600)},
-		     three {dpi_transform(116)},
-		     four  {dpi_transform(130) * lbq.column_at(4).visible()},
-		     five  {dpi_transform(160) * lbq.column_at(5).visible()},
-		     six   {dpi_transform(60) * lbq.column_at(6).visible()},
-		     seven {dpi_transform(90) * lbq.column_at(7).visible()};
+		nana::paint::graphics g {{100, 100}};
+		g.typeface(lbq.typeface());
+		const auto text_height {g.text_extent_size("mm").height};
+		const auto item_height {text_height + lbq.scheme().item_height_ex};
+		if(lbq.at(0).size() * item_height > lbq.size().height - 25)
+			return true;
+		return false;
+	}
+
+	void adjust_lbq_headers()
+	{
+		using namespace util;
+
+		auto zero  {scale(30)},
+		     one   {scale(20 + !conf.col_site_text * 10) * conf.col_site_icon + scale(110) * conf.col_site_text},
+		     three {scale(116)},
+		     four  {scale(130) * lbq.column_at(4).visible() + scale(16) * lbq_has_scrollbar()},
+		     five  {scale(150) * lbq.column_at(5).visible()},
+		     six   {scale(60) * lbq.column_at(6).visible()},
+		     seven {scale(90) * lbq.column_at(7).visible()};
 		
-		const bool extra_colums {four || five || six || seven};
-		if(extra_colums)
-			lbq.column_at(2).width(std::max(unsigned(two), lbq.size().width - (zero+one+three+four+five+six+seven) - dpi_transform(9)));
-		else lbq.column_at(2).width(lbq.size().width - (zero + one + three) - dpi_transform(9));
-		unsigned new_width {unsigned(dpi_transform(49)) + zero + one + (extra_colums ? two : dpi_transform(685)) + three + four + five + six + seven};
-		
-		if(resize_window)
+		if(conf.col_site_icon || conf.col_site_text)
 		{
-			const unsigned min_width {unsigned(dpi_transform(1000))};
-			if(new_width < min_width)
-				new_width = min_width;
-			size({new_width, size().height});
+			lbq.column_at(1).width(one);
+			lbq.column_at(1).text(conf.col_site_text ? "Website" : "");
+			if(!lbq.column_at(1).visible())
+				lbq.column_at(1).visible(true);
 		}
+		else lbq.column_at(1).visible(false);
+
+		const auto two_computed {lbq.size().width - (zero + one + three + four + five + six + seven) - scale(9)};
+		lbq.column_at(2).width(two_computed);
 	}
 
 	public:

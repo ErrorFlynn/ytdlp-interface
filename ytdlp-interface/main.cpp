@@ -200,7 +200,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				GUI::conf.col_format_note = jconf["queue_columns"]["format_note"];
 				GUI::conf.col_ext = jconf["queue_columns"]["ext"];
 				GUI::conf.col_fsize = jconf["queue_columns"]["fsize"];
-				GUI::conf.col_adjust_width = jconf["queue_columns"]["adjust_window_width"];
 			}
 			if(jconf.contains("output_template_bandcamp")) // v2.1
 			{
@@ -210,12 +209,16 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			{
 				GUI::conf.json_hide_null = jconf["json_hide_null"];
 			}
+			if(jconf.contains("ytdlp_nightly")) // v2.3
+			{
+				GUI::conf.col_site_icon = jconf["queue_columns"]["website_icon"];
+				GUI::conf.col_site_text = jconf["queue_columns"]["website_text"];
+				GUI::conf.ytdlp_nightly = jconf["ytdlp_nightly"];
+				GUI::conf.audio_multistreams = jconf["audio_multistreams"];
+			}
 		}
 	}
-	else
-	{
-		GUI::conf.outpath = util::get_sys_folder(FOLDERID_Downloads);
-	}
+	else GUI::conf.outpath = util::get_sys_folder(FOLDERID_Downloads);
 
 	GUI gui;
 	if(jconf.contains("playsel_strings"))
@@ -283,9 +286,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["queue_columns"]["format_note"] = GUI::conf.col_format_note;
 		jconf["queue_columns"]["ext"] = GUI::conf.col_ext;
 		jconf["queue_columns"]["fsize"] = GUI::conf.col_fsize;
-		jconf["queue_columns"]["adjust_window_width"] = GUI::conf.col_adjust_width;
+		jconf["queue_columns"]["website_icon"] = GUI::conf.col_site_icon;
+		jconf["queue_columns"]["website_text"] = GUI::conf.col_site_text;
 		jconf["output_template_bandcamp"] = to_utf8(GUI::conf.output_template_bandcamp);
 		jconf["json_hide_null"] = GUI::conf.json_hide_null;
+		jconf["ytdlp_nightly"] = GUI::conf.ytdlp_nightly;
+		jconf["audio_multistreams"] = GUI::conf.audio_multistreams;
 
 		if(jconf.contains("playsel_strings"))
 			jconf.erase("playsel_strings");

@@ -29,7 +29,31 @@
 	#undef small
 #endif
 
+#ifdef min
+	#undef min
+#endif
+
 namespace fs = std::filesystem;
+
+struct lbqval_t
+{
+	std::wstring url;
+	nana::paint::image *pimg {nullptr};
+	operator const nana::paint::image *() const { return pimg; }
+	operator const nana::paint::image *() { return pimg; }
+	operator const std::wstring &() const { return url; }
+	operator const std::wstring &() { return url; }
+	bool operator == (const lbqval_t &o)
+	{
+		return url == o.url;
+	}
+};
+
+static bool operator == (const lbqval_t &val, const std::wstring &url)
+{
+	return val.url == url;
+}
+
 
 namespace widgets
 {
@@ -43,7 +67,8 @@ namespace widgets
 		nana::color nimbus, fmbg, Label_fg, Text_fg, Text_fg_error, cbox_fg, btn_bg, btn_fg, path_bg, path_fg, path_link_fg, 
 			sep_bg, tbfg, tbbg, tbkw, tbkw_id, tbkw_special, tbkw_warning, tbkw_error, gpbg, lb_headerbg, title_fg, overlay_fg, border,
 			tb_selbg, tb_selbg_unfocused, expcol_fg, tree_selbg, tree_selfg, tree_hilitebg, tree_hilitefg, tree_selhilitebg, tree_selhilitefg,
-			tree_parent_node, tree_expander, tree_expander_hovered, tree_bg, tree_key_fg, tree_val_fg;
+			tree_parent_node, tree_expander, tree_expander_hovered, tree_bg, tree_key_fg, tree_val_fg, list_check_highlight_fg,
+			list_check_highlight_bg;
 		std::string gpfg;
 
 		void make_light()
@@ -70,7 +95,7 @@ namespace widgets
 			tbkw_id = color {"#777"};
 			tbkw_special = color {"#722"};
 			tbkw_warning = color {"#B96C00"};
-			tbkw_error = color {"#aa2222"};;
+			tbkw_error = color {"#aa2222"};
 			overlay_fg = color {"#bcc0c3"};
 			border = color {"#9CB6C5"};
 			tb_selbg = color {"#5695D3"};
@@ -87,6 +112,8 @@ namespace widgets
 			tree_bg = fmbg;
 			tree_key_fg = color {"#459"};
 			tree_val_fg = color {"#474"};
+			list_check_highlight_fg = color {"#036"};
+			list_check_highlight_bg = color {"#D5D8e0"};
 		}
 
 		void make_dark()
@@ -130,6 +157,8 @@ namespace widgets
 			tree_bg = gpbg;
 			tree_key_fg = color {"#ebebe3"};
 			tree_val_fg = color {"#d8e8ff"};
+			list_check_highlight_fg = colors::white;
+			list_check_highlight_bg = color {"#6D4941"};
 		}
 
 		bool is_dark() { return dark; }
@@ -428,11 +457,9 @@ namespace widgets
 	class Listbox : public nana::listbox
 	{
 		nana::drawing dw {*this};
-		bool hicontrast {false};
+		bool hicontrast {false}, hilite_checked {false};
 
 	public:
-
-		index_pairs highlighted_lines;
 
 		Listbox(nana::window parent, bool hicontrast = false) : listbox {parent}, hicontrast {hicontrast}
 		{
@@ -448,13 +475,28 @@ namespace widgets
 			return count;
 		}
 
+		std::string favicon_url_from_value(std::wstring val)
+		{
+			auto pos {val.rfind('.')};
+			if(pos != -1)
+			{
+				while(++pos < val.size())
+					if(!isalpha(val[pos]))
+						break;
+				return nana::to_utf8(val.substr(0, pos)) + "/favicon.ico";
+			}
+			return "";
+		}
+
 		auto item_from_value(std::wstring val, size_t cat = 0)
 		{
 			for(auto item : at(cat))
-				if(item.value<std::wstring>() == val)
+				if(item.value<lbqval_t>() == val)
 					return item;
 			return at(cat).end();
 		}
+
+		void hilight_checked(bool enable) { hilite_checked = enable; refresh_theme(); }
 
 		void refresh_theme()
 		{
@@ -487,15 +529,14 @@ namespace widgets
 				scheme().item_highlighted = color {"#eee"}.blend(colors::dark_grey, .25 - c / 2);
 				dw.clear();
 			}
-
-			for(const auto &ip : highlighted_lines)
+			if(hilite_checked)
 			{
-				try
+				auto chk {checked()};
+				for(const auto &el : chk)
 				{
-					at(ip).fgcolor(theme.is_dark() ? color {"#d4c6aa"} : colors::green);
-					at(ip).bgcolor(theme.tbbg.blend(theme.is_dark() ? color {"#eee"} : color {"#222"}, .06));
+					at(el).fgcolor(theme.list_check_highlight_fg);
+					at(el).bgcolor(theme.list_check_highlight_bg);
 				}
-				catch(...) {}
 			}
 		}
 	};
@@ -875,6 +916,7 @@ namespace widgets
 			{
 				if(!attr.enabled) return;
 				using namespace nana;
+				using util::scale;
 				const unsigned margin {8};
 				const color 
 					fg_normal {theme.is_dark() ? "#e6e6e3" : "#678"},
@@ -899,14 +941,6 @@ namespace widgets
 
 				if(attr.checked)
 				{
-					auto scale = [](int val)
-					{
-						const static double dpi {static_cast<double>(API::screen_dpi(true))};
-						if(dpi != 96)
-							val = round(val * dpi / 96);
-						return val;
-					};
-
 					int sx {(28 - scale(8)) / 2},
 						sy {r.y + (static_cast<int>(r.height) - scale(4)) / 2};
 
@@ -1033,10 +1067,7 @@ namespace widgets
 						g.line({x + w/2, y}, {x + w, y + w/2});
 					}
 				};
-				int pad {4};
-				const double dpi {static_cast<double>(nana::API::screen_dpi(true))};
-				if(dpi > 96)
-					pad = round(pad * dpi / 96.0);
+				int pad {util::scale(4)};
 
 				const auto w {g.width() - pad * 2};
 				auto x {pad}, y {pad + (int)(g.height()/2 - w/1.5)};
@@ -1264,10 +1295,7 @@ namespace widgets
 
 		void create(nana::window parent, const json &data, bool hide_null = false)
 		{
-			unsigned icon_size {16};
-			double dpi {static_cast<double>(nana::API::screen_dpi(true))};
-			if(dpi != 96)
-				icon_size = round(icon_size * dpi / 96);
+			unsigned icon_size {util::scale_uint(16)};
 
 			jptr = &data;
 			no_nulls = hide_null;
@@ -1435,3 +1463,115 @@ namespace widgets
 		}		
 	};
 }
+
+
+class inline_widget : public nana::listbox::inline_notifier_interface
+{
+	virtual void create(nana::window wd) override
+	{
+		using widgets::theme;
+
+		pic.create(wd);
+		pic.align(nana::align::center, nana::align_v::center);
+		pic.transparent(true);
+		pic.stretchable(true);
+		pic.events().click([this]{indicator_->selected(pos_);});
+		pic.events().mouse_move([this]{indicator_->hovered(pos_);});
+
+		text.create(wd);
+		text.transparent(true);
+		text.text_align(nana::align::left, nana::align_v::center);
+		text.typeface(nana::paint::font_info {"Calibri", 12});
+		text.events().click([this]{indicator_->selected(pos_);});
+		text.events().mouse_move([this]{indicator_->hovered(pos_);});
+	}
+
+	virtual void activate(inline_indicator &ind, index_type pos)
+	{
+		indicator_ = &ind;
+		pos_ = pos;
+		if(!lb) lb = dynamic_cast<widgets::Listbox*>(&indicator_->host());
+		text.fgcolor(lb->fgcolor());
+	}
+
+	void resize(const nana::size &sz) override
+	{
+		const unsigned picsz {std::min(util::scale_uint(18), sz.height)};
+		int pic_centered {int(sz.width-picsz)/2};
+		if(conf)
+		{
+			pic.move({conf > 1 ? 1 : int(sz.width - picsz) / 2, (sz.height > picsz ? int(sz.height - picsz) / 2 + 1 : int(picsz) + 1), picsz, picsz});
+			if(conf > 1) text.move({conf == 2 ? 4 : int(picsz) + 6, 0, conf == 2 ? sz.width - 4 : sz.width - (picsz + 5), sz.height});
+		}
+	}
+
+	virtual void set(const value_type &value)
+	{
+		if(!value.empty() && text.caption().substr(0, 8) != value.substr(0, 8))
+		{
+			if(value.front() == '%')
+			{
+				conf = value[1] - 0x30;
+				if(conf > 1)
+					text.show();
+				else text.hide();
+				if(conf == 1 || conf == 3)
+					pic.show();
+				else pic.hide();
+				indicator_->modify(pos_, value.substr(2));
+			}
+			else
+			{
+				if(value.size() < 4)
+					text.caption(value);
+				else 
+				{
+					clip_text(value);
+					auto pimg {lb->at(pos_).value<lbqval_t>().pimg};
+					if(pimg) pic.load(*pimg);
+				}
+				if(lb->column_at(1).visible())
+				{
+					const auto w {lb->column_at(1).width()};
+					if(w == util::scale(30))
+						conf = 1;
+					else if(w == util::scale(130))
+						conf = 3;
+					else conf = 2;
+				}
+				else conf = 0;
+				if(conf > 1)
+					text.show();
+				else text.hide();
+				if(conf == 1 || conf == 3)
+					pic.show();
+				else pic.hide();
+			}
+		}
+	}
+
+	void clip_text(const std::string &str)
+	{
+		const auto max_pixels {text.size().width};
+		int offset {0};
+		text.caption(str);
+		const auto strsize {str.size()};
+		while(text.measure(1234).width > max_pixels)
+		{
+			offset += 1;
+			if(strsize - offset < 4)
+				break;
+			text.caption(str.substr(0, strsize - offset) + "...");
+		}
+	};
+
+	bool whether_to_draw() const override { return false; }
+	void notify_status(status_type status, bool status_on) override {}
+
+	inline_indicator *indicator_ {nullptr};
+	index_type pos_;
+	nana::label text;
+	nana::picture pic;
+	widgets::Listbox *lb {nullptr};
+	int conf {3};
+};

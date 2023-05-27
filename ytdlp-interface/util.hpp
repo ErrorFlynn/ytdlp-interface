@@ -44,6 +44,8 @@ namespace util
 	std::wstring get_clipboard_text();
 	void set_clipboard_text(HWND hwnd, std::wstring text);
 	bool is_dir_writable(fs::path dir);
+	int scale(int val); // DPI scaling
+	unsigned scale_uint(unsigned val); // DPI scaling
 }
 
 // https://github.com/qPCR4vir/nana-demo/blob/master/Examples/windows-subclassing.cpp

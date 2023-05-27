@@ -159,8 +159,13 @@ int themed_form::dpi_transform(int val, double from_dpi)
 bool themed_form::center(double w, double h)
 {
 	using namespace nana;
-	const auto maxh {screen {}.from_window(*this).area().dimension().height};
-	const auto maxw {screen {}.from_window(*this).area().dimension().width};
+
+	auto hmon {MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)};
+	MONITORINFO moninfo {};
+	moninfo.cbSize = sizeof(MONITORINFO);
+	GetMonitorInfo(hmon, &moninfo);
+	const auto maxh {moninfo.rcWork.bottom};
+	const auto maxw {screen {}.from_window(*this).area().width};
 	auto r {API::make_center(w ? dpi_transform_size(w, h) : size())};
 	move(r);
 	const auto sz {API::window_outline_size(*this)};

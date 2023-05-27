@@ -499,3 +499,19 @@ bool util::is_dir_writable(fs::path dir)
 	}
 	return false;
 }
+
+int util::scale(int val)
+{
+	const static double dpi {static_cast<double>(nana::API::screen_dpi(true))};
+	if(dpi != 96)
+		val = round(val * dpi / 96);
+	return val;
+};
+
+unsigned util::scale_uint(unsigned val)
+{
+	const static double dpi {static_cast<double>(nana::API::screen_dpi(true))};
+	if(dpi != 96)
+		val = round(val * dpi / 96);
+	return val;
+}

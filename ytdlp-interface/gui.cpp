@@ -77,7 +77,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 		{
 			restore();
 			bring_top(true);
-			center(1000, 800 - bottoms.current().expcol.collapsed() * 240);
+			center(1000, 708 - bottoms.current().expcol.collapsed() * 240);
 		}
 		return true;
 	});
@@ -113,7 +113,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 			if(GetAsyncKeyState(VK_CONTROL) & 0xff00)
 			{
 				if(is_zoomed(true)) restore();
-				center(1000, 800 - bottoms.current().expcol.collapsed() * 240);
+				center(1000, 708 - bottoms.current().expcol.collapsed() * 240);
 			}
 		}
 		else if(wparam == VK_DELETE)
@@ -123,7 +123,10 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 				auto fwnd {api::focus_window()};
 				auto &bottom {bottoms.current()};
 				if(fwnd != bottom.com_args && fwnd != bottom.tbrate && !lbq.selected().empty())
+				{
+					outbox.clear(bottom.url);
 					remove_queue_item(bottom.url);
+				}
 			}
 		}
 		else if(wparam == VK_APPS)
@@ -261,7 +264,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 		{
 			auto text {item.text(3)};
 			if(text != "done" && text != "error")
-				conf.unfinished_queue_items.push_back(to_utf8(item.value<std::wstring>()));
+				conf.unfinished_queue_items.push_back(to_utf8(item.value<lbqval_t>().url));
 		}			
 	});
 
@@ -269,7 +272,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 		add_url(to_wstring(url));
 
 	if(conf.cb_queue_autostart && lbq.at(0).size())
-		on_btn_dl(lbq.at(0).at(0).value<std::wstring>());
+		on_btn_dl(lbq.at(0).at(0).value<lbqval_t>());
 
 	center(MINW, MINH);
 	show_queue(false);
@@ -299,7 +302,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 			api::window_outline_size(*this, sz);
 		}
 	}
-	else center(1000, 800);
+	else center(1000, 708);
 	bring_top(true);
 	if(conf.zoomed) zoom(true);
 	no_draw_freeze = false;
@@ -333,7 +336,8 @@ void GUI::dlg_formats()
 	fm.caption(title + " - manual selection of formats");
 	fm.bgcolor(theme.fmbg);
 	fm.div(R"(
-			vert margin=20 <weight=180px 
+			vert margin=20
+				<weight=180px 
 					<thumb weight=320px> <weight=20px>
 					<vert
 						<l_title weight=27px> <weight=10px>
@@ -344,8 +348,9 @@ void GUI::dlg_formats()
 						<weight=28px <l_date weight=45%> <weight=10> <l_datetext> > <weight=15px>
 						<sep2 weight=3px>
 					>
-				 >
-				<weight=20> <lbformats> <weight=20>
+				>
+				<weight=20> <cb_streams weight=25>
+				<weight=20> <list> <weight=20>
 				<weight=35 <><btncancel weight=420> <weight=20> <btnok weight=420><>>
 		)");
 
@@ -355,7 +360,9 @@ void GUI::dlg_formats()
 	::widgets::Text l_durtext {fm, "", true}, l_chaptext {fm, "", true}, l_upltext {fm, "", true}, l_datetext {fm, "", true};
 	nana::picture thumb {fm};
 	::widgets::Separator sep1 {fm}, sep2 {fm};
-	::widgets::Listbox lbformats {fm};
+	::widgets::cbox cb_streams {fm, "Select multiple audio formats to merge into .mkv file as audio tracks "
+		"(this passes --audio-multistreams to yt-dlp)"};
+	::widgets::Listbox list {fm, true};
 	::widgets::Button btnok {fm, "Use the selected format(s)"}, btncancel {fm, "Let yt-dlp choose the best formats (default)"};
 
 	fm["l_title"] << l_title;
@@ -370,41 +377,126 @@ void GUI::dlg_formats()
 	fm["thumb"] << thumb;
 	fm["sep1"] << sep1;
 	fm["sep2"] << sep2;
-	fm["lbformats"] << lbformats;
+	fm["cb_streams"] << cb_streams;
+	fm["list"] << list;
 	fm["btncancel"] << btncancel;
 	fm["btnok"] << btnok;
 
-	lbformats.enable_single(true, true);
-	lbformats.append_header("format", dpi_transform(280));
-	lbformats.append_header("acodec", dpi_transform(90));
-	lbformats.append_header("vcodec", dpi_transform(90));
-	lbformats.append_header("ext", dpi_transform(50));
-	lbformats.append_header("fps", dpi_transform(32));
-	lbformats.append_header("vbr", dpi_transform(40));
-	lbformats.append_header("abr", dpi_transform(40));
-	lbformats.append_header("asr", dpi_transform(50));
-	lbformats.append_header("filesize", dpi_transform(cnlang ? 170 : 160));
+	cb_streams.check(conf.audio_multistreams);
 
-	lbformats.events().selected([&, this](const arg_listbox &arg)
+	list.sortable(false);
+	list.checkable(true);
+	list.hilight_checked(true);
+	list.enable_single(true, false);
+	list.scheme().text_margin = 10;
+	list.append_header("format", dpi_transform(280));
+	list.append_header("acodec", dpi_transform(90));
+	list.append_header("vcodec", dpi_transform(90));
+	list.append_header("ext", dpi_transform(50));
+	list.append_header("fps", dpi_transform(32));
+	list.append_header("vbr", dpi_transform(40));
+	list.append_header("abr", dpi_transform(40));
+	list.append_header("asr", dpi_transform(50));
+	list.append_header("filesize", dpi_transform(cnlang ? 170 : 160));
+
+	list.events().selected([&](const arg_listbox &arg)
 	{
 		if(arg.item.selected())
+			arg.item.check(!arg.item.checked()).select(false);
+	});
+
+	list.events().mouse_down([&](const arg_mouse &arg)
+	{
+		if(conf.audio_multistreams)
 		{
-			btnok.enabled(true);
-			if(arg.item.pos().cat == 0)
+			auto pos {list.cast({arg.pos.x, arg.pos.y})};
+			if(pos.is_category() && list.at(pos.cat).text() == "Audio only")
 			{
-				if(lbformats.size_categ() == 3)
-				{
-					lbformats.at(1).select(false);
-					lbformats.at(2).select(false);
-				}
-			}
-			else
-			{
-				lbformats.at(0).select(false);
+				list.auto_draw(false);
+				for(auto ip : list.at(pos.cat))
+					ip.check(!ip.checked());
+				list.auto_draw(true);
 			}
 		}
-		else if(lbformats.selected().empty())
-			btnok.enabled(false);
+	});
+
+	list.events().checked([&](const arg_listbox &arg)
+	{
+		auto item {arg.item};
+		auto pos {item.pos()};
+
+		if(item.checked())
+		{
+			item.fgcolor(theme.list_check_highlight_fg);
+			item.bgcolor(theme.list_check_highlight_bg);
+			list.auto_draw(false);
+			if(pos.cat == 0)
+			{
+				for(auto ip : list.at(0))
+					if(ip != item)
+						ip.check(false);
+				if(list.size_categ() == 3)
+					for(auto ip : list.at(2))
+						ip.check(false);
+				if(list.size_categ() > 1 && (!conf.audio_multistreams || list.at(1).text() == "Video only"))
+					for(auto ip : list.at(1))
+						ip.check(false);
+			}
+			else if(list.size_categ() > 1)
+			{
+				if(list.at(pos.cat).text() == "Video only")
+				{
+					for(auto ip : list.at(0))
+						ip.check(false);
+					for(auto ip : list.at(2))
+						if(ip != item)
+							ip.check(false);
+				}
+				else if(!conf.audio_multistreams)
+				{
+					for(auto ip : list.at(1))
+						if(ip != item)
+							ip.check(false);
+					for(auto ip : list.at(0))
+						if(ip != item)
+							ip.check(false);
+				}
+			}
+			list.auto_draw(true);
+		}
+		else 
+		{
+			item.fgcolor(list.fgcolor());
+			item.bgcolor(list.bgcolor());
+		}
+		btnok.enable(!list.checked().empty());
+	});
+
+	cb_streams.events().checked([&]
+	{
+		conf.audio_multistreams = cb_streams.checked();
+		if(!conf.audio_multistreams && list.size_categ() > 1 && list.at(1).text() == "Audio only")
+		{
+			list.auto_draw(false);
+			int count {0};
+			for(auto ip : list.at(0))
+				if(ip.checked())
+				{
+					count++;
+					break;
+				}
+			for(auto ip : list.at(1))
+				if(ip.checked())
+				{
+					if(!count)
+					{
+						count++;
+						continue;
+					}
+					ip.check(false);
+				}
+			list.auto_draw(true);
+		}
 	});
 
 	btncancel.events().click([&, this]
@@ -417,21 +509,79 @@ void GUI::dlg_formats()
 	btnok.events().click([&, this]
 	{
 		auto &bottom {bottoms.current()};
-		auto &strfmt {bottom.strfmt};
-		auto sel {lbformats.selected()};
-		strfmt = lbformats.at(sel.front()).value<std::wstring>();
+		auto &strfmt {bottom.strfmt}, &fmt1 {bottom.fmt1}, &fmt2 {bottom.fmt2};
+		fmt1.clear();
+		fmt2.clear();
+
+		size_t vidcat {0};
+		if(list.size_categ() == 3)
+			vidcat = 2;
+		else if(list.size_categ() == 2 && list.at(1).text() == "Video only")
+			vidcat = 1;
+		
+		bool mergeall {false};
+		if(vidcat == 2)
+		{
+			size_t cnt {0};
+			for(const auto ip : list.at(1))
+				if(ip.checked())
+					cnt++;
+			if(list.at(1).size() == cnt)
+			{
+				fmt2 = L"mergeall";
+				mergeall = true;
+			}
+		}
+
+		auto sel {list.checked()};
+		for(const auto &pos : sel)
+		{
+			auto &val {list.at(pos).value<std::wstring>()};
+			if(pos.cat == vidcat || pos.cat == 0)
+			{
+				fmt1 = std::move(val);
+				if(mergeall) break;
+			}
+			else if(!mergeall)
+			{
+				if(!fmt2.empty())
+					fmt2 += '+';
+				fmt2 += std::move(val);
+			}
+		}
+		strfmt = fmt1;
+		if(!fmt2.empty())
+		{
+			if(!strfmt.empty())
+				strfmt += L'+';
+			strfmt += fmt2;
+		}
+
+		conf.fmt1 = fmt1;
+		conf.fmt2 = fmt2;
+
+		/*auto sel {list.selected()};
+		strfmt = list.at(sel.front()).value<std::wstring>();
 		bottom.fmt1 = conf.fmt1 = strfmt;
 		if(sel.size() > 1)
 		{
-			bottom.fmt2 = conf.fmt2 = lbformats.at(sel.back()).value<std::wstring>();
+			bottom.fmt2 = conf.fmt2 = list.at(sel.back()).value<std::wstring>();
 			strfmt += L'+' + conf.fmt2;
 		}
 		else
 		{
 			bottom.fmt2.clear();
 			conf.fmt2.clear();
-		}
+		}*/
 		bottom.use_strfmt = true;
+		if(bottom.using_custom_fmt())
+		{
+			nana::msgbox mbox {fm, "Warning: conflicting -f arguments"};
+			std::string text {"The \"Custom arguments\" checkbox is checked, and \"-f\" is present as a custom argument.\n\n"
+				"If you don't uncheck that checkbox, the \"-f\" custom argument will override the selection you have made here."};
+			mbox.icon(nana::msgbox::icon_warning);
+			(mbox << text)();
+		}
 		fm.close();
 	});
 
@@ -466,7 +616,7 @@ void GUI::dlg_formats()
 	}
 
 	l_title.caption(title);
-	lbformats.append({"Audio only", "Video only"});
+	list.append({"Audio only", "Video only"});
 
 	int dur {0};
 	bool live {bottom.vidinfo_contains("is_live") && bottom.vidinfo["is_live"] ||
@@ -554,7 +704,7 @@ void GUI::dlg_formats()
 		{
 			if(j[key] == nullptr)
 				return "null";
-			else return std::to_string(unsigned(j[key]));
+			else return std::to_string(j[key].get<unsigned>());
 		}
 		else return "---";
 	};
@@ -565,11 +715,12 @@ void GUI::dlg_formats()
 		{
 			if(j[key] == nullptr)
 				return "null";
-			else return std::string {j[key]};
+			else return j[key].get<std::string>();
 		}
 		else return "---";
 	};
 
+	std::vector<bool> colmask(9, false);
 	for(auto &fmt : vidinfo["formats"])
 	{
 		std::string format {fmt["format"]}, acodec, vcodec, ext, fps, vbr, abr, asr, filesize;
@@ -594,39 +745,37 @@ void GUI::dlg_formats()
 				catidx = 2; // video only
 			else if(vcodec == "none")
 				catidx = 1; // audio only
-			lbformats.at(catidx).append({format, acodec, vcodec, ext, fps, vbr, abr, asr, filesize});
-			auto idstr {to_wstring(std::string {fmt["format_id"]})};
-			auto item {lbformats.at(catidx).back()};
+			list.at(catidx).append({format, acodec, vcodec, ext, fps, vbr, abr, asr, filesize});
+			auto idstr {to_wstring(fmt["format_id"].get<std::string>())};
+			auto item {list.at(catidx).back()};
 			item.value(idstr);
-			if(!bottom.fmt1.empty() || !bottom.fmt2.empty())
-			{
-				if(idstr == bottom.fmt1 || idstr == bottom.fmt2)
-					lbformats.at(catidx).back().select(true);
-			}
-			else if(idstr == conf.fmt1 || idstr == conf.fmt2)
-				lbformats.at(catidx).back().select(true);
+			if(idstr == conf.fmt1 || (conf.audio_multistreams ? conf.fmt2.find(idstr) != -1 : idstr == conf.fmt2))
+				list.at(catidx).back().select(true);
 			if(!format_id1.empty() && format_id1 == to_utf8(idstr))
 				item.text(0, format + " *");
 			if(!format_id2.empty() && format_id2 == to_utf8(idstr))
 				item.text(0, format + " *");
-		}
-	}
-	lbformats.refresh_theme();
-	if(lbformats.size_categ() == 3)
-	{
-		if(lbformats.at(2).size() == 0)
-		{
-			lbformats.erase(2);
-			if(lbformats.at(0).size() == 0)
+			for(int n {1}; n < 9; n++)
 			{
-				lbformats.column_at(2).visible(false);
-				lbformats.column_at(4).visible(false);
-				lbformats.column_at(5).visible(false);
+				const auto text {item.text(n)};
+				if(!colmask[n] && text != "---" && text != "null" && text != "none")
+					colmask[n] = true;
 			}
 		}
-		if(lbformats.at(1).size() == 0)
-			lbformats.erase(1);
 	}
+
+	for(int n {1}; n < 9; n++)
+		list.column_at(n).visible(colmask[n]);
+
+	if(list.size_categ() == 3)
+	{
+		if(list.at(2).size() == 0)
+			list.erase(2);
+		if(list.at(1).size() == 0)
+			list.erase(1);
+	}
+
+	list.refresh_theme();
 
 	fm.events().unload([&]
 	{
@@ -648,7 +797,7 @@ void GUI::dlg_formats()
 		fm.system_theme(true);
 	else fm.dark_theme(conf.cbtheme == 0);
 
-	fm.center(1000, std::max(384.0 + lbformats.item_count() * (cnlang ? 22.4 : 20.4), double(600)));
+	fm.center(1000, std::max(429.0 + list.item_count() * (cnlang ? 22.4 : 20.4), double(600)));
 
 	fm.collocate();
 	fm.show();
@@ -716,7 +865,11 @@ bool GUI::process_queue_item(std::wstring url)
 		if(!bottom.using_custom_fmt())
 		{
 			if(bottom.use_strfmt)
+			{
+				if(bottom.fmt2.find('+') != -1 || bottom.fmt2 == L"mergeall")
+					cmd += L" --audio-multistreams";
 				cmd += L" -f " + bottom.strfmt;
+			}
 			else
 			{
 				std::wstring strpref {L" -S \""};
@@ -1079,10 +1232,12 @@ bool GUI::process_queue_item(std::wstring url)
 
 void GUI::add_url(std::wstring url)
 {
+	using namespace nana;
+
 	auto it {std::find_if(lbq.at(0).begin(), lbq.at(0).end(), [&, this](auto &el)
 	{
 		std::wstring val;
-		try { val = el->value<std::wstring>(); }
+		try { val = el->value<lbqval_t>().url; }
 		catch(std::runtime_error) { return false; }
 		return val == url;
 	})};
@@ -1091,7 +1246,7 @@ void GUI::add_url(std::wstring url)
 	{
 		auto stridx {std::to_string(lbq.at(0).size() + 1)};
 		lbq.at(0).append({stridx, "...", "...", "queued", "...", "...", "...", "..."});
-		lbq.at(0).back().value(url);
+		lbq.at(0).back().value(lbqval_t {url, nullptr});
 		adjust_lbq_headers();
 
 		auto &bottom {bottoms.add(url)};
@@ -1119,6 +1274,21 @@ void GUI::add_url(std::wstring url)
 				}
 			}
 			active_threads++;
+
+			auto favicon_url {lbq.favicon_url_from_value(url)};
+			if(!favicon_url.empty())
+			{
+				auto item {lbq.item_from_value(url)};
+				std::function<void(paint::image &)> cbfn = [favicon_url, url, this](paint::image &img)
+				{
+					auto item {lbq.item_from_value(url)};
+					if(item != lbq.at(0).end())
+					{
+						item.value<lbqval_t>().pimg = &img;
+					}
+				};
+				favicons[favicon_url].add(favicon_url, cbfn);
+			}
 
 			std::wstring fmt_sort {' '}, strpref {L" -S \""};
 			if(conf.pref_res)
@@ -1155,7 +1325,7 @@ void GUI::add_url(std::wstring url)
 					auto ca {outbox.colored_area_access()};
 					ca->clear();
 					auto p {ca->get(0)};
-					p->fgcolor = widgets::theme.is_dark() ? widgets::theme.path_link_fg : nana::color {"#569"};
+					p->fgcolor = ::widgets::theme.is_dark() ? ::widgets::theme.path_link_fg : color {"#569"};
 				}
 				if(!queue_panel.visible() && overlay.visible())
 				{
@@ -1184,7 +1354,7 @@ void GUI::add_url(std::wstring url)
 						if(!bottom.playlist_info.empty())
 						{
 							std::string URL {bottom.playlist_info["entries"][0]["url"]};
-							cmd = L" --no-warnings -j " + fmt_sort + nana::to_wstring(URL);
+							cmd = L" --no-warnings -j " + fmt_sort + to_wstring(URL);
 							media_info = {util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + cmd, &bottom.working_info)};
 							if(media_info.front() == '{')
 							{
@@ -1272,7 +1442,7 @@ void GUI::add_url(std::wstring url)
 					std::vector<std::string> tabs {"videos", "featured", "playlists", "shorts", "streams", "community", "podcasts"};
 					if(bottom.is_ytchan)
 						for(const auto &t : tabs)
-							if(url.rfind(L"/" + nana::to_wstring(t)) == url.size() - t.size() - 1)
+							if(url.rfind(L"/" + to_wstring(t)) == url.size() - t.size() - 1)
 							{
 								tab = "[channel tab] ";
 								break;
@@ -1293,7 +1463,7 @@ void GUI::add_url(std::wstring url)
 							if(m.text(n) == "Select formats" && !bottom.btnfmt_visible())
 								m.erase(n--);
 						}
-						nana::api::refresh_window(m.handle());
+						api::refresh_window(m.handle());
 						vidsel_item.m = nullptr;
 					}
 					active_threads--;
@@ -1428,14 +1598,14 @@ void GUI::add_url(std::wstring url)
 					lbq.item_from_value(url).text(6, "");
 					lbq.item_from_value(url).text(7, "");
 
-					auto cmdline {bottom.playlist_vid_cmdinfo.empty() ? nana::to_utf8(bottom.cmdinfo) : nana::to_utf8(bottom.playlist_vid_cmdinfo)};
+					auto cmdline {bottom.playlist_vid_cmdinfo.empty() ? to_utf8(bottom.cmdinfo) : to_utf8(bottom.playlist_vid_cmdinfo)};
 					outbox.caption("[GUI] got error executing command line: " + cmdline + "\n\n" + media_info + "\n", url);
 					if(outbox.current() == url)
 					{
 						auto ca {outbox.colored_area_access()};
 						ca->clear();
 						auto p {ca->get(0)};
-						p->fgcolor = widgets::theme.is_dark() ? widgets::theme.path_link_fg : nana::color {"#569"};
+						p->fgcolor = ::widgets::theme.is_dark() ? ::widgets::theme.path_link_fg : color {"#569"};
 					}
 					if(!queue_panel.visible() && overlay.visible())
 					{
@@ -1458,7 +1628,7 @@ void GUI::add_url(std::wstring url)
 								break;
 							}
 						}						
-						nana::api::refresh_window(m.handle());
+						api::refresh_window(m.handle());
 						vidsel_item.m = nullptr;
 					}
 				}
@@ -1472,11 +1642,11 @@ void GUI::add_url(std::wstring url)
 					if(m.text(n) == "Select formats" && !bottom.btnfmt_visible())
 						m.erase(n--);
 				}
-				nana::api::refresh_window(m.handle());
+				api::refresh_window(m.handle());
 				vidsel_item.m = nullptr;
 			}
 			active_threads--;
-			if(bottom.working_info)
+			if(bottom.working_info && bottom.info_thread.joinable())
 				bottom.info_thread.detach();
 		});
 	}
@@ -1977,7 +2147,7 @@ std::wstring GUI::pop_queue_menu(int x, int y)
 	{
 		auto item {lbq.at(sel.back())};
 		auto item_name {"item #" + item.text(0)};
-		auto url {item.value<std::wstring>()};
+		auto url {item.value<lbqval_t>().url};
 		auto &bottom {bottoms.current()};
 		const auto is_live {bottom.vidinfo_contains("is_live") && bottom.vidinfo["is_live"] ||
 						   bottom.vidinfo_contains("live_status") && bottom.vidinfo["live_status"] == "is_live"};
@@ -1990,7 +2160,7 @@ std::wstring GUI::pop_queue_menu(int x, int y)
 		{
 			const auto text {item.text(3)};
 			if(text == "done")
-				completed.push_back(item.value<std::wstring>());
+				completed.push_back(item.value<lbqval_t>().url);
 			else if(text.find("stopped") == -1 && text.find("queued") == -1 && text.find("error") == -1)
 				stoppable.push_back(item);
 			else startable.push_back(item);
@@ -2125,7 +2295,7 @@ std::wstring GUI::pop_queue_menu(int x, int y)
 						for(auto item : startable)
 						{
 							if(!menu_working) break;
-							auto url {item.value<std::wstring>()};
+							auto url {item.value<lbqval_t>().url};
 							process_queue_item(url);
 						}
 					});
@@ -2147,7 +2317,7 @@ std::wstring GUI::pop_queue_menu(int x, int y)
 						for(auto item : stoppable)
 						{
 							if(!menu_working) break;
-							auto url {item.value<std::wstring>()};
+							auto url {item.value<lbqval_t>().url};
 							on_btn_dl(url);
 						}
 						if(menu_working)
@@ -2170,7 +2340,7 @@ std::wstring GUI::pop_queue_menu(int x, int y)
 					auto item {lbq.at(0).begin()};
 					while(item != lbq.at(0).end() && menu_working)
 					{
-						auto url {item.value<std::wstring>()};
+						auto url {item.value<lbqval_t>().url};
 						item = lbq.erase(item);
 						auto &bottom {bottoms.at(url)};
 						if(bottom.timer_proc.started())
@@ -2197,7 +2367,30 @@ std::wstring GUI::pop_queue_menu(int x, int y)
 		m.append_splitter();
 	}
 
+	auto update_inline_widgets = [this]
+	{
+		lbq.auto_draw(false);
+		for(auto item : lbq.at(0))
+			item.text(1, '%' + std::to_string(conf.col_site_icon + conf.col_site_text * 2) + item.text(1));
+		lbq.auto_draw(true);
+		adjust_lbq_headers();
+	};
+
 	make_columns_menu(m.create_sub_menu(m.append("Extra columns").index()));
+	auto m2 {m.create_sub_menu(m.append("Website column").index())};
+
+	m2->append("Favicon", [&, this](menu::item_proxy)
+	{
+		conf.col_site_icon = !conf.col_site_icon;
+		update_inline_widgets();
+	}).checked(conf.col_site_icon);
+
+	m2->append("Text", [&, this](menu::item_proxy)
+	{
+		conf.col_site_text = !conf.col_site_text;
+		update_inline_widgets();
+	}).checked(conf.col_site_text);
+
 	m.popup_await(lbq, x, y);
 	vidsel_item.m = nullptr;
 	return url_of_item_to_delete;
@@ -2207,25 +2400,27 @@ std::wstring GUI::pop_queue_menu(int x, int y)
 void GUI::make_queue_listbox()
 {
 	using namespace nana;
+	using namespace util;
 
 	lbq.sortable(false);
 	lbq.enable_single(true, false);
 	lbq.typeface(nana::paint::font_info {"Calibri", 12});
 	lbq.scheme().item_height_ex = 8;
-	lbq.append_header("#", dpi_transform(30));
-	lbq.append_header("Website", dpi_transform(120));
-	lbq.append_header("Media title", dpi_transform(685));
-	lbq.append_header("Status", dpi_transform(116));
-	lbq.append_header("Format", dpi_transform(130));
-	lbq.append_header("Format note", dpi_transform(160));
-	lbq.append_header("Ext", dpi_transform(60));
-	lbq.append_header("Filesize", dpi_transform(90));
+	lbq.append_header("#", scale(30));
+	lbq.append_header("Website", scale(20 + !conf.col_site_text * 10) * conf.col_site_icon + scale(110) * conf.col_site_text);
+	lbq.append_header("Media title", scale(584));
+	lbq.append_header("Status", scale(116));
+	lbq.append_header("Format", scale(130));
+	lbq.append_header("Format note", scale(150));
+	lbq.append_header("Ext", scale(60));
+	lbq.append_header("Filesize", scale(90));
 	lbq.column_movable(false);
 	lbq.column_resizable(false);
 	lbq.column_at(4).visible(conf.col_format);
 	lbq.column_at(5).visible(conf.col_format_note);
 	lbq.column_at(6).visible(conf.col_ext);
 	lbq.column_at(7).visible(conf.col_fsize);
+	lbq.at(0).inline_factory(1, pat::make_factory<inline_widget>());
 
 	lbq.events().resized([this] (const arg_resized &arg) { adjust_lbq_headers(); });
 
@@ -2254,7 +2449,7 @@ void GUI::make_queue_listbox()
 		{
 			lbq_can_drag = true;
 			auto hovitem {lbq.at(hovered)};
-			if(last_selected && last_selected->value<std::wstring>() == hovitem.value<std::wstring>())
+			if(last_selected && last_selected->value<lbqval_t>() == hovitem.value<lbqval_t>())
 			{
 				if(!hovitem.selected())
 				{
@@ -2274,7 +2469,7 @@ void GUI::make_queue_listbox()
 			last_selected = &item;
 			if(!lbq_no_action)
 			{
-				auto url {arg.item.value<std::wstring>()};
+				const auto &url {arg.item.value<lbqval_t>().url};
 				if(url != bottoms.visible())
 				{
 					bottoms.show(url);
@@ -2335,7 +2530,8 @@ void GUI::make_queue_listbox()
 					seltext6 {lb.at(selected.item).text(6)},
 					seltext7 {lb.at(selected.item).text(7)};
 
-				std::wstring selval {lb.at(selected.item).value<std::wstring>()};
+				lbqval_t selval {lb.at(selected.item).value<lbqval_t>()};
+				std::string sel_favicon_url {lbq.favicon_url_from_value(selval)};
 
 				auto hovitem {lb.at(hovered.item)};
 
@@ -2344,6 +2540,8 @@ void GUI::make_queue_listbox()
 				{
 					for(auto n {selected.item}; n > hovered.item; n--)
 					{
+						const auto &val {lb.at(n - 1).value<lbqval_t>()};
+						lb.at(n).value(val);
 						lb.at(n).text(1, lb.at(n - 1).text(1));
 						lb.at(n).text(2, lb.at(n - 1).text(2));
 						lb.at(n).text(3, lb.at(n - 1).text(3));
@@ -2351,15 +2549,13 @@ void GUI::make_queue_listbox()
 						lb.at(n).text(5, lb.at(n - 1).text(5));
 						lb.at(n).text(6, lb.at(n - 1).text(6));
 						lb.at(n).text(7, lb.at(n - 1).text(7));
-						auto url {lb.at(n - 1).value<std::wstring>()};
-						lb.at(n).value(url);
 						if(!conf.common_dl_options)
-							bottoms.at(url).gpopt.caption("Download options for queue item #" + lb.at(n).text(0));
+							bottoms.at(val).gpopt.caption("Download options for queue item #" + lb.at(n).text(0));
 						lb.at(n).fgcolor(lbq.fgcolor());
 					}
 					if(autoscroll)
 					{
-						if(arg.pos.y / lbq.scheme().item_height_ex <= 1)
+						if(arg.pos.y / util::scale(27) <= 2)
 						{
 							if(!scroll_up_timer.started())
 							{
@@ -2384,6 +2580,8 @@ void GUI::make_queue_listbox()
 				{
 					for(auto n(selected.item); n < hovered.item; n++)
 					{
+						const auto &val {lb.at(n + 1).value<lbqval_t>()};
+						lb.at(n).value(val);
 						lb.at(n).text(1, lb.at(n + 1).text(1));
 						lb.at(n).text(2, lb.at(n + 1).text(2));
 						lb.at(n).text(3, lb.at(n + 1).text(3));
@@ -2391,15 +2589,13 @@ void GUI::make_queue_listbox()
 						lb.at(n).text(5, lb.at(n + 1).text(5));
 						lb.at(n).text(6, lb.at(n + 1).text(6));
 						lb.at(n).text(7, lb.at(n + 1).text(7));
-						auto url {lb.at(n + 1).value<std::wstring>()};
-						lb.at(n).value(url);
 						if(!conf.common_dl_options)
-							bottoms.at(url).gpopt.caption("Download options for queue item #" + lb.at(n).text(0));
+							bottoms.at(val).gpopt.caption("Download options for queue item #" + lb.at(n).text(0));
 						lb.at(n).fgcolor(lbq.fgcolor());
 					}
 					if(autoscroll)
 					{
-						if(arg.pos.y > lbq.size().height - 3 * lbq.scheme().item_height_ex)
+						if(arg.pos.y > lbq.size().height - 2 * util::scale(27))
 						{
 							if(!scroll_down_timer.started())
 							{
@@ -2421,6 +2617,7 @@ void GUI::make_queue_listbox()
 						}
 					}
 				}
+				hovitem.value(selval);
 				hovitem.text(1, seltext1);
 				hovitem.text(2, seltext2);
 				hovitem.text(3, seltext3);
@@ -2428,7 +2625,6 @@ void GUI::make_queue_listbox()
 				hovitem.text(5, seltext5);
 				hovitem.text(6, seltext6);
 				hovitem.text(7, seltext7);
-				hovitem.value(selval);
 				hovitem.select(true);
 				hovitem.fgcolor(dragging_color);
 				if(!conf.common_dl_options)
@@ -2473,7 +2669,7 @@ void GUI::make_queue_listbox()
 			std::wstring last_downloading_url;
 			for(auto item : lbq.at(0))
 			{
-				auto &bot {bottoms.at(item.value<std::wstring>())};
+				auto &bot {bottoms.at(item.value<lbqval_t>())};
 				if(bot.started())
 					last_downloading_url = bot.url;
 			}
@@ -2585,7 +2781,7 @@ void GUI::make_form()
 		auto sel {lbq.selected()};
 		if(sel.empty())
 			qurl.clear();
-		else qurl = lbq.at(sel.front()).value<std::wstring>();
+		else qurl = lbq.at(sel.front()).value<lbqval_t>();
 		l_url.update_caption();
 		if(theme.is_dark())
 			l_url.fgcolor(theme.path_link_fg);
@@ -3132,15 +3328,24 @@ void GUI::dlg_settings()
 		maxdl_tip {"When a queue item finishes, the program automatically starts the next one.\nThis setting lets you make it "
 		"start the next two or more items (up to 10).\n\nDoes not limit the number of manually started queue items "
 		"(you can have\nmore than 10 concurrent downloads if you want, but you have to start\nthe ones after the 10th manually)."},
-		
+
 		template_tip {"The output template tells yt-dlp how to name the downloaded files.\nIt's a powerful way to compose the output "
 		"file name, allowing many \ncharacteristics of the downloaded media to be incorporated \ninto the name. To learn how to use it, "
 		"see the documentation at \n<bold>https://github.com/yt-dlp/yt-dlp#output-template</>"},
-		
+
 		playlist_tip {"This is a string that the program optionally incorporates into the \noutput template defined above, only when "
 		"downloading \nYouTube playlists. It is prepended to the output template string, \nso with default values, the result would "
 		"look like this:\n\n<bold>\"%(playlist_index)d - %(title)s.%(ext)s\"</>\n\nThis output template produces filenames that look like this:\n\n"
-		"<bold>1 - title.ext\n2 - title.ext\n3 - title.ext</>\n\nLeave blank if you don't want playlist videos to be numbered."};
+		"<bold>1 - title.ext\n2 - title.ext\n3 - title.ext</>\n\nLeave blank if you don't want playlist videos to be numbered."},
+
+		container_tip {"A container format allows multiple data streams to be embedded\ninto a single file. A media container is a file that "
+		"can contain multiple \nvideo and/or audio streams. The codec with which the video and \naudio streams are encoded affects which "
+		"container they can fit in.\n\nFor example, the MPEG-4 video container format (<bold>.mp4</> file) can \ncontain audio streams encoded with the "
+		"<bold>mp4a</> codec, but doesn't\nsupport audio encoded with the <bold>opus</> codec (which yt-dlp considers\nto be the better "
+		"of the two).\n\nFor that reason, if you select <bold>mp4</> "
+		"as the preferred video container,\nyou must select <bold>m4a</> as the preferred audio container. Otherwise,\nyt-dlp will be forced to "
+		"merge the streams into an <bold>.mkv</> file instead\nof an <bold>.mp4</> file (when combining an <bold>.mp4</> video-only format "
+		"with\nan incompatible audio-only format)."};
 
 
 	for(auto &opt : com_video_options)
@@ -3163,6 +3368,10 @@ void GUI::dlg_settings()
 	tb_template.tooltip(template_tip);
 	l_playlist.tooltip(playlist_tip);
 	tb_playlist.tooltip(playlist_tip);
+	l_video.tooltip(container_tip);
+	l_audio.tooltip(container_tip);
+	com_video.tooltip(container_tip);
+	com_audio.tooltip(container_tip);
 
 	com_res.option(conf.pref_res);
 	com_video.option(conf.pref_video);
@@ -3561,11 +3770,11 @@ void GUI::get_releases()
 }
 
 
-void GUI::get_releases_misc(bool ytdlp_only)
+void GUI::get_latest_ffmpeg()
 {
 	using json = nlohmann::json;
 
-	if(!ytdlp_only) thr_releases_ffmpeg = std::thread {[this]
+	thr_releases_ffmpeg = std::thread {[this]
 	{
 		auto jtext {util::get_inet_res("https://api.github.com/repos/yt-dlp/FFmpeg-Builds/releases", &inet_error)};
 		if(!jtext.empty())
@@ -3605,6 +3814,12 @@ void GUI::get_releases_misc(bool ytdlp_only)
 		if(thr_releases_ffmpeg.joinable())
 			thr_releases_ffmpeg.detach();
 	}};
+}
+
+
+void GUI::get_latest_ytdlp()
+{
+	using json = nlohmann::json;
 
 	thr_releases_ytdlp = std::thread {[this]
 	{
@@ -3613,9 +3828,13 @@ void GUI::get_releases_misc(bool ytdlp_only)
 		if(fname.empty())
 			fname = ytdlp_fname;
 		if(fname == "yt-dlp.exe" || fname == "yt-dlp_x86.exe")
-			jtext = util::get_inet_res("https://api.github.com/repos/yt-dlp/yt-dlp/releases", &inet_error);
-		else jtext = util::get_inet_res("https://api.github.com/repos/ytdl-patched/ytdl-patched/releases", &inet_error);
-		if(!jtext.empty())
+		{
+			if(conf.ytdlp_nightly)
+				jtext = util::get_inet_res("https://api.github.com/repos/yt-dlp/yt-dlp-nightly-builds/releases/latest", &inet_error);
+			else jtext = util::get_inet_res("https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest", &inet_error);
+		}
+		else jtext = util::get_inet_res("https://api.github.com/repos/ytdl-patched/ytdl-patched/releases/latest", &inet_error);
+		if(!jtext.empty() && thr_releases_ytdlp.joinable())
 		{
 			json json_ytdlp;
 			try { json_ytdlp = json::parse(jtext); }
@@ -3631,17 +3850,17 @@ void GUI::get_releases_misc(bool ytdlp_only)
 					thr_releases_ytdlp.detach();
 				return;
 			}
-			if(!json_ytdlp.empty())
+			if(!json_ytdlp.empty() && thr_releases_ytdlp.joinable())
 			{
-				for(auto &el : json_ytdlp[0]["assets"])
+				for(auto &el : json_ytdlp["assets"])
 				{
 					std::string url {el["browser_download_url"]};
 					if(url.find(fname) != -1)
 					{
 						url_latest_ytdlp = url;
 						size_latest_ytdlp = el["size"];
-						url_latest_ytdlp_relnotes = json_ytdlp[0]["html_url"];
-						std::string date {json_ytdlp[0]["published_at"]};
+						url_latest_ytdlp_relnotes = json_ytdlp["html_url"];
+						std::string date {json_ytdlp["published_at"]};
 						ver_ytdlp_latest.year = stoi(date.substr(0, 4));
 						ver_ytdlp_latest.month = stoi(date.substr(5, 2));
 						ver_ytdlp_latest.day = stoi(date.substr(8, 2));
@@ -3718,7 +3937,7 @@ void GUI::make_columns_menu(nana::menu *m)
 			ip.checked(conf.col_format);
 			lbq.auto_draw(false);
 			lbq.column_at(4).visible(conf.col_format);
-			adjust_lbq_headers(conf.col_adjust_width);
+			adjust_lbq_headers();
 			lbq.auto_draw(true);
 		}).checked(conf.col_format);
 
@@ -3728,7 +3947,7 @@ void GUI::make_columns_menu(nana::menu *m)
 			ip.checked(conf.col_format_note);
 			lbq.auto_draw(false);
 			lbq.column_at(5).visible(conf.col_format_note);
-			adjust_lbq_headers(conf.col_adjust_width);
+			adjust_lbq_headers();
 			lbq.auto_draw(true);
 		}).checked(conf.col_format_note);
 
@@ -3738,7 +3957,7 @@ void GUI::make_columns_menu(nana::menu *m)
 			ip.checked(conf.col_ext);
 			lbq.auto_draw(false);
 			lbq.column_at(6).visible(conf.col_ext);
-			adjust_lbq_headers(conf.col_adjust_width);
+			adjust_lbq_headers();
 			lbq.auto_draw(true);
 		}).checked(conf.col_ext);
 
@@ -3748,17 +3967,9 @@ void GUI::make_columns_menu(nana::menu *m)
 			ip.checked(conf.col_fsize);
 			lbq.auto_draw(false);
 			lbq.column_at(7).visible(conf.col_fsize);
-			adjust_lbq_headers(conf.col_adjust_width);
+			adjust_lbq_headers();
 			lbq.auto_draw(true);
 		}).checked(conf.col_fsize);
-
-		m->append_splitter();
-
-		m->append("Adjust window width", [&, this](menu::item_proxy ip)
-		{
-			conf.col_adjust_width = !conf.col_adjust_width;
-			ip.checked(conf.col_adjust_width);
-		}).checked(conf.col_adjust_width);
 	}
 }
 
@@ -3790,8 +4001,8 @@ void GUI::dlg_updater(nana::window parent)
 {
 	using widgets::theme;
 	themed_form fm {nullptr, parent, {}, appear::decorate<appear::minimize>{}};
-	if(cnlang) fm.center(645, 387);
-	else fm.center(610, 387);
+	if(cnlang) fm.center(645, 427);
+	else fm.center(610, 427);
 
 	fm.caption(title + " - updater");
 	fm.bgcolor(theme.fmbg);
@@ -3802,6 +4013,7 @@ void GUI::dlg_updater(nana::window parent)
 		<weight=20>
 		<weight=30 <btn_update weight=100> <weight=20> <prog> > <weight=25>
 		<separator weight=3px> <weight=20>
+		<weight=25 <l_channel weight=170> <weight=20> <cb_chan_stable weight=75> <weight=10> <cb_chan_nightly weight=85> <> > <weight=15>
 		<weight=30 <l_ver_ytdlp weight=158> <weight=10> <l_ytdlp_text> > <weight=10>
 		<weight=30 <l_ver_ffmpeg weight=170> <weight=10> <l_ffmpeg_text> > <weight=20>
 		<weight=30 <prog_misc> > <weight=25>
@@ -3815,6 +4027,7 @@ void GUI::dlg_updater(nana::window parent)
 		<weight=20>
 		<weight=30 <btn_update weight=100> <weight=20> <prog> > <weight=25>
 		<separator weight=3px> <weight=20>
+		<weight=25 <l_channel weight=165> <weight=20> <cb_chan_stable weight=70> <weight=10> <cb_chan_nightly weight=80> <> > <weight=15>
 		<weight=30 <l_ver_ytdlp weight=158> <weight=10> <l_ytdlp_text> > <weight=10>
 		<weight=30 <l_ver_ffmpeg weight=158> <weight=10> <l_ffmpeg_text> > <weight=20>
 		<weight=30 <prog_misc> > <weight=25>
@@ -3824,7 +4037,8 @@ void GUI::dlg_updater(nana::window parent)
 	widgets::Label
 		l_ver {fm, "Latest version:"},
 		l_ver_ytdlp {fm, "Latest yt-dlp version:"},
-		l_ver_ffmpeg {fm, "Latest ffmpeg version:"};
+		l_ver_ffmpeg {fm, "Latest ffmpeg version:"},
+		l_channel {fm, "yt-dlp release channel:"};
 
 	widgets::Text
 		l_vertext {fm, "checking..."},
@@ -3837,8 +4051,22 @@ void GUI::dlg_updater(nana::window parent)
 		btn_update_ytdlp {fm, "Update yt-dlp"},
 		btn_update_ffmpeg {fm, "Update FFmpeg"};
 
-	widgets::cbox cb_startup {fm, "Check at program startup and display any new version in the title bar"};
+	widgets::cbox
+		cb_startup {fm, "Check at program startup and display any new version in the title bar"},
+		cb_chan_stable {fm, "Stable"},
+		cb_chan_nightly {fm, "Nightly"};
+
 	cb_startup.check(conf.get_releases_at_startup);
+	cb_chan_stable.radio(true);
+	cb_chan_nightly.radio(true);
+
+	cb_chan_stable.tooltip("\"Stable\" releases are well tested and have no major bugs,\n"
+		"but there's a relatively long time until one comes out.");
+	cb_chan_nightly.tooltip("\"Nightly\" releases come out frequently and contain the\nlatest changes, but some features may be broken.");
+
+	nana::radio_group rgp;
+	rgp.add(cb_chan_stable);
+	rgp.add(cb_chan_nightly);
 
 	btn_changes.typeface(nana::paint::font_info {"", 12, {800}});
 	btn_changes.enabled(false);
@@ -3861,6 +4089,9 @@ void GUI::dlg_updater(nana::window parent)
 	fm["btn_update"] << btn_update;
 	fm["prog"] << prog;
 	fm["separator"] << separator;
+	fm["l_channel"] << l_channel;
+	fm["cb_chan_stable"] << cb_chan_stable;
+	fm["cb_chan_nightly"] << cb_chan_nightly;
 	fm["l_ver_ytdlp"] << l_ver_ytdlp;
 	fm["l_ver_ffmpeg"] << l_ver_ffmpeg;
 	fm["l_ytdlp_text"] << l_ytdlp_text;
@@ -4024,7 +4255,7 @@ void GUI::dlg_updater(nana::window parent)
 		else
 		{
 			bool not_present {conf.ytdlp_path.empty() && !fs::exists(appdir / ytdlp_fname)};
-			if(ver_ytdlp_latest > ver_ytdlp)
+			if(ver_ytdlp_latest != ver_ytdlp)
 			{
 				l_ytdlp_text.caption(ver_ytdlp_latest.string() + "  (current = " +
 					(not_present ? "not present)  [click for changelog]" : ver_ytdlp.string() + ")  [click for changelog]"));
@@ -4119,7 +4350,7 @@ void GUI::dlg_updater(nana::window parent)
 									if(!ec)
 									{
 										ffmpeg_loc = target / "ffmpeg.exe";
-										get_versions();
+										ver_ffmpeg = ver_ffmpeg_latest;
 										btnffmpeg_state = false;
 										prog_misc.caption("FFmpeg update complete");
 										l_ffmpeg_text.caption(ver_ffmpeg_latest.string() + "  (current)");
@@ -4136,7 +4367,7 @@ void GUI::dlg_updater(nana::window parent)
 						else // yt-dlp downloaded
 						{
 							conf.ytdlp_path = target / fname;
-							get_versions();
+							ver_ytdlp = ver_ytdlp_latest;
 							btnytdlp_state = false;
 							prog_misc.caption("yt-dlp update complete");
 							l_ytdlp_text.caption(ver_ytdlp_latest.string() + "  (current)  [click to see changelog]");
@@ -4277,6 +4508,14 @@ void GUI::dlg_updater(nana::window parent)
 				});
 			}
 			display_version_ytdlp();
+			if(conf.ytdlp_path.filename().string() != "ytdl-patched-red.exe")
+			{
+				cb_chan_stable.enabled(true);
+				cb_chan_nightly.enabled(true);
+			}
+			btn_update_ytdlp.enable(ver_ytdlp_latest != ver_ytdlp);
+			if(!btn_update_ytdlp.enabled())
+				btn_update_ytdlp.tooltip("");
 			t2.stop();
 		}
 	});
@@ -4296,9 +4535,8 @@ void GUI::dlg_updater(nana::window parent)
 
 	if(url_latest_ffmpeg.empty())
 	{
-		get_releases_misc();
+		get_latest_ffmpeg();
 		t1.start();
-		t2.start();
 	}
 	else display_version_ffmpeg();
 
@@ -4307,10 +4545,20 @@ void GUI::dlg_updater(nana::window parent)
 		const auto fname {url_latest_ytdlp.substr(url_latest_ytdlp.rfind('/') + 1)};
 		if(fname != conf.ytdlp_path.filename().string())
 		{
-			get_releases_misc(true);
+			get_latest_ytdlp();
 			t2.start();
 		}
 	}
+	else if(!thr_releases_ytdlp.joinable())
+	{
+		cb_chan_stable.enabled(false);
+		cb_chan_nightly.enabled(false);
+		l_ytdlp_text.caption("checking...");
+		nana::api::refresh_window(fm);
+		get_latest_ytdlp();
+		t2.start();
+	}
+
 	if(!url_latest_ytdlp_relnotes.empty() && fs::path{url_latest_ytdlp}.filename() == conf.ytdlp_path.filename())
 	{
 		nana::api::effects_edge_nimbus(l_ytdlp_text, nana::effects::edge_nimbus::over);
@@ -4321,6 +4569,31 @@ void GUI::dlg_updater(nana::window parent)
 		});
 		display_version_ytdlp();
 	}
+
+	if(conf.ytdlp_nightly)
+		cb_chan_nightly.check(true);
+	else cb_chan_stable.check(true);
+
+	if(conf.ytdlp_path.filename().string() == "ytdl-patched-red.exe")
+	{
+		cb_chan_stable.enabled(false);
+		cb_chan_nightly.enabled(false);
+	}
+
+	rgp.on_checked([&](const nana::arg_checkbox &arg)
+	{
+		if(arg.widget->checked())
+		{
+			if(thr_releases_ytdlp.joinable())
+				thr_releases_ytdlp.detach();
+			cb_chan_stable.enabled(false);
+			cb_chan_nightly.enabled(false);
+			l_ytdlp_text.caption("checking...");
+			conf.ytdlp_nightly = arg.widget->handle() == cb_chan_nightly;
+			get_latest_ytdlp();
+			t2.start();
+		}
+	});
 
 	fm.theme_callback([&, this](bool dark)
 	{
@@ -5014,6 +5287,29 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 	if(conf.common_dl_options && gui.bottoms.size())
 		com_args.caption(gui.bottoms.at(0).com_args.caption());
 
+	com_args.events().mouse_up([this](const arg_mouse &arg)
+	{
+		if(arg.button == mouse::right_button)
+		{
+			using namespace nana;
+			::widgets::Menu m;
+			m.item_pixels(util::scale(24));
+
+			auto cliptext {util::get_clipboard_text()};
+
+			m.append("Paste", [&, this](menu::item_proxy)
+			{
+				com_args.focus();
+				keybd_event(VK_LCONTROL, 0, 0, 0);
+				keybd_event('V', 0, 0, 0);
+				keybd_event('V', 0, KEYEVENTF_KEYUP, 0);
+				keybd_event(VK_LCONTROL, 0, KEYEVENTF_KEYUP, 0);
+			}).enabled(!cliptext.empty());
+
+			m.popup_await(com_args, arg.pos.x, arg.pos.y);
+		}
+	});
+
 	gui.queue_panel.focus();
 	plc.collocate();
 }
@@ -5027,9 +5323,11 @@ void GUI::taskbar_overall_progress()
 		for(auto &item : lbq.at(0))
 			if(item.text(3) == "done")
 				completed++;
-		if(completed == total)
-			i_taskbar->SetProgressState(hwnd, TBPF_NOPROGRESS);
-		else i_taskbar->SetProgressValue(hwnd, completed, total);
+		if(completed)
+			if(completed == total)
+				i_taskbar->SetProgressState(hwnd, TBPF_NOPROGRESS);
+			else i_taskbar->SetProgressValue(hwnd, completed, total);
+		else i_taskbar->SetProgressValue(hwnd, 1, -1);
 	}
 }
 
@@ -5078,11 +5376,12 @@ void GUI::remove_queue_item(std::wstring url)
 				const auto stridx {std::to_string(std::stoi(it.text(0)) - 1)};
 				it.text(0, stridx);
 				if(!conf.common_dl_options)
-					bottoms.at(it.value<std::wstring>()).gpopt.caption("Download options for queue item #" + stridx);
+					bottoms.at(it.value<lbqval_t>()).gpopt.caption("Download options for queue item #" + stridx);
 			}
 
 		auto prev_idx {std::stoi(item.text(0)) - 1};
 		auto next_item {lbq.erase(item)};
+		nana::api::refresh_window(lbq);
 		taskbar_overall_progress();
 		adjust_lbq_headers();
 		if(next_item != lbq.at(0).end())
@@ -5146,7 +5445,7 @@ std::wstring GUI::next_startable_url(std::wstring current_url)
 			while(++pos < item_total && items_currently_downloading < conf.max_concurrent_downloads)
 			{
 				auto next_item {lbq.at(0).at(pos)};
-				auto next_url {next_item.value<std::wstring>()};
+				const auto &next_url {next_item.value<lbqval_t>().url};
 				auto text {next_item.text(3)};
 				if(text == "queued" || (text.find("stopped") != -1 && text.find("error") != -1))
 					return next_url;
