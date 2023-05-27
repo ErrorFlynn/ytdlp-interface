@@ -19,12 +19,12 @@ The easiest way to build the project is to open the solution file with Visual St
 
 ---
 
-![ytdlp-interface_settings](https://user-images.githubusercontent.com/20293505/199632897-31020961-63b8-4a8f-98e5-9cda8adc4340.png)
+![ytdlp-interface_settings](https://github.com/ErrorFlynn/ytdlp-interface/assets/20293505/cba155ae-e51c-407e-9aaa-76c67cb99d9f)
 
 ---
 
-![ytdlp-interface_queue](https://user-images.githubusercontent.com/20293505/199632781-db7aa408-15cb-44ea-b5a5-e67e595e2372.png)
+![ytdlp-interface_queue](https://github.com/ErrorFlynn/ytdlp-interface/assets/20293505/bcd25267-e29a-4115-9271-7b3519c49917)
 
 ---
 
-![ytdlp-interface_output](https://user-images.githubusercontent.com/20293505/199632812-21d21500-3acf-453c-bd1b-a445eec03f7a.png)
+![ytdlp-interface_output](https://github.com/ErrorFlynn/ytdlp-interface/assets/20293505/3b9b5b37-2e78-4d25-b20a-76b0a7246167)
