@@ -77,7 +77,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 		{
 			restore();
 			bring_top(true);
-			center(1000, 708 - bottoms.current().expcol.collapsed() * 240);
+			center(1000, 703 - bottoms.current().expcol.collapsed() * 240);
 		}
 		return true;
 	});
@@ -113,7 +113,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 			if(GetAsyncKeyState(VK_CONTROL) & 0xff00)
 			{
 				if(is_zoomed(true)) restore();
-				center(1000, 708 - bottoms.current().expcol.collapsed() * 240);
+				center(1000, 703 - bottoms.current().expcol.collapsed() * 240);
 			}
 		}
 		else if(wparam == VK_DELETE)
@@ -302,7 +302,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 			api::window_outline_size(*this, sz);
 		}
 	}
-	else center(1000, 708);
+	else center(1000, 703);
 	bring_top(true);
 	if(conf.zoomed) zoom(true);
 	no_draw_freeze = false;
@@ -560,19 +560,6 @@ void GUI::dlg_formats()
 		conf.fmt1 = fmt1;
 		conf.fmt2 = fmt2;
 
-		/*auto sel {list.selected()};
-		strfmt = list.at(sel.front()).value<std::wstring>();
-		bottom.fmt1 = conf.fmt1 = strfmt;
-		if(sel.size() > 1)
-		{
-			bottom.fmt2 = conf.fmt2 = list.at(sel.back()).value<std::wstring>();
-			strfmt += L'+' + conf.fmt2;
-		}
-		else
-		{
-			bottom.fmt2.clear();
-			conf.fmt2.clear();
-		}*/
 		bottom.use_strfmt = true;
 		if(bottom.using_custom_fmt())
 		{
@@ -4502,6 +4489,7 @@ void GUI::dlg_updater(nana::window parent)
 			{
 				nana::api::effects_edge_nimbus(l_ytdlp_text, nana::effects::edge_nimbus::over);
 				l_ytdlp_text.tooltip("Click to view release notes in web browser.");
+				l_ytdlp_text.events().click.clear();
 				l_ytdlp_text.events().click([this]
 				{
 					nana::system::open_url(url_latest_ytdlp_relnotes);
@@ -5351,7 +5339,7 @@ void GUI::on_btn_dl(std::wstring url)
 		while(++pos < item_total && items_currently_downloading < conf.max_concurrent_downloads)
 		{
 			auto next_item {lbq.at(0).at(pos)};
-			auto next_url {next_item.value<std::wstring>()};
+			std::wstring next_url {next_item.value<lbqval_t>()};
 			auto text {next_item.text(3)};
 			if(text == "queued" || text.find("stopped") == 0)
 			{

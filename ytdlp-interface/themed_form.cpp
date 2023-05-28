@@ -168,7 +168,7 @@ bool themed_form::center(double w, double h)
 	const auto maxw {screen {}.from_window(*this).area().width};
 	auto r {API::make_center(w ? dpi_transform_size(w, h) : size())};
 	move(r);
-	const auto sz {API::window_outline_size(*this)};
+	auto sz {API::window_outline_size(*this)};
 	const auto wnd {api::get_owner_window(*this)};
 	if(api::is_window(wnd))
 	{
@@ -178,7 +178,12 @@ bool themed_form::center(double w, double h)
 		nana::size owner_size {unsigned(rect.right - rect.left), unsigned(rect.bottom - rect.top)};
 		centered_pos.x = owner_pos.x + (owner_size.width / 2 - sz.width / 2);
 		centered_pos.y = owner_pos.y + (owner_size.height / 2 - sz.height / 2);
-		MoveWindow(hwnd, centered_pos.x, max(0, centered_pos.y), sz.width, min(sz.height, maxh), TRUE);
+		sz.height = min(sz.height, maxh);
+		if(centered_pos.y + sz.height > maxh)
+			centered_pos.y -= sz.height - (maxh - centered_pos.y);
+		if(centered_pos.x + sz.width > maxw)
+			centered_pos.x -= sz.width - (maxw - centered_pos.x);
+		MoveWindow(hwnd, max(0, centered_pos.x), max(0, centered_pos.y), min(sz.width, maxw), min(sz.height, maxh), TRUE);
 	}
 	else
 	{

@@ -61,7 +61,7 @@ private:
 	std::thread thr, thr_releases, thr_versions, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.3.0"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
+	const std::string ver_tag {"v2.3.1"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
 		ytdlp_fname {X64 ? "yt-dlp.exe" : "yt-dlp_x86.exe"};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
@@ -724,7 +724,11 @@ private:
 		void erase(std::wstring url)
 		{
 			if(buffers.contains(url))
+			{
 				buffers.erase(url);
+				if(buffers.size() == 1)
+					current_.clear();
+			}
 		}
 
 		auto caption() const { return textbox::caption(); }
