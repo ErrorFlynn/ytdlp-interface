@@ -72,6 +72,25 @@ HWND util::hwnd_from_pid(DWORD pid)
 	return lparam.hwnd;
 }
 
+std::vector<HWND> util::hwnds_from_pid(DWORD pid)
+{
+	struct lparam_t { std::vector<HWND> hwnds; DWORD pid {0}; } lparam;
+
+	WNDENUMPROC enumfn = [](HWND hwnd, LPARAM lparam) -> BOOL
+	{
+		auto &target {*reinterpret_cast<lparam_t*>(lparam)};
+		DWORD pid {0};
+		GetWindowThreadProcessId(hwnd, &pid);
+		if(pid == target.pid && IsWindowVisible(hwnd))
+			target.hwnds.push_back(hwnd);
+		return TRUE;
+	};
+
+	lparam.pid = pid;
+	EnumWindows(enumfn, reinterpret_cast<LPARAM>(&lparam));
+	return lparam.hwnds;
+}
+
 std::string util::run_piped_process(std::wstring cmd, bool *working, append_callback cbappend, progress_callback cbprog, bool *graceful_exit, std::string suppress)
 {
 	std::wstring modpath(4096, '\0');
@@ -185,7 +204,7 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 										cbappend(text, true);
 								if(text == "[Exec]" && text.find("ytdlp_status") != 1)
 									continue;
-								if(text == "[ExtractAudio]" || text.find("[Fixup") == 0 || text == "[Merger]")
+								if(text == "[ExtractAudio]" || text.starts_with("[Fixup") || text == "[Merger]")
 									cbprog(-1, -1, text);
 								else if(!suppress.empty())
 									if(text == "[download]" && (line.find("Destination:") == 11 || line.find("has already been downloaded") != -1))
@@ -193,7 +212,7 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 							}
 						}
 						auto pos {line.find('%')};
-						if(pos != -1 && line.find("[download]") == 0)
+						if(pos != -1 && line.starts_with("[download]"))
 						{
 							if(subs)
 							{
@@ -215,7 +234,7 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 								}
 							}
 						}
-						else if(pos != -1 && line.find("[#") == 0 && line[line.size()-2] == ']')
+						else if(pos != -1 && line.starts_with("[#") && line[line.size()-2] == ']')
 						{
 							auto pos2 {line.rfind('(', pos) + 1};
 							auto strpct {line.substr(pos2, pos - pos2)};
@@ -261,8 +280,14 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 	return ret;
 }
 
-void util::end_processes(std::wstring img_name)
+DWORD util::other_instance(std::wstring path)
 {
+	std::wstring modpath(4096, '\0');
+	if(path.empty())
+		modpath.resize(GetModuleFileNameW(0, &modpath.front(), modpath.size()));
+	else modpath = path;
+	auto img_name {fs::path {modpath}.filename().wstring()};
+
 	HANDLE hSnapshot {CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)};
 	if(hSnapshot)
 	{
@@ -275,29 +300,29 @@ void util::end_processes(std::wstring img_name)
 			{
 				if(img_name == pe32.szExeFile)
 				{
-					if(pe32.th32ProcessID != curpid)
+					auto hproc {OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pe32.th32ProcessID)};
+					if(hproc)
 					{
-						auto hwnd {hwnd_from_pid(pe32.th32ProcessID)};
-						std::string wndtext(1024, '\0');
-						wndtext.resize(GetWindowTextA(hwnd, &wndtext.front(), wndtext.size()-1));
-						if(hwnd && wndtext.find("settings") == -1)
-							SendMessageA(hwnd, WM_CLOSE, 0, 0);
-						else
+						DWORD bufsize {8192};
+						std::wstring buf(bufsize, '\0');
+						if(QueryFullProcessImageName(hproc, 0, &buf.front(), &bufsize))
 						{
-							HANDLE hproc {OpenProcess(PROCESS_TERMINATE, 0, pe32.th32ProcessID)};
-							if(hproc)
+							buf.resize(bufsize);
+							if(modpath == buf && pe32.th32ProcessID != curpid)
 							{
-								TerminateProcess(hproc, 0xDeadBeef);
-								WaitForSingleObject(hproc, INFINITE);
 								CloseHandle(hproc);
+								CloseHandle(hSnapshot);
+								return pe32.th32ProcessID;
 							}
 						}
+						CloseHandle(hproc);
 					}
 				}
 			} while(Process32Next(hSnapshot, &pe32));
 		}
 		CloseHandle(hSnapshot);
 	}
+	return 0;
 }
 
 std::wstring util::get_sys_folder(REFKNOWNFOLDERID rfid)

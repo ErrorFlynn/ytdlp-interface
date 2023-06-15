@@ -29,7 +29,7 @@ public:
 		const std::wstring output_template_default {L"%(title)s.%(ext)s"}, playlist_indexing_default {L"%(playlist_index)d - "},
 			output_template_default_bandcamp {L"%(artist)s - %(album)s - %(track_number)02d - %(track)s.%(ext)s"};
 		std::wstring fmt1, fmt2, output_template {output_template_default}, playlist_indexing {playlist_indexing_default},
-			output_template_bandcamp {output_template_default_bandcamp};
+			output_template_bandcamp {output_template_default_bandcamp}, proxy;
 		std::vector<std::string> argsets, unfinished_queue_items;
 		std::unordered_set<std::wstring> outpaths;
 		std::map<std::wstring, std::string> playsel_strings;
@@ -42,9 +42,11 @@ public:
 			cbargs {false}, kwhilite {true}, pref_fps {false}, cb_lengthyproc {true}, common_dl_options {true}, cb_autostart {true},
 			cb_queue_autostart {false}, gpopt_hidden {false}, open_dialog_origin {false}, cb_zeropadding {true}, cb_playlist_folder {true},
 			zoomed {false}, get_releases_at_startup {true}, col_format {false}, col_format_note {true}, col_ext {true}, col_fsize {false},
-			json_hide_null {false}, col_site_icon {true}, col_site_text {false}, ytdlp_nightly {false}, audio_multistreams {false};
+			json_hide_null {false}, col_site_icon {true}, col_site_text {false}, ytdlp_nightly {false}, audio_multistreams {false},
+			cb_sblock_mark {false}, cb_sblock_remove {false}, cb_proxy {false};
 		nana::rectangle winrect;
 		int dpi {96};
+		std::vector<int> sblock_mark, sblock_remove;
 	}
 	conf;
 
@@ -58,10 +60,10 @@ private:
 	unsigned size_latest_ffmpeg {0}, size_latest_ytdlp {0}, number_of_processors {4};
 	bool working {false}, menu_working {false}, lbq_no_action {false}, thumbthr_working {false}, 
 		autostart_next_item {true}, lbq_can_drag {false}, cnlang {false}, no_draw_freeze {true};
-	std::thread thr, thr_releases, thr_versions, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp;
+	std::thread thr, thr_releases, thr_versions, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp, thr_update;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.3.1"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
+	const std::string ver_tag {"v2.4.0"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
 		ytdlp_fname {X64 ? "yt-dlp.exe" : "yt-dlp_x86.exe"};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
@@ -72,7 +74,10 @@ private:
 	const std::vector<std::wstring>
 		com_res_options {L"none", L"4320", L"2160", L"1440", L"1080", L"720", L"480", L"360"},
 		com_audio_options {L"none", L"m4a", L"mp3", L"ogg", L"webm", L"flac"},
-		com_video_options {L"none", L"mp4", L"webm"};
+		com_video_options {L"none", L"mp4", L"webm"},
+		sblock_cats_mark {L"all", L"sponsor", L"intro", L"outro", L"selfpromo", L"preview", L"filler", L"interaction", L"music_offtopic",
+			L"poi_highlight", L"chapter"},
+		sblock_cats_remove {L"all", L"sponsor", L"intro", L"outro", L"selfpromo", L"preview", L"filler", L"interaction", L"music_offtopic"};
 
 	struct version_t
 	{
@@ -256,7 +261,7 @@ private:
 		bool btnfmt_visible() { return plc.field_visible("btn_ytfmtlist"); }
 		fs::path file_path();
 
-		bool started() { return btndl.caption().find("Stop") == 0; }
+		bool started() { return btndl.caption().starts_with("Stop"); }
 		bool using_custom_fmt() {return cbargs.checked() && com_args.caption_wstring().find(L"-f ") != -1;}
 
 		auto playlist_selected()
@@ -761,6 +766,18 @@ private:
 	widgets::path_label l_url {queue_panel, &qurl};
 	std::unordered_map<std::string, favicon_t> favicons;
 
+	widgets::conf_page updater;	
+	widgets::Label l_ver, l_ver_ytdlp, l_ver_ffmpeg, l_channel;
+	widgets::Text l_vertext, l_ytdlp_text, l_ffmpeg_text;
+	widgets::Button btn_changes, btn_update, btn_update_ytdlp, btn_update_ffmpeg;
+	widgets::cbox cb_startup, cb_chan_stable, cb_chan_nightly;
+	nana::radio_group rgp_chan;
+	widgets::Progress prog_updater, prog_updater_misc;
+	widgets::Separator separator;
+	nana::timer updater_t0, updater_t1, updater_t2;
+	bool updater_working {false}, updater_init {false};
+
+	void dlg_settings();
 	void dlg_settings_info(nana::window owner);
 	void dlg_json();
 	void dlg_sections();
@@ -770,16 +787,15 @@ private:
 	void make_queue_listbox();
 	void dlg_formats();
 	bool process_queue_item(std::wstring url);
-	void dlg_settings();
 	void dlg_changes(nana::window parent);
 	void make_form();
 	bool apply_theme(bool dark);
 	void get_releases();
 	void get_latest_ffmpeg();
 	void get_latest_ytdlp();
-	//void get_releases_misc(bool ytdlp_only = false);
 	void get_versions();
 	bool is_ytlink(std::wstring text);
+	void make_updater_page(themed_form &parent);
 	void change_field_attr(nana::place &plc, std::string field, std::string attr, unsigned new_val);
 	bool is_tag_a_new_version(std::string tag_name) { return semver_t {tag_name} > semver_t {ver_tag}; }
 	void dlg_updater(nana::window parent);
@@ -826,6 +842,34 @@ private:
 		const auto two_computed {lbq.size().width - (zero + one + three + four + five + six + seven) - scale(9)};
 		lbq.column_at(2).width(two_computed);
 	}
+
+	std::unordered_map<std::string, std::pair<std::string, std::string>> sblock_infos
+	{
+		{"all", {"All", "Select this to indicate all categories."}},
+		{"sponsor", {"Sponsor", "Segments promoting a product or service not directly related to the creator."}},
+
+		{"intro", {"Intermission/Intro Animation", "Segments typically found at the start of a video that include an animation, "
+		          "still frame or clip which are also seen in other videos by the same creator. This can include livestream pauses "
+		          "with no content\n(looping animations or chat windows) and Copyright / Fair Use disclaimers."}},
+
+		{"outro", {"Endcards/Credits (Outro)", "Typically near or at the end of the video when the credits pop up and/or endcards are shown."}},
+
+		{"selfpromo", {"Unpaid/Self Promotion", "Segments promoting a product or service that is directly related to the creator themselves.\n"
+		              "This usually includes merchandise or promotion of monetized platforms."}},
+
+		{"preview", {"Preview/Recap", "Collection of clips that show what is coming up in in this video or other videos in a series."}},
+
+		{"filler", {"Filler Tangent/Jokes", "Tangential scenes added only for filler or humor, that are not required to understand the main "
+		           "content of the video. This can also include: Timelapses / B-Roll, Fake Sponsors and slow-motion clips that do not provide "
+		           "any context or are used as replays or B-roll."}},
+
+		{"interaction", {"Interaction Reminder (Subscribe)", "Explicit reminders to like, subscribe or interact with them on any paid or "
+			            "free platform(s)\n(e.g. click on a video)."}},
+
+		{"music_offtopic", {"Music: Non-Music Section", "Section devoid of music in videos which feature music as the primary content."}},
+		{"poi_highlight", {"Highlight", "A point of interest in the video, possibly the most important part of the video."}},
+		{"chapter", {"Chapter", "Chapters designated by SponsorBlock (presumably in a video that doesn't have chapters otherwise)."}}
+	};
 
 	public:
 		gui_bottoms &botref() { return bottoms; }

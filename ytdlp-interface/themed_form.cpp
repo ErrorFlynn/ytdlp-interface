@@ -5,7 +5,7 @@
 themed_form::themed_form(theme_cb theme_change_callback, nana::window owner, nana::rectangle r, const nana::appearance& appear) : form{owner, r, appear}
 {
 	InitDarkMode();
-	hwnd = reinterpret_cast<HWND>(native_handle());
+	hwnd = reinterpret_cast<HWND>(form::native_handle());
 	if(theme_change_callback)
 		callback = std::move(theme_change_callback);
 	if(dark_mode_supported)

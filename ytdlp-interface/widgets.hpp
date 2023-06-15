@@ -204,8 +204,17 @@ namespace widgets
 		bool error_mode_ {false};
 
 	public:
+
+		Text() = default;
+
 		Text(nana::window parent, std::string_view text = "", bool dpi_adjust = false) : label {parent, text}
 		{
+			create(parent, text, dpi_adjust);
+		}
+
+		void create(nana::window parent, std::string_view text = "", bool dpi_adjust = false)
+		{
+			nana::label::create(parent, true);
 			fgcolor(theme.Text_fg);
 			typeface(nana::paint::font_info {"", 12 - (double)(nana::API::screen_dpi(true) > 96) * 2 * dpi_adjust});
 			text_align(nana::align::left, nana::align_v::center);
@@ -227,12 +236,12 @@ namespace widgets
 
 	class Separator : public nana::panel<false>
 	{
-		nana::place plc;
+		std::unique_ptr<nana::place> plc;
 		nana::label sep1, sep2;
 
 	public:
 
-		Separator() {}
+		Separator() = default;
 
 		Separator(nana::window parent)
 		{
@@ -242,13 +251,12 @@ namespace widgets
 		void create(nana::window parent)
 		{
 			panel<false>::create(parent);
-			plc.bind(*this);
+			plc = std::make_unique<nana::place>(*this);
 			sep1.create(*this);
 			sep2.create(*this);
-			plc.div("vert <sep1> <> <sep2>");
-			plc["sep1"] << sep1;
-			plc["sep2"] << sep2;
-
+			plc->div("vert <sep1> <> <sep2>");
+			plc->field("sep1") << sep1;
+			plc->field("sep2") << sep2;
 			events().expose([this] { refresh_theme(); });
 		}
 
@@ -865,7 +873,7 @@ namespace widgets
 
 		Overlay() : label() {}
 
-		Overlay(nana::window parent, nana::widget *outbox, std::string_view text = "", bool visible = true) : label {parent, text, visible}
+		Overlay(nana::window parent, nana::widget *outbox, std::string_view text = "", bool visible = true)
 		{
 			create(parent, outbox, text, visible);
 		}
@@ -998,8 +1006,7 @@ namespace widgets
 
 		Menu()
 		{
-			//if(theme.is_dark())
-				renderer(menu_renderer {renderer()});
+			renderer(menu_renderer {renderer()});
 		}
 	};
 
@@ -1204,14 +1211,9 @@ namespace widgets
 					if(pos != -1)
 					{
 						std::string strkey {iattr.text.substr(0, pos + 3)}, strval {iattr.text.substr(pos + 3)};
-						//auto pos1 {strval.find('\n')};
-						//if(pos1 != -1)
-							//strval = strval.substr(0, pos1);
 						graph.string(tpos, strkey, theme.tree_key_fg);
 						tpos.x += graph.text_extent_size(strkey).width;
 						graph.string(tpos, strval, theme.tree_val_fg);
-						//nana::paint::text_renderer tr {graph};
-						//tr.render(tpos, nana::to_wstring(strval), graph.width()-tpos.x, nana::paint::text_renderer::mode::truncate_letter_with_ellipsis);
 					}
 					else graph.string(tpos, iattr.text, theme.tree_parent_node);
 				}
@@ -1461,6 +1463,403 @@ namespace widgets
 			recpop(root, *jptr);
 			auto_draw(true);
 		}		
+	};
+
+	class conf_tree : public nana::treebox
+	{
+		using json = nlohmann::json;
+		using item_proxy = nana::treebox::item_proxy;
+
+		nana::place *plc {nullptr};
+
+		class ctree_renderer : public nana::treebox::renderer_interface
+		{
+			using clonable_renderer = nana::pat::cloneable<renderer_interface>;
+			clonable_renderer renderer_; // wraps a pointer to the library's internal renderer
+
+		public:
+			ctree_renderer(const clonable_renderer &rd) : renderer_(rd) {}
+
+		private:
+
+			nana::window htree_ {nullptr}; // treebox window handle
+
+			// this function is called whenever a paint operation begins
+			void begin_paint(nana::widget &wdg) override
+			{
+				htree_ = wdg.handle();
+				renderer_->begin_paint(wdg);
+			}
+
+			// paints the background for each item
+			void bground(graph_reference graph, const compset_interface *compset) const override
+			{
+				renderer_->bground(graph, compset);
+			}
+
+			// paints the node operator for each item
+			void expander(graph_reference graph, const compset_interface *compset) const override
+			{
+				using namespace nana;
+				comp_attribute_t attr;
+				if(compset->comp_attribute(component::expander, attr))
+				{
+					facade<element::arrow> arrow("solid_triangle");
+					arrow.direction(direction::southeast);
+					if(!compset->item_attribute().expended)
+					{
+						arrow.switch_to("hollow_triangle");
+						arrow.direction(direction::east);
+					}
+					auto r = attr.area;
+					r.y += (attr.area.height - 16) / 2;
+					r.width = r.height = 16;
+					auto clr {attr.mouse_pointed ? theme.tree_expander_hovered : theme.tree_expander};
+					arrow.draw(graph, api::bgcolor(htree_), clr, r, element_state::normal);
+				}
+			}
+
+			// paints the checkbox for each item (if the checkable mode is enabled)
+			void crook(graph_reference graph, const compset_interface *compset) const override
+			{
+				renderer_->crook(graph, compset);
+			}
+
+			// paints the icon for each item (if the node has an icon scheme set)
+			virtual void icon(graph_reference graph, const compset_interface *compset) const override
+			{
+				renderer_->icon(graph, compset);
+			}
+
+			// paints the text for each item
+			virtual void text(graph_reference graph, const compset_interface *compset) const override
+			{
+				auto iattr {compset->item_attribute()};
+				comp_attribute_t cattr;
+				compset->comp_attribute(component::text, cattr);
+				auto tf {graph.typeface()};
+				if(iattr.has_children)
+					graph.typeface({tf.name(), tf.size(), {800}});
+
+				auto tsize {graph.text_extent_size(iattr.text)};
+				auto gsize {cattr.area.dimension()};
+				nana::point tpos {cattr.area.position()};
+				if(tsize.height < gsize.height)
+					tpos.y += gsize.height / 2 - tsize.height / 2 - 1;
+
+				if(iattr.has_children)
+				{
+					graph.string(tpos, iattr.text, theme.tree_parent_node);
+					graph.typeface(tf);
+				}
+				else graph.string(tpos, iattr.text, theme.tree_key_fg);
+			}
+		};
+
+		class ctree_placer : public nana::treebox::compset_placer_interface
+		{
+			using clonable_placer = nana::pat::cloneable<nana::treebox::compset_placer_interface>;
+			clonable_placer placer_; // wraps a pointer to the library's internal placer
+
+		public:
+			ctree_placer(const clonable_placer &r) : placer_(r) {}
+
+		private:
+
+			// called when certain features are toggled:
+			// - when the checkable mode is toggled (treebox::checkable())
+			// - when an icon scheme is added or erased (treebox::icon() and treebox::icon_erase())
+			virtual void enable(component_t comp, bool enabled) override
+			{
+				if(comp == component_t::icon) // an icon scheme is being added or erased
+				{
+					// the bool parameter indicates which is the case
+				}
+				else if(comp == component_t::crook) // the checkable mode is being toggled
+				{
+					// the bool parameter indicates whether it's toggled on or off
+				}
+
+				// the library's placer must be called, otherwise the toggling won't work
+				placer_->enable(comp, enabled);
+			}
+
+			// returns whether a feature is on or off
+			virtual bool enabled(component_t comp) const override
+			{
+				return placer_->enabled(comp);
+			}
+
+			// returns the height of an item, which is dependent on the size of
+			// the font used by the `graph` object, and the size of the checkbox
+			virtual unsigned item_height(graph_reference graph) const override
+			{
+				return placer_->item_height(graph);
+			}
+
+			// returns the width of an item, which is dependent of font size, 
+			// checkbox and icon presence, checkbox and icon size, and text offset
+			virtual unsigned item_width(graph_reference graph, const item_attribute_t &attr) const override
+			{
+				if(attr.has_children) // if the item has children, calc width using bold font
+				{
+					auto tf {graph.typeface()};
+					graph.typeface({tf.name(), tf.size(), {800}}); // bold font
+					auto result {placer_->item_width(graph, attr)};
+					graph.typeface(tf); // restore original font
+					return result;
+				}
+				return placer_->item_width(graph, attr);
+			}
+
+			// locates a component (returns true if the component is present, and writes the position
+			// and dimensions of the component to the rectangle object pointed to by the `r` parameter)
+			virtual bool locate(component_t comp, const item_attribute_t &attr, nana::rectangle *r) const override
+			{
+				return placer_->locate(comp, attr, r);
+			}
+		};
+
+	public:
+
+		conf_tree() : treebox() {}
+
+		conf_tree(nana::window parent, nana::place *place)
+		{
+			create(parent, place);
+		}
+
+		void create(nana::window parent, nana::place *place)
+		{
+			plc = place;
+			treebox::create(parent);
+			use_entire_line(true);
+			scheme().text_offset = 5;
+			scheme().indent_displacement = 33;
+			typeface(nana::paint::font_info {"", 12});
+			placer(ctree_placer {placer()});
+			renderer(ctree_renderer {renderer()});
+			events().expose([this] { refresh_theme(); });
+			events().selected([this](const nana::arg_treebox &arg)
+			{
+				static std::string last;
+				if(arg.item.selected())
+				{
+					auto field_name {arg.item.value<std::string>().data()};
+					if(last != field_name)
+					{
+						last = field_name;
+						plc->field_display(field_name, true);
+						plc->collocate();
+					}
+				}
+			});
+		}
+
+		void refresh_theme()
+		{
+			bgcolor(theme.fmbg.blend(theme.is_dark() ? nana::colors::white : nana::colors::black, .06));
+			fgcolor(theme.tbfg);
+			if(theme.is_dark())
+			{
+				scheme().item_bg_selected = theme.tree_selbg;
+				scheme().item_fg_selected = theme.tree_selfg;
+				scheme().item_bg_highlighted = theme.tree_hilitebg;
+				scheme().item_fg_highlighted = theme.tree_hilitefg;
+				scheme().item_bg_selected_and_highlighted = theme.tree_selhilitebg;
+				scheme().item_fg_selected_and_highlighted = theme.tree_selhilitefg;
+			}
+			else
+			{
+				scheme().item_bg_selected = theme.tree_selbg.blend(nana::colors::black, .06);
+				scheme().item_fg_selected = theme.tree_selfg.blend(nana::colors::black, .06);
+				scheme().item_bg_highlighted = theme.tree_hilitebg.blend(nana::colors::black, .06);
+				scheme().item_fg_highlighted = theme.tree_hilitefg.blend(nana::colors::black, .06);
+				scheme().item_bg_selected_and_highlighted = theme.tree_selhilitebg.blend(nana::colors::black, .06);
+				scheme().item_fg_selected_and_highlighted = theme.tree_selhilitefg.blend(nana::colors::black, .06);
+			}
+		}
+
+		void add(std::string item_text, std::string field_name)
+		{
+			if(plc)
+			{
+				insert(field_name, item_text).value(field_name);
+			}
+		}
+
+		void select(std::string field_name)
+		{
+			auto item {find(field_name)};
+			if(!item.empty())
+			{
+				item.select(true);
+			}
+		}
+	};
+
+	class conf_page : public nana::panel<true>
+	{
+		std::unique_ptr<nana::place> plc;
+
+	public:
+
+		conf_page() = default;
+
+		conf_page(nana::window parent)
+		{
+			create(parent);
+		}
+
+		void create(nana::window parent)
+		{
+			nana::panel<true>::create(parent);
+			plc = std::make_unique<nana::place>(*this);
+			refresh_theme();
+			events().expose([this] { refresh_theme(); });
+			events().resized([this] { plc->collocate(); });
+		}
+
+		void refresh_theme()
+		{
+			bgcolor(theme.fmbg);
+		}
+
+		auto &get_place() { return *plc; }
+		void div(std::string div_text) { plc->div(div_text); }
+		auto &operator[](const char *field_name) { return plc->field(field_name); }
+	};
+
+
+	class sblock_listbox : public nana::listbox
+	{
+		bool hicontrast {false}, hilite_checked {false};
+
+	public:
+
+		sblock_listbox(nana::window parent, bool high_contrast = true) : listbox {parent}, hicontrast {hicontrast}
+		{
+			refresh_theme();
+			events().expose([this] { refresh_theme(); });
+			checkable(true);
+			enable_single(true, false);
+			typeface(nana::paint::font_info {"Calibri", 12});
+			scheme().item_height_ex = 8;
+			scheme().text_margin = util::scale(10) + (nana::api::screen_dpi(true) > 96) * 4;
+			append_header("", util::scale(286));
+			show_header(false);
+
+			events().selected([&](const nana::arg_listbox &arg)
+			{
+				if(arg.item.selected())
+					arg.item.check(!arg.item.checked()).select(false);
+			});
+
+			events().checked([&](const nana::arg_listbox &arg)
+			{
+				static bool ignore {false};
+				if(!ignore && arg.item.checked())
+				{
+					ignore = true;
+					auto_draw(false);
+					auto cat {at(0)};
+					auto catsize {cat.size()};
+					if(arg.item.pos().item == 0)
+					{
+						for(auto ip : cat)
+							ip.check(false);
+						cat.at(0).check(true);
+					}
+					else 
+					{
+						cat.at(0).check(false);
+						if(checked().size() == catsize - 1)
+						{
+							for(int n {1}; n < catsize; n++)
+								cat.at(n).check(false);
+							cat.at(0).check(true);
+						}
+					}
+					auto_draw(true);
+					ignore = false;
+				}
+			});
+		}
+
+		void refresh_theme()
+		{
+			using namespace nana;
+			auto bgparent {nana::API::get_widget(parent())->bgcolor()};
+			fgcolor(theme.is_dark() ? nana::color {"#e5e5e5"} : nana::color {"#404040"});
+			bgcolor(theme.is_dark() ? bgparent.blend(nana::colors::white, .020) : bgparent.blend(nana::colors::black, .020));
+
+			if(theme.is_dark())
+			{
+				borderless(true);
+				scheme().header_bgcolor = theme.lb_headerbg;
+				scheme().header_fgcolor = colors::white;
+				scheme().cat_fgcolor = theme.nimbus;
+				scheme().item_selected = color {"#AC4F44"};
+				scheme().item_selected_border = color {"#B05348"}.blend(colors::black, .15);
+				if(hicontrast)
+					scheme().item_highlighted = color {"#544"}.blend(colors::light_grey, .15 - theme.contrast() / 2);
+				else scheme().item_highlighted = color {"#544"};
+			}
+			else
+			{
+				borderless(false);
+				scheme().header_bgcolor = color {"#f1f2f4"};
+				scheme().header_fgcolor = colors::black;
+				scheme().cat_fgcolor = color {"#039"};
+				auto c {theme.contrast()};
+				scheme().item_selected = color {"#c7dEe4"}.blend(colors::grey, .1 - c);
+				scheme().item_selected_border = color {"#a7cEd4"}.blend(colors::grey, .1 - c);
+				scheme().item_highlighted = color {"#eee"}.blend(colors::dark_grey, .25 - c / 2);
+			}
+			if(borderless())
+				nana::drawing {*this}.draw([](paint::graphics &g) { g.rectangle(false, theme.border); });
+			if(hilite_checked)
+			{
+				auto chk {checked()};
+				for(const auto &el : chk)
+				{
+					at(el).fgcolor(theme.list_check_highlight_fg);
+					at(el).bgcolor(theme.list_check_highlight_bg);
+				}
+			}
+		}
+	};
+
+
+	class Infobox : public nana::label
+	{
+		bool highlighted {false};
+
+	public:
+
+		Infobox() : label() {};
+
+		Infobox(nana::window parent, bool visible = true)
+		{
+			create(parent, visible);
+		}
+
+		void create(nana::window parent, bool visible = true)
+		{
+			label::create(parent, visible);
+			text_align(nana::align::center, nana::align_v::center);
+			typeface(nana::paint::font_info {"Arial", 10, {400, true}});
+			refresh_theme();
+			events().expose([this] { refresh_theme(); });
+			nana::drawing {*this}.draw([](nana::paint::graphics &g) { g.rectangle(false, theme.border); });
+		}
+
+		void refresh_theme()
+		{
+			auto bgparent {nana::API::get_widget(parent())->bgcolor()};
+			bgcolor(theme.is_dark() ? bgparent.blend(nana::colors::white, .020) : bgparent.blend(nana::colors::black, .020));
+			fgcolor(theme.is_dark() ? nana::color {"#bbb"} : nana::color {"#666"});
+		}
 	};
 }
 

@@ -24,7 +24,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		if(first_arg == L"update")
 		{
 			fs::path arc_path {argv[2]}, target_dir {argv[3]};
-			util::end_processes(modpath.filename());
+			auto pid {util::other_instance(target_dir / modpath.filename())};
+			if(pid)
+			{
+				auto hwnds {util::hwnds_from_pid(pid)};
+				for(auto hwnd : hwnds)
+					if(IsWindow(hwnd))
+						SendMessage(hwnd, WM_CLOSE, 0, 0);
+			}
 			auto res {util::extract_7z(arc_path, target_dir)};
 			fs::remove(arc_path, ec);
 			fs::remove(fs::temp_directory_path() / "7z.dll", ec);
@@ -62,6 +69,22 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		}
 	}
 	LocalFree(argv);
+
+	auto pid {util::other_instance()};
+	if(pid)
+	{
+		auto hwnds {util::hwnds_from_pid(pid)};
+		for(auto hwnd : hwnds)
+		{
+			if(IsIconic(hwnd))
+				ShowWindow(hwnd, SW_RESTORE);
+			SetForegroundWindow(hwnd);
+			BringWindowToTop(hwnd);
+			break;
+		}
+		return 0;
+	}
+
 	CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
 
 	paint::image img {modpath};
@@ -216,6 +239,17 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				GUI::conf.ytdlp_nightly = jconf["ytdlp_nightly"];
 				GUI::conf.audio_multistreams = jconf["audio_multistreams"];
 			}
+			if(jconf.contains("sblock")) // v2.4
+			{
+				for(auto &el : jconf["sblock"]["mark"])
+					GUI::conf.sblock_mark.push_back(el.get<int>());
+				for(auto &el : jconf["sblock"]["remove"])
+					GUI::conf.sblock_remove.push_back(el.get<int>());
+				GUI::conf.cb_sblock_mark = jconf["sblock"]["cb_mark"];
+				GUI::conf.cb_sblock_remove = jconf["sblock"]["cb_remove"];
+				GUI::conf.cb_proxy = jconf["proxy"]["enabled"];
+				GUI::conf.proxy = to_wstring(jconf["proxy"]["URL"].get<std::string>());
+			}
 		}
 	}
 	else GUI::conf.outpath = util::get_sys_folder(FOLDERID_Downloads);
@@ -292,6 +326,24 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["json_hide_null"] = GUI::conf.json_hide_null;
 		jconf["ytdlp_nightly"] = GUI::conf.ytdlp_nightly;
 		jconf["audio_multistreams"] = GUI::conf.audio_multistreams;
+
+		if(jconf.contains("sblock"))
+		{
+			if(jconf["sblock"].contains("mark"))
+				jconf["sblock"]["mark"].clear();
+			if(jconf["sblock"].contains("remove"))
+				jconf["sblock"]["remove"].clear();
+		}
+
+		for(auto i : GUI::conf.sblock_mark)
+			jconf["sblock"]["mark"].push_back(i);
+		for(auto i : GUI::conf.sblock_remove)
+			jconf["sblock"]["remove"].push_back(i);
+
+		jconf["sblock"]["cb_mark"] = GUI::conf.cb_sblock_mark;
+		jconf["sblock"]["cb_remove"] = GUI::conf.cb_sblock_remove;
+		jconf["proxy"]["enabled"] = GUI::conf.cb_proxy;
+		jconf["proxy"]["URL"] = to_utf8(GUI::conf.proxy);
 
 		if(jconf.contains("playsel_strings"))
 			jconf.erase("playsel_strings");

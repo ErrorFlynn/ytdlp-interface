@@ -12,6 +12,7 @@
 
 #include <nana/gui.hpp>
 
+#pragma warning(disable : 4267)
 #pragma comment(linker, "/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
 	processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
@@ -33,10 +34,10 @@ namespace util
 	std::string int_to_filesize(unsigned i, bool with_bytes = true);
 	std::string GetLastErrorStr(bool inet = false);
 	HWND hwnd_from_pid(DWORD pid);
+	std::vector<HWND> hwnds_from_pid(DWORD pid);
 	std::string run_piped_process(std::wstring cmd, bool *working = nullptr, append_callback cbappend = nullptr,
 								  progress_callback cbprog = nullptr, bool *graceful_exit = nullptr, std::string suppress = "");
-	void end_processes(std::wstring img_name);
-	//void message_processes(std::wstring img_name, UINT msg, WPARAM wparam, LPARAM lparam);
+	DWORD other_instance(std::wstring path = L"");
 	std::wstring get_sys_folder(REFKNOWNFOLDERID rfid);
 	std::string get_inet_res(std::string res, std::string *error = nullptr);
 	std::string dl_inet_res(std::string res, fs::path fname, bool *working = nullptr, std::function<void(unsigned)> cb = nullptr);

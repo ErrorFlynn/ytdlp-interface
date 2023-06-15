@@ -21,6 +21,7 @@ public:
 	nana::size dpi_transform_size(double w, double h = 0);
 	int dpi_transform(int val, double from_dpi = 96);
 	bool center(double w = 0, double h = 0);
+	HWND native_handle() { return hwnd; }
 
 protected:
 	HWND hwnd {nullptr};
