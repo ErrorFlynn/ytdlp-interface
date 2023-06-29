@@ -22,6 +22,8 @@ public:
 	int dpi_transform(int val, double from_dpi = 96);
 	bool center(double w = 0, double h = 0);
 	HWND native_handle() { return hwnd; }
+	void subclass_before(UINT msgid, std::function<bool(UINT, WPARAM, LPARAM, LRESULT*)> handler) { msg.make_before(msgid, handler); }
+	void subclass_after(UINT msgid, std::function<bool(UINT, WPARAM, LPARAM, LRESULT*)> handler) { msg.make_after(msgid, handler); }
 
 protected:
 	HWND hwnd {nullptr};

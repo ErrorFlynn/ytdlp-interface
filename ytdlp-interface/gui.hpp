@@ -63,7 +63,7 @@ private:
 	std::thread thr, thr_releases, thr_versions, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp, thr_update;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.4.0"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
+	const std::string ver_tag {"v2.4.1"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
 		ytdlp_fname {X64 ? "yt-dlp.exe" : "yt-dlp_x86.exe"};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
@@ -794,11 +794,11 @@ private:
 	void get_latest_ffmpeg();
 	void get_latest_ytdlp();
 	void get_versions();
+	void get_version_ytdlp();
 	bool is_ytlink(std::wstring text);
 	void make_updater_page(themed_form &parent);
 	void change_field_attr(nana::place &plc, std::string field, std::string attr, unsigned new_val);
 	bool is_tag_a_new_version(std::string tag_name) { return semver_t {tag_name} > semver_t {ver_tag}; }
-	void dlg_updater(nana::window parent);
 	void show_queue(bool freeze_redraw = true);
 	void show_output();
 	void add_url(std::wstring url);
@@ -828,7 +828,7 @@ private:
 		     four  {scale(130) * lbq.column_at(4).visible() + scale(16) * lbq_has_scrollbar()},
 		     five  {scale(150) * lbq.column_at(5).visible()},
 		     six   {scale(60) * lbq.column_at(6).visible()},
-		     seven {scale(90) * lbq.column_at(7).visible()};
+		     seven {scale(100) * lbq.column_at(7).visible()};
 		
 		if(conf.col_site_icon || conf.col_site_text)
 		{

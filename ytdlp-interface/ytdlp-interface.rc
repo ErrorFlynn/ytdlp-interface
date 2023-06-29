@@ -61,8 +61,8 @@ IDI_APPICON             ICON                    "Youtube-Round.ico"
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 2,4,0,0
- PRODUCTVERSION 2,4,0,0
+ FILEVERSION 2,4,1,0
+ PRODUCTVERSION 2,4,1,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -78,12 +78,12 @@ BEGIN
         BLOCK "040904b0"
         BEGIN
             VALUE "FileDescription", "Graphical interface for yt-dlp.exe"
-            VALUE "FileVersion", "2.4.0.0"
+            VALUE "FileVersion", "2.4.1.0"
             VALUE "InternalName", "ytdlp-interface.exe"
             VALUE "LegalCopyright", "Copyright (C) 2023"
             VALUE "OriginalFilename", "ytdlp-interface.exe"
             VALUE "ProductName", "ytdlp-interface"
-            VALUE "ProductVersion", "2.4.0.0"
+            VALUE "ProductVersion", "2.4.1.0"
         END
     END
     BLOCK "VarFileInfo"
