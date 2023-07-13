@@ -1,10 +1,12 @@
 #include "themed_form.hpp"
 #include <iostream>
+#include <dwmapi.h>
 
 
 themed_form::themed_form(theme_cb theme_change_callback, nana::window owner, nana::rectangle r, const nana::appearance& appear) : form{owner, r, appear}
 {
 	InitDarkMode();
+
 	hwnd = reinterpret_cast<HWND>(form::native_handle());
 	if(theme_change_callback)
 		callback = std::move(theme_change_callback);
@@ -42,6 +44,50 @@ themed_form::themed_form(theme_cb theme_change_callback, nana::window owner, nan
 			return true;
 		});
 	}
+
+	msg.make_after(WM_ENTERSIZEMOVE, [this](UINT, WPARAM, LPARAM, LRESULT*)
+	{
+		DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rsnap, sizeof rsnap);
+		GetCursorPos(&snap_cur_pos);
+
+		snap_x = snap_cur_pos.x - rsnap.left;
+		snap_y = snap_cur_pos.y - rsnap.top;
+
+		return false;
+	});
+
+	msg.make_after(WM_MOVING, [this](UINT, WPARAM, LPARAM lparam, LRESULT*)
+	{
+		if(snap_)
+		{
+			auto  pr_current     {reinterpret_cast<LPRECT>(lparam)};
+			auto  width          {pr_current->right - pr_current->left}, 
+			      correct_width  {rsnap.right - rsnap.left};
+
+			int offset {0};
+			if(width > correct_width)
+				offset = dpi_transform((width - correct_width) / 2) + 1;
+
+			GetCursorPos(&snap_cur_pos);
+			OffsetRect(pr_current, snap_cur_pos.x - (pr_current->left + snap_x), snap_cur_pos.y - (pr_current->top + snap_y));
+
+			SystemParametersInfo(SPI_GETWORKAREA, 0, &snap_wa, 0);
+
+			if(IsSnapClose(pr_current->left + offset, snap_wa.left))
+				OffsetRect(pr_current, snap_wa.left - pr_current->left - offset, 0);
+			else if(IsSnapClose(snap_wa.right + offset, pr_current->right))
+				OffsetRect(pr_current, snap_wa.right - pr_current->right + offset, 0);
+
+			if(IsSnapClose(pr_current->top, snap_wa.top))
+				OffsetRect(pr_current, 0, snap_wa.top - pr_current->top);
+			else if(IsSnapClose(snap_wa.bottom, pr_current->bottom - offset))
+				OffsetRect(pr_current, 0, snap_wa.bottom - pr_current->bottom + offset);
+
+			return true;
+		}
+
+		return false;
+	});
 }
 
 void themed_form::dark_theme(bool enable)
@@ -173,7 +219,7 @@ bool themed_form::center(double w, double h)
 	if(api::is_window(wnd))
 	{
 		RECT rect;
-		GetWindowRect(reinterpret_cast<themed_form*>(api::get_widget(wnd))->hwnd, &rect);
+		DwmGetWindowAttribute(reinterpret_cast<themed_form*>(api::get_widget(wnd))->hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rect, sizeof rect);
 		point owner_pos {rect.left, rect.top}, centered_pos;
 		nana::size owner_size {unsigned(rect.right - rect.left), unsigned(rect.bottom - rect.top)};
 		centered_pos.x = owner_pos.x + (owner_size.width / 2 - sz.width / 2);

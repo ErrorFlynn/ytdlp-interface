@@ -350,7 +350,8 @@ std::string util::get_inet_res(std::string res, std::string *error)
 		return str;
 	};*/
 
-	auto hinet {InternetOpenA("ytdlp-interface", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0)};
+	const char *agent {res.find("github.com") == -1 ? "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" : "ytdlp-interface"};
+	auto hinet {InternetOpenA(agent, INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0)};
 	if(hinet)
 	{
 		auto hfile {InternetOpenUrlA(hinet, res.data(), NULL, 0, 0, 0)};

@@ -223,7 +223,9 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 	if(conf.get_releases_at_startup)
 		get_releases();
 	caption(title);
+	snap(conf.cbsnap);
 	make_form();
+	RegisterDragDrop(hwnd, this);
 
 	if(system_theme())
 		apply_theme(is_system_theme_dark());
@@ -233,6 +235,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 	
 	events().unload([&]
 	{
+		RevokeDragDrop(hwnd);
 		conf.zoomed = is_zoomed(true);
 		if(conf.zoomed || is_zoomed(false)) restore();
 		conf.winrect = nana::rectangle {pos(), size()};
@@ -342,6 +345,7 @@ void GUI::dlg_formats()
 	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize>{}};
 	fm.caption(title + " - manual selection of formats");
 	fm.bgcolor(theme.fmbg);
+	fm.snap(conf.cbsnap);
 	fm.div(R"(
 			vert margin=20
 				<weight=180px 
@@ -513,6 +517,16 @@ void GUI::dlg_formats()
 		fm.close();
 	});
 
+	auto get_int = [](const nlohmann::json &j, const std::string &key) -> std::string
+	{
+		return (j.contains(key) && j[key] != nullptr) ? std::to_string(j[key].get<unsigned>()) : "---";
+	};
+
+	auto get_string = [](const nlohmann::json &j, const std::string &key) -> std::string
+	{
+		return (j.contains(key) && j[key] != nullptr) ? j[key].get<std::string>() : "---";
+	};
+
 	btnok.events().click([&, this]
 	{
 		auto &bottom {bottoms.current()};
@@ -567,6 +581,33 @@ void GUI::dlg_formats()
 		conf.fmt1 = fmt1;
 		conf.fmt2 = fmt2;
 
+		if(sel.size() == 1)
+		{
+			auto item {lbq.at(lbq.selected().front())};
+			auto it {std::find_if(vidinfo["formats"].begin(), vidinfo["formats"].end(), [&](const auto &el)
+			{
+				return el["format"].get<std::string>().rfind(nana::to_utf8(strfmt)) != -1;
+			})};
+			std::string fsize {"---"}, fmt_note, ext, fmtid;
+			if(it != vidinfo["formats"].end())
+			{
+				auto &fmt {*it};
+				if(fmt.contains("filesize") && fmt["filesize"] != nullptr)
+					fsize = util::int_to_filesize(fmt["filesize"], false);
+				if(list.at(sel.front().cat).text() == "Audio only")
+					fmt_note = get_string(fmt, "format_note");
+				else fmt_note = get_string(fmt, "resolution");
+				ext = get_string(fmt, "ext");
+				fmtid = get_string(fmt, "format_id");
+				item.text(4, fmtid);
+				item.text(5, fmt_note);
+				item.text(6, ext);
+				if(fsize != "---")
+					fsize = '~' + fsize;
+				item.text(7, fsize);
+			}
+		}
+
 		bottom.use_strfmt = true;
 		if(bottom.using_custom_fmt())
 		{
@@ -596,13 +637,13 @@ void GUI::dlg_formats()
 	{
 		auto it {std::find_if(vidinfo["thumbnails"].begin(), vidinfo["thumbnails"].end(), [](const auto &el)
 		{
-			return std::string{el["url"]}.rfind("mqdefault.jpg") != -1;
+			return el["url"].get<std::string>().rfind("mqdefault.jpg") != -1;
 		})};
 
 		if(it == vidinfo["thumbnails"].end())
 			it = std::find_if(vidinfo["thumbnails"].begin(), vidinfo["thumbnails"].end(), [](const auto &el)
 		{
-			return std::string {el["url"]}.rfind("mqdefault_live.jpg") != -1;
+			return el["url"].get<std::string>().rfind("mqdefault_live.jpg") != -1;
 		});
 
 		if(it != vidinfo["thumbnails"].end())
@@ -692,32 +733,10 @@ void GUI::dlg_formats()
 		else format_id1 = format_id;
 	}
 
-	auto get_int = [](const nlohmann::json &j, const std::string &key) -> std::string
-	{
-		if(j.contains(key))
-		{
-			if(j[key] == nullptr)
-				return "null";
-			else return std::to_string(j[key].get<unsigned>());
-		}
-		else return "---";
-	};
-
-	auto get_string = [](const nlohmann::json &j, const std::string &key) -> std::string
-	{
-		if(j.contains(key))
-		{
-			if(j[key] == nullptr)
-				return "null";
-			else return j[key].get<std::string>();
-		}
-		else return "---";
-	};
-
 	std::vector<bool> colmask(9, false);
 	for(auto &fmt : vidinfo["formats"])
 	{
-		std::string format {fmt["format"]}, acodec, vcodec, ext, fps, vbr, abr, asr, filesize;
+		std::string format {fmt["format"]}, acodec, vcodec, ext, fps, vbr, abr, asr, filesize {"---"};
 		if(format.find("storyboard") == -1)
 		{
 			abr = get_int(fmt, "abr");
@@ -727,13 +746,8 @@ void GUI::dlg_formats()
 			ext = get_string(fmt, "ext");
 			acodec = get_string(fmt, "acodec");
 			vcodec = get_string(fmt, "vcodec");
-			if(fmt.contains("filesize"))
-			{
-				if(fmt["filesize"] != nullptr)
-					filesize = util::int_to_filesize(fmt["filesize"]);
-				else filesize = "null";
-			}
-			else filesize = "---";
+			if(fmt.contains("filesize") && fmt["filesize"] != nullptr)
+				filesize = util::int_to_filesize(fmt["filesize"]);
 			unsigned catidx {0};
 			if(acodec == "none")
 				catidx = 2; // video only
@@ -752,7 +766,7 @@ void GUI::dlg_formats()
 			for(int n {1}; n < 9; n++)
 			{
 				const auto text {item.text(n)};
-				if(!colmask[n] && text != "---" && text != "null" && text != "none")
+				if(!colmask[n] && text != "---" && text != "none")
 					colmask[n] = true;
 			}
 		}
@@ -1397,7 +1411,7 @@ void GUI::add_url(std::wstring url)
 						cmd = L" --proxy " + conf.proxy + cmd;
 					bottom.cmdinfo = conf.ytdlp_path.filename().wstring() + cmd;
 					media_info = util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + cmd, &bottom.working_info);
-					if(media_info.front() == '{')
+					if(!media_info.empty() && media_info.front() == '{')
 					{
 						try { bottom.playlist_info = nlohmann::json::parse(media_info); }
 						catch(nlohmann::detail::exception e)
@@ -1411,7 +1425,7 @@ void GUI::add_url(std::wstring url)
 							std::string URL {bottom.playlist_info["entries"][0]["url"]};
 							cmd = L" --no-warnings -j " + fmt_sort + to_wstring(URL);
 							media_info = {util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + cmd, &bottom.working_info)};
-							if(media_info.front() == '{')
+							if(!media_info.empty() && media_info.front() == '{')
 							{
 								try { bottom.vidinfo = nlohmann::json::parse(media_info); }
 								catch(nlohmann::detail::exception e)
@@ -1421,14 +1435,7 @@ void GUI::add_url(std::wstring url)
 										json_error(e);
 								}
 								if(!bottom.vidinfo.empty())
-								{
 									bottom.show_btnfmt(true);
-									if(bottom.is_bcplaylist)
-									{
-										if(bottom.playlist_info["entries"].size() < 2)
-											bottom.is_bcplaylist = false;
-									}
-								}
 							}
 							else bottom.playlist_vid_cmdinfo = conf.ytdlp_path.filename().wstring() + cmd;
 						}
@@ -1712,6 +1719,7 @@ void GUI::dlg_playlist()
 
 	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize>{}};
 	fm.caption(title);
+	fm.snap(conf.cbsnap);
 	fm.div(R"(vert margin=20 
 		<weight=25 <l_title> <btnall weight=100> <weight=20> <btnnone weight=120>> <weight=20> 
 		<range_row weight=25 <l_first weight=36> <weight=10> <tbfirst weight=45> <weight=10> <slfirst> <weight=20> 
@@ -2020,10 +2028,11 @@ void GUI::dlg_sections()
 	auto &bottom {bottoms.current()};
 	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize>{}};
 	fm.caption(title + " - media sections");
+	fm.snap(conf.cbsnap);
 	if(cnlang) fm.center(800, 678);
 	else fm.center(788, 678);
 	if(cnlang) fm.div(R"(vert margin=[15,20,20,20] 
-		<weight=130 <l_help>> <weight=20> 
+		<weight=115 <l_help>> <weight=20> 
 		<weight=25
 			<l_start weight=154> <weight=10> <tbfirst weight=80> <weight=10> <l_end weight=16> <weight=10> <tbsecond weight=80>
 			<weight=20> <btnadd weight=100> <weight=20> <btnremove weight=150> <weight=20> <btnclear weight=90>
@@ -2032,7 +2041,7 @@ void GUI::dlg_sections()
 		<weight=35 <> <btnclose weight=100> <>>
 	)");
 	else fm.div(R"(vert margin=[15,20,20,20] 
-		<weight=130 <l_help>> <weight=20> 
+		<weight=115 <l_help>> <weight=20> 
 		<weight=25
 			<l_start weight=142> <weight=10> <tbfirst weight=80> <weight=10> <l_end weight=16> <weight=10> <tbsecond weight=80>
 			<weight=20> <btnadd weight=100> <weight=20> <btnremove weight=150> <weight=20> <btnclear weight=90>
@@ -2096,8 +2105,7 @@ void GUI::dlg_sections()
 		"in the format <bold color=0x>[hour:][minute:]second</>.\n\nFor example, <bold color=0x>54</> means second 54, "
 		"<bold color=0x>9:54</> means minute 9 second 54, "
 		"and <bold color=0x>1:9:54</> means hour 1 minute 9 second 54.\nTo indicate the end of the media, put <bold color=0x>0</> "
-		"in the \"to\" field or leave it blank. \n\nWARNING: your input is not validated in any way, what you "
-		"enter is what is passed to yt-dlp. The downloading of sections is done through FFmpeg (which is significantly slower), "
+		"in the \"to\" field or leave it blank. \n\nThe downloading of sections is done through FFmpeg (which is much slower), "
 		"and each section is downloaded to its own file."};
 
 	for(auto &val : bottom.sections)
@@ -2152,8 +2160,50 @@ void GUI::dlg_sections()
 
 	btnadd.events().click([&]
 	{
+		using namespace std;
+
+		struct timepoint
+		{
+			timepoint(string str)
+			{
+				vector<int> vals, hms {0, 0, 0};
+				stringstream ss {str};
+				for(string val; getline(ss, val, ':');)
+					vals.push_back(stoi(val));
+				for(auto it_src {vals.rbegin()}, it_dest {hms.rbegin()}; it_src != vals.rend(); it_src++, it_dest++)
+					*it_dest = *it_src;
+				value = chrono::hours {hms[0]} + chrono::minutes{hms[1]} + chrono::seconds{hms[2]};
+			}
+			bool operator < (const timepoint &o) { return value < o.value; }
+			bool operator > (const timepoint &o) { return value > o.value; }
+			//bool operator == (const timepoint &o) { return  value == o.value; }
+			bool equal(const timepoint &o) { return value == o.value; }
+		private:
+			chrono::seconds value;
+		};
+
 		auto first {tbfirst.text()}, second {tbsecond.text()};
-		const auto text {(first.empty() ? "0" : first) + " -> " + (second.empty() || second == "0" ? "end" : second)};
+		if(first.empty()) first = '0';
+		if(second.empty()) second = '0';
+		timepoint tp1 {first}, tp2 {second};
+		if(first == "0" && second == "0")
+		{
+			(nana::msgbox {fm, "validation error"}.icon(nana::msgbox::icon_error) << "section spans entire length")();
+			return;
+		}
+		if(tp1.equal(tp2))
+		{
+			(nana::msgbox {fm, "validation error"}.icon(nana::msgbox::icon_error) << "timepoints are identical")();
+			return;
+		}
+		else if(tp1 > tp2)
+		{
+			(nana::msgbox {fm, "validation error"}.icon(nana::msgbox::icon_error) << "second timepoint precedes the first one")();
+			return;
+		}
+		
+
+		const auto text {first + " -> " + (second == "0" ? "end" : second)};
 		for(auto item : lbs.at(0))
 			if(item.text(0) == text)
 			{
@@ -2161,7 +2211,7 @@ void GUI::dlg_sections()
 				return;
 			}
 		lbs.at(0).append(text).select(true);
-		lbs.at(0).back().value(std::make_pair<std::wstring, std::wstring>(to_wstring(first), to_wstring(second)));
+		lbs.at(0).back().value(make_pair<wstring, wstring>(to_wstring(first), to_wstring(second)));
 		tbfirst.focus();
 	});
 
@@ -2901,6 +2951,7 @@ void GUI::dlg_settings()
 	fm.center(820, 500);
 	fm.caption(title + " - settings");
 	fm.bgcolor(theme.fmbg);
+	fm.snap(conf.cbsnap);
 
 	fm.div(R"(vert margin=20 < <tree weight=150> <weight=20> <switchable <ytdlp> <sblock> <queuing> <gui> <updater>> >)");
 
@@ -2938,7 +2989,8 @@ void GUI::dlg_settings()
 		cb_queue_autostart {queuing, "When the program starts, automatically start processing the queue"},
 		cb_zeropadding {ytdlp, "Pad the indexed filenames with zeroes"}, cb_playlist_folder {ytdlp, "Put playlists in their own folders"},
 		cb_origin_progdir {gui, "Program folder"}, cb_origin_curdir {gui, "Currently selected folder"}, 
-		cb_mark {sblock, "Mark these categories:"}, cb_remove {sblock, "Remove these categories:"}, cb_proxy {ytdlp, "Use this proxy:"};
+		cb_mark {sblock, "Mark these categories:"}, cb_remove {sblock, "Remove these categories:"}, cb_proxy {ytdlp, "Use this proxy:"}, 
+		cbsnap {gui, "Snap windows to screen edges"};
 	widgets::Separator sep1 {ytdlp}, sep2 {ytdlp}, sep3 {gui}, sep4 {fm};
 	widgets::Button btn_close {fm, " Close"}, btn_default {ytdlp, "Reset to default", true},
 		btn_playlist_default {ytdlp, "Reset to default", true}, btn_info {ytdlp};
@@ -3159,6 +3211,7 @@ void GUI::dlg_settings()
 			<cbtheme_light weight=66> <weight=20> <cbtheme_system weight=178> > <weight=20>
 		<weight=25 <l_contrast weight=70> <weight=20> <slider> >
 		<weight=20> <sep3 weight=3px> <weight=20>
+		<weight=25 <cbsnap> <>> <weight=20>
 		<weight=25 <l_opendlg_origin weight=380> <cb_origin_curdir>> <weight=10>
 		<weight=25 <opendlg_spacer weight=380> <cb_origin_progdir>> <weight=20>
 	)");
@@ -3176,10 +3229,19 @@ void GUI::dlg_settings()
 		gui["cbtheme_system"] << cbtheme_system;
 	gui["l_contrast"] << l_contrast;
 	gui["slider"] << slider;
+	gui["cbsnap"] << cbsnap;
 	gui["sep3"] << sep3;
 	gui["l_opendlg_origin"] << l_opendlg_origin;
 	gui["cb_origin_progdir"] << cb_origin_progdir;
 	gui["cb_origin_curdir"] << cb_origin_curdir;
+
+	cbsnap.check(conf.cbsnap);
+	cbsnap.events().checked([&, this]
+	{
+		conf.cbsnap = cbsnap.checked();
+		fm.snap(conf.cbsnap);
+		snap(conf.cbsnap);
+	});
 
 	l_opendlg_origin.text_align(nana::align::left, nana::align_v::center);
 	if(nana::API::screen_dpi(true) > 96)
@@ -3501,6 +3563,7 @@ void GUI::dlg_settings_info(nana::window owner)
 	themed_form fm {nullptr, owner, {}, appear::decorate{}};
 	fm.caption(title + " - format sorting info");
 	fm.bgcolor(theme.fmbg);
+	fm.snap(conf.cbsnap);
 	fm.center(621 + 40 * (nana::API::screen_dpi(true) >= 144), 680);
 	fm.div("vert margin=20 <weight=284 <> <pic weight=581> <>> <weight=20> <p>");
 
@@ -3569,6 +3632,7 @@ void GUI::dlg_json()
 	fm.center(1000, 1006);
 	fm.caption(title + " - JSON viewer");
 	fm.bgcolor(theme.fmbg);
+	fm.snap(conf.cbsnap);
 
 	fm.div("vert margin=20 <tree> <weight=20> <label weight=48>");
 
@@ -3740,6 +3804,7 @@ void GUI::dlg_changes(nana::window parent)
 
 	themed_form fm {nullptr, parent, {}, appear::decorate<appear::sizable>{}};
 	fm.center(1030, 543);
+	fm.snap(conf.cbsnap);
 	fm.theme_callback([&, this](bool dark)
 	{
 		apply_theme(dark);

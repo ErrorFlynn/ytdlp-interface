@@ -21,6 +21,7 @@ public:
 	nana::size dpi_transform_size(double w, double h = 0);
 	int dpi_transform(int val, double from_dpi = 96);
 	bool center(double w = 0, double h = 0);
+	void snap(bool enable) { snap_ = enable; }
 	HWND native_handle() { return hwnd; }
 	void subclass_before(UINT msgid, std::function<bool(UINT, WPARAM, LPARAM, LRESULT*)> handler) { msg.make_before(msgid, handler); }
 	void subclass_after(UINT msgid, std::function<bool(UINT, WPARAM, LPARAM, LRESULT*)> handler) { msg.make_after(msgid, handler); }
@@ -28,9 +29,13 @@ public:
 protected:
 	HWND hwnd {nullptr};
 	subclass msg {*this};
+	bool snap_ {false};
 
 private:
 	theme_cb callback;
+	POINT snap_cur_pos {};
+	RECT rsnap {}, snap_wa;
+	int snap_x, snap_y, snap_margin {15};
 
 	enum IMMERSIVE_HC_CACHE_MODE
 	{
@@ -182,4 +187,6 @@ private:
 	}
 
 	void InitDarkMode();
+
+	BOOL IsSnapClose(int a, int b) { return (abs(a - b) < dpi_transform(snap_margin)); }
 };

@@ -485,6 +485,22 @@ namespace widgets
 
 		std::string favicon_url_from_value(std::wstring val)
 		{
+			if(val.find(L"bandcamp.com") != -1)
+			{
+				std::string res, error;
+				res = util::get_inet_res(nana::to_utf8(val), &error);
+				if(!res.empty())
+				{
+					auto pos1 {res.find(R"(<link rel="shortcut icon" href=")")};
+					if(pos1 != -1)
+					{
+						pos1 += 32;
+						auto pos2 {res.find('\"', pos1)};
+						if(pos2 != -1)
+							return res.substr(pos1, pos2 - pos1);
+					}
+				}
+			}
 			auto pos {val.rfind('.')};
 			if(pos != -1)
 			{

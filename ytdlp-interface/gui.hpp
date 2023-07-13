@@ -17,7 +17,7 @@ namespace fs = std::filesystem;
 constexpr int YTDLP_DOWNLOAD {0}, YTDLP_POSTPROCESS {1};
 constexpr bool X64 {INTPTR_MAX == INT64_MAX};
 
-class GUI : public themed_form
+class GUI : public themed_form, IDropTarget
 {	
 public:
 
@@ -43,7 +43,7 @@ public:
 			cb_queue_autostart {false}, gpopt_hidden {false}, open_dialog_origin {false}, cb_zeropadding {true}, cb_playlist_folder {true},
 			zoomed {false}, get_releases_at_startup {true}, col_format {false}, col_format_note {true}, col_ext {true}, col_fsize {false},
 			json_hide_null {false}, col_site_icon {true}, col_site_text {false}, ytdlp_nightly {false}, audio_multistreams {false},
-			cb_sblock_mark {false}, cb_sblock_remove {false}, cb_proxy {false};
+			cb_sblock_mark {false}, cb_sblock_remove {false}, cb_proxy {false}, cbsnap {true};
 		nana::rectangle winrect;
 		int dpi {96};
 		std::vector<int> sblock_mark, sblock_remove;
@@ -55,6 +55,7 @@ private:
 	nlohmann::json releases;
 	fs::path self_path, appdir, ffmpeg_loc;
 	std::string inet_error, url_latest_ffmpeg, url_latest_ytdlp, url_latest_ytdlp_relnotes;
+	std::wstring drop_cliptext_temp;
 	std::wstringstream multiple_url_text;
 	long minw {0}, minh {0};
 	unsigned size_latest_ffmpeg {0}, size_latest_ytdlp {0}, number_of_processors {4};
@@ -63,7 +64,7 @@ private:
 	std::thread thr, thr_releases, thr_versions, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp, thr_update;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.4.1"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
+	const std::string ver_tag {"v2.5.0"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
 		ytdlp_fname {X64 ? "yt-dlp.exe" : "yt-dlp_x86.exe"};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
@@ -185,7 +186,7 @@ private:
 						if(!favicon_url.empty())
 						{
 							std::string res, error;
-							res = util::get_inet_res(favicon_url.data(), &error);
+							res = util::get_inet_res(favicon_url, &error);
 							if(working)
 							{
 								std::lock_guard<std::mutex> lock {mtx};
@@ -872,6 +873,66 @@ private:
 	};
 
 	public:
-		gui_bottoms &botref() { return bottoms; }
-		unsigned res_options_size() { return com_res_options.size(); }
+
+	gui_bottoms &botref() { return bottoms; }
+	unsigned res_options_size() { return com_res_options.size(); }
+
+
+	HRESULT STDMETHODCALLTYPE DragEnter(IDataObject *pDataObj, DWORD, POINTL, DWORD*) override
+	{
+		FORMATETC fmtetc {CF_TEXT, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
+		STGMEDIUM stgmedium;
+		HRESULT hr {pDataObj->GetData(&fmtetc, &stgmedium)};
+		if(FAILED(hr)) return hr;
+
+		auto ptext {reinterpret_cast<const char*>(GlobalLock(stgmedium.hGlobal))};
+		if(ptext)
+		{
+			std::string text {ptext};
+			if(text.starts_with("http://") || text.starts_with("https://"))
+			{
+				drop_cliptext_temp = util::get_clipboard_text();
+				util::set_clipboard_text(hwnd, nana::to_wstring(text));
+				l_url.events().mouse_enter.emit({}, l_url);
+				ReleaseStgMedium(&stgmedium);
+				return S_OK;
+			}
+		}
+		ReleaseStgMedium(&stgmedium);
+		return S_FALSE;
+	}
+
+	HRESULT STDMETHODCALLTYPE DragLeave() override
+	{
+		l_url.events().mouse_leave.emit({}, l_url);
+		util::set_clipboard_text(hwnd, drop_cliptext_temp);
+		return S_OK;
+	}
+
+	HRESULT STDMETHODCALLTYPE DragOver(DWORD, POINTL, DWORD*) override
+	{
+		return S_OK;
+	}
+
+	HRESULT STDMETHODCALLTYPE Drop(IDataObject* pDataObj, DWORD, POINTL, DWORD*) override
+	{
+		l_url.events().mouse_up.emit({}, l_url);
+		util::set_clipboard_text(hwnd, drop_cliptext_temp);
+		return S_OK;
+	}
+
+	ULONG STDMETHODCALLTYPE AddRef() override
+	{
+		return S_OK;
+	}
+
+	HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, void**) override
+	{
+		return S_OK;
+	}
+
+	ULONG STDMETHODCALLTYPE Release() override
+	{
+		return S_OK;
+	}
 };

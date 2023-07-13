@@ -85,7 +85,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		return 0;
 	}
 
-	CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+	OleInitialize(0);
+	
 
 	paint::image img {modpath};
 	API::window_icon_default(img, img);
@@ -250,6 +251,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				GUI::conf.cb_proxy = jconf["proxy"]["enabled"];
 				GUI::conf.proxy = to_wstring(jconf["proxy"]["URL"].get<std::string>());
 			}
+			if(jconf.contains("cbsnap")) // v2.5
+			{
+				GUI::conf.cbsnap = jconf["cbsnap"];
+			}
 		}
 	}
 	else GUI::conf.outpath = util::get_sys_folder(FOLDERID_Downloads);
@@ -326,6 +331,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["json_hide_null"] = GUI::conf.json_hide_null;
 		jconf["ytdlp_nightly"] = GUI::conf.ytdlp_nightly;
 		jconf["audio_multistreams"] = GUI::conf.audio_multistreams;
+		jconf["cbsnap"] = GUI::conf.cbsnap;
 
 		if(jconf.contains("sblock"))
 		{
