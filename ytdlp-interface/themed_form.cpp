@@ -2,6 +2,8 @@
 #include <iostream>
 #include <dwmapi.h>
 
+#pragma warning (disable: 4018 4244)
+
 
 themed_form::themed_form(theme_cb theme_change_callback, nana::window owner, nana::rectangle r, const nana::appearance& appear) : form{owner, r, appear}
 {

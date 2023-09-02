@@ -1,4 +1,6 @@
 ﻿#include "gui.hpp"
+#pragma warning (disable: 4244)
+
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 {
@@ -255,6 +257,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			{
 				GUI::conf.cbsnap = jconf["cbsnap"];
 			}
+			if(jconf.contains("limit_output_buffer")) // v2.6
+			{
+				GUI::conf.limit_output_buffer = jconf["limit_output_buffer"];
+				GUI::conf.output_buffer_size = jconf["output_buffer_size"];
+			}
 		}
 	}
 	else GUI::conf.outpath = util::get_sys_folder(FOLDERID_Downloads);
@@ -332,6 +339,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["ytdlp_nightly"] = GUI::conf.ytdlp_nightly;
 		jconf["audio_multistreams"] = GUI::conf.audio_multistreams;
 		jconf["cbsnap"] = GUI::conf.cbsnap;
+		jconf["limit_output_buffer"] = GUI::conf.limit_output_buffer;
+		jconf["output_buffer_size"] = GUI::conf.output_buffer_size;
 
 		if(jconf.contains("sblock"))
 		{

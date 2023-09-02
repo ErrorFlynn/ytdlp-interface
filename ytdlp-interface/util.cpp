@@ -6,6 +6,8 @@
 #include <TlHelp32.h>
 #include <iostream>
 
+#pragma warning (disable: 4244)
+
 std::recursive_mutex subclass::mutex_;
 std::map<HWND, subclass*> subclass::table_;
 

@@ -90,12 +90,16 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>NotSet</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>bit7z_d.lib;Wininet.lib;nana_v143_Debug_x86.lib;jpeg_Debug_x86.lib;png_Debug_x86.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>bit7z_d.lib;Dwmapi.lib;Wininet.lib;nana_v143_Debug_x86.lib;jpeg_Debug_x86.lib;png_Debug_x86.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <Manifest>
+      <AdditionalManifestFiles>manifest.xml</AdditionalManifestFiles>
+    </Manifest>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -116,6 +120,7 @@
     <Manifest>
       <InputResourceManifests>
       </InputResourceManifests>
+      <AdditionalManifestFiles>manifest.xml</AdditionalManifestFiles>
     </Manifest>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -128,8 +133,11 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <FavorSizeOrSpeed>Neither</FavorSizeOrSpeed>
       <WholeProgramOptimization>true</WholeProgramOptimization>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <DebugInformationFormat>None</DebugInformationFormat>
+      <Optimization>MinSpace</Optimization>
     </ClCompile>
     <Link>
       <SubSystem>NotSet</SubSystem>
@@ -140,6 +148,9 @@
       <LinkTimeCodeGeneration>UseFastLinkTimeCodeGeneration</LinkTimeCodeGeneration>
       <ProgramDatabaseFile />
     </Link>
+    <Manifest>
+      <AdditionalManifestFiles>manifest.xml</AdditionalManifestFiles>
+    </Manifest>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -157,9 +168,10 @@
       <DebugInformationFormat>None</DebugInformationFormat>
       <EnableModules>
       </EnableModules>
-      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <FavorSizeOrSpeed>Neither</FavorSizeOrSpeed>
       <WholeProgramOptimization>true</WholeProgramOptimization>
       <ExceptionHandling>Sync</ExceptionHandling>
+      <Optimization>MinSpace</Optimization>
     </ClCompile>
     <Link>
       <SubSystem>NotSet</SubSystem>
@@ -172,12 +184,27 @@
       <StripPrivateSymbols>Yes</StripPrivateSymbols>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
+    <Manifest>
+      <AdditionalManifestFiles>manifest.xml</AdditionalManifestFiles>
+    </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="forms\form_changes.cpp" />
+    <ClCompile Include="forms\form_formats.cpp" />
+    <ClCompile Include="forms\form_json.cpp" />
+    <ClCompile Include="forms\form_playlist.cpp" />
+    <ClCompile Include="forms\form_sections.cpp" />
+    <ClCompile Include="forms\form_settings.cpp" />
     <ClCompile Include="gui.cpp" />
+    <ClCompile Include="gui_bottom.cpp" />
+    <ClCompile Include="gui_bottoms.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="outbox.cpp" />
+    <ClCompile Include="queue.cpp" />
     <ClCompile Include="themed_form.cpp" />
+    <ClCompile Include="types.cpp" />
     <ClCompile Include="util.cpp" />
+    <ClCompile Include="widgets.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="gui.hpp" />
@@ -186,6 +213,7 @@
     <ClInclude Include="progress_ex.hpp" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="themed_form.hpp" />
+    <ClInclude Include="types.hpp" />
     <ClInclude Include="util.hpp" />
     <ClInclude Include="widgets.hpp" />
   </ItemGroup>
