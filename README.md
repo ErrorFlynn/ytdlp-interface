@@ -19,7 +19,7 @@ The easiest way to build the project is to open the solution file with Visual St
 
 ---
 
-![ytdlp-interface_settings](https://github.com/ErrorFlynn/ytdlp-interface/assets/20293505/cba155ae-e51c-407e-9aaa-76c67cb99d9f)
+![ytdlp-interface_settings](https://github.com/ErrorFlynn/ytdlp-interface/assets/20293505/2113ce06-375f-498d-bc3d-555d907db15c)
 
 ---
 
