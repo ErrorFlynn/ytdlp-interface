@@ -286,12 +286,29 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 
 	for(auto &str : conf.argsets)
 		com_args.push_back(to_utf8(str));
-	com_args.option(conf.com_args);
+	com_args.caption(conf.argset);
 	com_args.editable(true);
+
+	com_args.events().focus([&, this] (const arg_focus &arg)
+	{
+		if(!arg.getting)
+		{
+			conf.argset = com_args.caption();
+			if(conf.common_dl_options)
+			{
+				for(auto &pbot : gui.bottoms)
+				{
+					auto &bot {*pbot.second};
+					if(bot.handle() != *this)
+						bot.com_args.caption(caption());
+				}
+			}
+		}
+	});
 
 	com_args.events().selected([&, this]
 	{
-		conf.com_args = com_args.option();
+		conf.argset = com_args.caption();
 		if(conf.common_dl_options && api::focus_window() == com_args)
 			gui.bottoms.propagate_args_options(*this);
 	});

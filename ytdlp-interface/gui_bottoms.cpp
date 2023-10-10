@@ -74,8 +74,7 @@ GUI::gui_bottom &GUI::gui_bottoms::add(std::wstring url, bool visible)
 		pbot->url = url;
 		pbot->is_ytlink = gui->is_ytlink(url);
 		pbot->is_ytplaylist = pbot->is_ytlink && (url.find(L"?list=") != -1 || url.find(L"&list=") != -1);
-		pbot->is_ytchan = url.find(L"www.youtube.com/c/") != -1 || url.find(L"www.youtube.com/@") != -1 ||
-			url.find(L"www.youtube.com/channel/") != -1 || url.find(L"www.youtube.com/user/") != -1;
+		pbot->is_ytchan = gui->is_ytchan(url);
 		pbot->is_bcplaylist = url.find(L"bandcamp.com/album/") != -1;
 		pbot->is_bclink = url.find(L"bandcamp.com") != -1;
 		pbot->is_bcchan = url.find(L".bandcamp.com/music") != -1 || url.rfind(L".bandcamp.com") == url.size() - 13

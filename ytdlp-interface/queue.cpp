@@ -1,4 +1,5 @@
-#include "gui.hpp"
+﻿#include "gui.hpp"
+#include <codecvt>
 
 
 void GUI::make_queue_listbox()
@@ -7,7 +8,6 @@ void GUI::make_queue_listbox()
 	using namespace util;
 
 	lbq.sortable(false);
-	//lbq.enable_single(true, false);
 	lbq.typeface(nana::paint::font_info {"Calibri", 12});
 	lbq.scheme().item_height_ex = 8;
 	lbq.append_header("#", scale(30));
@@ -436,11 +436,20 @@ std::wstring GUI::pop_queue_menu(int x, int y)
 					{
 						fm_playlist();
 					});
+					auto playlist_size {bottom.playlist_info["entries"].size()};
 					if(!count || bottom.playlist_info.empty())
 					{
 						item.enabled(false);
 						vidsel_item = {&m, item.index()};
 					}
+				}
+				else if(bottom.is_yttab)
+				{
+					m.append("Treat as playlist", [&, url, this](menu::item_proxy)
+					{
+						bottom.is_ytplaylist = true;
+						add_url(url, true);
+					}).enabled(item.text(2) != "...");
 				}
 				else if(!bottom.is_ytchan && !bottom.is_bcchan && !is_live && item.text(2).find("[live event scheduled to begin in") != 0)
 				{
@@ -450,7 +459,7 @@ std::wstring GUI::pop_queue_menu(int x, int y)
 					});
 				}
 
-				if(item.text(2) == "...")
+				if(item.text(2) == "..." && !bottom.is_ytchan)
 					m.append("Select formats", [this](menu::item_proxy) { fm_formats(); }).enabled(false);
 				else if(bottom.btnfmt_visible())
 				{

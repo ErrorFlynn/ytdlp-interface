@@ -73,7 +73,11 @@ themed_form::themed_form(theme_cb theme_change_callback, nana::window owner, nan
 			GetCursorPos(&snap_cur_pos);
 			OffsetRect(pr_current, snap_cur_pos.x - (pr_current->left + snap_x), snap_cur_pos.y - (pr_current->top + snap_y));
 
-			SystemParametersInfo(SPI_GETWORKAREA, 0, &snap_wa, 0);
+			auto hmon {MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)};
+			MONITORINFO moninfo {};
+			moninfo.cbSize = sizeof(MONITORINFO);
+			GetMonitorInfo(hmon, &moninfo);
+			snap_wa = moninfo.rcWork;
 
 			if(IsSnapClose(pr_current->left + offset, snap_wa.left))
 				OffsetRect(pr_current, snap_wa.left - pr_current->left - offset, 0);
@@ -212,32 +216,45 @@ bool themed_form::center(double w, double h)
 	MONITORINFO moninfo {};
 	moninfo.cbSize = sizeof(MONITORINFO);
 	GetMonitorInfo(hmon, &moninfo);
-	const auto maxh {moninfo.rcWork.bottom};
-	const auto maxw {screen {}.from_window(*this).area().width};
-	auto r {API::make_center(w ? dpi_transform_size(w, h) : size())};
+	const auto maxh {moninfo.rcWork.bottom - moninfo.rcWork.top},
+	           maxw {moninfo.rcWork.right - moninfo.rcWork.left};
+	int mon_x {moninfo.rcWork.left}, mon_y {moninfo.rcWork.top};
+
+	nana::rectangle r;
+	w = dpi_transform(w);
+	h = dpi_transform(h);
+	r.x = mon_x + (w > maxw ? maxw : (maxw - w) / 2);
+	r.y = mon_y + (h > maxh ? maxh : (maxh - h) / 2);
+	r.width = min(w, maxw);
+	r.height = min(h, maxh);
 	move(r);
 	auto sz {API::window_outline_size(*this)};
-	const auto wnd {api::get_owner_window(*this)};
-	if(api::is_window(wnd))
+	int frame_w {static_cast<int>(sz.width)},
+	    frame_h {static_cast<int>(sz.height)};
+	const auto wd {api::get_owner_window(*this)};
+	if(api::is_window(wd))
 	{
 		RECT rect;
-		DwmGetWindowAttribute(reinterpret_cast<themed_form*>(api::get_widget(wnd))->hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rect, sizeof rect);
+		DwmGetWindowAttribute(reinterpret_cast<themed_form*>(api::get_widget(wd))->hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &rect, sizeof rect);
 		point owner_pos {rect.left, rect.top}, centered_pos;
-		nana::size owner_size {unsigned(rect.right - rect.left), unsigned(rect.bottom - rect.top)};
-		centered_pos.x = owner_pos.x + (owner_size.width / 2 - sz.width / 2);
-		centered_pos.y = owner_pos.y + (owner_size.height / 2 - sz.height / 2);
-		sz.height = min(sz.height, maxh);
-		if(centered_pos.y + sz.height > maxh)
-			centered_pos.y -= sz.height - (maxh - centered_pos.y);
-		if(centered_pos.x + sz.width > maxw)
-			centered_pos.x -= sz.width - (maxw - centered_pos.x);
-		MoveWindow(hwnd, max(0, centered_pos.x), max(0, centered_pos.y), min(sz.width, maxw), min(sz.height, maxh), TRUE);
+		int owner_w {rect.right - rect.left},
+		    owner_h {rect.bottom - rect.top};
+		centered_pos.x = owner_pos.x + (owner_w - frame_w) / 2;
+		centered_pos.y = owner_pos.y + (owner_h - frame_h) / 2;
+		frame_h = min(frame_h, maxh);
+		if(centered_pos.y + frame_h > mon_y + maxh)
+			centered_pos.y -= frame_h - ((mon_y + maxh) - centered_pos.y);
+		if(centered_pos.x + frame_w > mon_x + maxw)
+			centered_pos.x -= frame_w - ((mon_x + maxw)-centered_pos.x);
+		MoveWindow(hwnd, max(mon_x, centered_pos.x), max(mon_y, centered_pos.y), min(frame_w, maxw), min(frame_h, maxh), TRUE);
 	}
 	else
 	{
-		if(sz.height > maxh)
-			MoveWindow(hwnd, (maxw - sz.width) / 2, 0, sz.width, maxh, TRUE);
-		else MoveWindow(hwnd, (maxw - sz.width) / 2, (maxh - sz.height) / 2, sz.width, sz.height, TRUE);
+		int w {frame_w},
+		    h {frame_h},
+			x {w > maxw ? mon_x : mon_x + (maxw - w) / 2},
+			y {h > maxh ? mon_y : mon_y + (maxh - h) / 2};
+		MoveWindow(hwnd, x, y, w > maxw ? maxw : w, h > maxh ? maxh : h, TRUE);
 	}
-	return sz.height > maxh;
+	return frame_h > maxh;
 }

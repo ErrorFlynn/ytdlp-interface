@@ -33,25 +33,29 @@ public:
 			output_template_default_bandcamp {L"%(artist)s - %(album)s - %(track_number)02d - %(track)s.%(ext)s"};
 		std::wstring fmt1, fmt2, output_template {output_template_default}, playlist_indexing {playlist_indexing_default},
 			output_template_bandcamp {output_template_default_bandcamp}, proxy;
+		std::string argset;
 		std::vector<std::string> argsets, unfinished_queue_items;
 		std::unordered_set<std::wstring> outpaths;
 		std::map<std::wstring, std::string> playsel_strings;
 		double ratelim {0}, contrast {.1};
 		unsigned ratelim_unit {1}, pref_res {0}, pref_video {0}, pref_audio {0}, cbtheme {2}, max_argsets {10}, max_outpaths {10}, 
-			max_concurrent_downloads {1}, output_buffer_size {30000};
+			max_concurrent_downloads {1}, output_buffer_size {30000}, pref_vcodec {0}, pref_acodec {0};
 		std::chrono::milliseconds max_proc_dur {3000};
-		size_t com_args {0};
 		bool cbsplit {false}, cbchaps {false}, cbsubs {false}, cbthumb {false}, cbtime {true}, cbkeyframes {false}, cbmp3 {false},
 			cbargs {false}, kwhilite {true}, pref_fps {false}, cb_lengthyproc {true}, common_dl_options {true}, cb_autostart {true},
 			cb_queue_autostart {false}, gpopt_hidden {false}, open_dialog_origin {false}, cb_zeropadding {true}, cb_playlist_folder {true},
 			zoomed {false}, get_releases_at_startup {true}, col_format {false}, col_format_note {true}, col_ext {true}, col_fsize {false},
 			json_hide_null {false}, col_site_icon {true}, col_site_text {false}, ytdlp_nightly {false}, audio_multistreams {false},
-			cb_sblock_mark {false}, cb_sblock_remove {false}, cb_proxy {false}, cbsnap {true}, limit_output_buffer {true};
+			cb_sblock_mark {false}, cb_sblock_remove {false}, cb_proxy {false}, cbsnap {true}, limit_output_buffer {true}, 
+			update_self_only {true};
 		nana::rectangle winrect;
 		int dpi {96};
 		std::vector<int> sblock_mark, sblock_remove;
 	}
 	conf;
+
+	fs::path confpath;
+	std::function<bool()> fn_write_conf;
 
 private:
 
@@ -62,12 +66,12 @@ private:
 	std::wstringstream multiple_url_text;
 	long minw {0}, minh {0};
 	unsigned size_latest_ffmpeg {0}, size_latest_ytdlp {0}, number_of_processors {4};
-	bool working {false}, menu_working {false}, lbq_no_action {false}, thumbthr_working {false}, 
+	bool menu_working {false}, lbq_no_action {false}, thumbthr_working {false}, 
 		autostart_next_item {true}, lbq_can_drag {false}, cnlang {false}, no_draw_freeze {true};
 	std::thread thr, thr_releases, thr_versions, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp, thr_update;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.6.0"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
+	const std::string ver_tag {"v2.7.0"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
 		ytdlp_fname {X64 ? "yt-dlp.exe" : "yt-dlp_x86.exe"};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
@@ -79,6 +83,9 @@ private:
 		com_res_options {L"none", L"4320", L"2160", L"1440", L"1080", L"720", L"480", L"360"},
 		com_audio_options {L"none", L"m4a", L"mp3", L"ogg", L"webm", L"flac"},
 		com_video_options {L"none", L"mp4", L"webm"},
+		com_vcodec_options {L"none", L"av01", L"vp9.2", L"vp9", L"h265", L"h264", L"vp8", L"h263", L"theora"},
+		com_acodec_options {L"none", L"flac", L"alac", L"wav", L"aiff", L"opus", L"vorbis", L"aac", L"mp4a", 
+			L"mp3", L"ac4", L"eac3", L"ac3", L"dts"},
 		sblock_cats_mark {L"all", L"sponsor", L"intro", L"outro", L"selfpromo", L"preview", L"filler", L"interaction", L"music_offtopic",
 			L"poi_highlight", L"chapter"},
 		sblock_cats_remove {L"all", L"sponsor", L"intro", L"outro", L"selfpromo", L"preview", L"filler", L"interaction", L"music_offtopic"};
@@ -94,7 +101,7 @@ private:
 		gui_bottom(GUI &gui, bool visible = false);
 
 		bool is_ytlink {false}, use_strfmt {false}, working {false}, graceful_exit {false}, working_info {true}, received_procmsg {false},
-			is_ytplaylist {false}, is_ytchan {false}, is_bcplaylist {false}, is_bclink {false}, is_bcchan {false};
+			is_ytplaylist {false}, is_ytchan {false}, is_bcplaylist {false}, is_bclink {false}, is_bcchan {false}, is_yttab {false};
 		fs::path outpath, merger_path, download_path, printed_path;
 		nlohmann::json vidinfo, playlist_info;
 		std::vector<bool> playlist_selection;
@@ -226,12 +233,12 @@ private:
 	widgets::Label l_ver, l_ver_ytdlp, l_ver_ffmpeg, l_channel;
 	widgets::Text l_vertext, l_ytdlp_text, l_ffmpeg_text;
 	widgets::Button btn_changes, btn_update, btn_update_ytdlp, btn_update_ffmpeg;
-	widgets::cbox cb_startup, cb_chan_stable, cb_chan_nightly;
+	widgets::cbox cb_startup, cb_selfonly, cb_chan_stable, cb_chan_nightly;
 	nana::radio_group rgp_chan;
 	widgets::Progress prog_updater, prog_updater_misc;
-	widgets::Separator separator;
+	widgets::Separator sep1, sep2;
 	nana::timer updater_t0, updater_t1, updater_t2;
-	bool updater_working {false}, updater_init {false};
+	bool updater_working {false};
 
 	void updater_init_page();
 	void updater_display_version();
@@ -261,20 +268,21 @@ private:
 	void get_latest_ytdlp();
 	void get_versions();
 	void get_version_ytdlp();
-	bool is_ytlink(std::wstring text);
+	bool is_ytlink(std::wstring url);
+	bool is_ytchan(std::wstring url);
 	void make_updater_page(themed_form &parent);
 	void change_field_attr(nana::place &plc, std::string field, std::string attr, unsigned new_val);
 	bool is_tag_a_new_version(std::string tag_name) { return semver_t {tag_name} > semver_t {ver_tag}; }
 	void show_queue(bool freeze_redraw = true);
 	void show_output();
-	void add_url(std::wstring url);
+	void add_url(std::wstring url, bool refresh = false);
 	void taskbar_overall_progress();
 	void on_btn_dl(std::wstring url);
 	void remove_queue_item(std::wstring url);
 	std::wstring next_startable_url(std::wstring current_url = L"current");
 	bool lbq_has_scrollbar();
-
 	void adjust_lbq_headers();
+	void write_settings() { events().unload.emit({}, *this); }
 
 	std::unordered_map<std::string, std::pair<std::string, std::string>> sblock_infos
 	{

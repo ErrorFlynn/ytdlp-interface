@@ -24,7 +24,7 @@ namespace util
 		virtual std::string do_grouping() const { return "\003"; }
 	};
 
-	using progress_callback = std::function<void(ULONGLONG, ULONGLONG, std::string)>;
+	using progress_callback = std::function<void(ULONGLONG, ULONGLONG, std::string, int, int)>;
 	using append_callback = std::function<void(std::string, bool)>;
 
 	std::string format_int(unsigned i);
@@ -39,7 +39,7 @@ namespace util
 	std::wstring get_sys_folder(REFKNOWNFOLDERID rfid);
 	std::string get_inet_res(std::string res, std::string *error = nullptr);
 	std::string dl_inet_res(std::string res, fs::path fname, bool *working = nullptr, std::function<void(unsigned)> cb = nullptr);
-	std::string extract_7z(fs::path arc_path, fs::path out_path, bool ffmpeg = false);
+	std::string extract_7z(fs::path arc_path, fs::path out_path, bool ffmpeg = false, bool ytdlp_interface = false);
 	std::wstring get_clipboard_text();
 	void set_clipboard_text(HWND hwnd, std::wstring text);
 	bool is_dir_writable(fs::path dir);

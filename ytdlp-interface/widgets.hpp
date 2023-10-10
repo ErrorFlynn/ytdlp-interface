@@ -133,12 +133,12 @@ namespace widgets
 
 		Separator() = default;
 
-		Separator(nana::window parent)
+		Separator(nana::window parent, std::string title = "")
 		{
-			create(parent);
+			create(parent, title);
 		}
 
-		void create(nana::window parent);
+		void create(nana::window parent, std::string title = "");
 
 		void refresh_theme()
 		{
@@ -220,6 +220,7 @@ namespace widgets
 		{
 			refresh_theme();
 			events().expose([this] { refresh_theme(); });
+			dw.draw([](nana::paint::graphics &g) { g.rectangle(false, theme::border); });
 		}
 
 		size_t item_count();
@@ -392,6 +393,7 @@ namespace widgets
 		private:
 			nana::pat::cloneable<renderer_interface> reuse_;
 			nana::facade<nana::element::crook> crook_;
+			HWND hwnd {nullptr};
 		};
 
 	public:
@@ -437,6 +439,7 @@ namespace widgets
 
 		const json *jptr {nullptr};
 		bool no_nulls {false};
+		HWND hwnd {nullptr};
 
 		class jtree_renderer : public nana::treebox::renderer_interface
 		{
@@ -638,6 +641,7 @@ namespace widgets
 	class sblock_listbox : public nana::listbox
 	{
 		bool hicontrast {false}, hilite_checked {false};
+		HWND hwnd {nullptr};
 
 	public:
 
@@ -697,4 +701,5 @@ class inline_widget : public nana::listbox::inline_notifier_interface
 	nana::picture pic;
 	widgets::Listbox *lb {nullptr};
 	int conf {3};
+	HWND hwnd {nullptr};
 };

@@ -5,6 +5,7 @@
 #include <WinInet.h>
 #include <TlHelp32.h>
 #include <iostream>
+#include <codecvt>
 
 #pragma warning (disable: 4244)
 
@@ -142,8 +143,8 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 		if(graceful_exit)
 			*graceful_exit = false;
 	};
-
-	bool procexit {false};
+	std::string playlist_line;
+	bool procexit {false}, subs {false};
 	while(!procexit)
 	{
 		procexit = WaitForSingleObject(pi.hProcess, 50) == WAIT_OBJECT_0;
@@ -173,10 +174,18 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 			std::string s;
 			if(cbprog)
 			{
-				static bool subs {false};
 				if(std::string(buf).find("Writing video subtitles") != -1)
 					subs = true;
 				std::string line, strbuf {buf};
+				if(!nana::is_utf8(strbuf))
+				{
+					std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> u16conv;
+					auto u16str {u16conv.from_bytes(strbuf)};
+					std::wstring wstr(u16str.size(), L'\0');
+					memcpy(&wstr.front(), &u16str.front(), wstr.size() * 2);
+					std::wstring_convert<std::codecvt_utf8<wchar_t>> u8conv;
+					strbuf = u8conv.to_bytes(wstr);
+				}
 				size_t lnstart {0}, lnend {0};
 				do
 				{
@@ -207,14 +216,18 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 								if(text == "[Exec]" && text.find("ytdlp_status") != 1)
 									continue;
 								if(text == "[ExtractAudio]" || text.starts_with("[Fixup") || text == "[Merger]")
-									cbprog(-1, -1, text);
+									cbprog(-1, -1, text, 0, 0);
 								else if(!suppress.empty())
 									if(text == "[download]" && (line.find("Destination:") == 11 || line.find("has already been downloaded") != -1))
-										cbprog(-1, -1, line);
+										cbprog(-1, -1, line, 0, 0);
 							}
 						}
+						const bool line_starts_with_download {line.starts_with("[download]")},
+						           playlist_progress {line_starts_with_download && line.find(" Downloading item ") == 10};
+						if(playlist_progress)
+							playlist_line = line;
 						auto pos {line.find('%')};
-						if(pos != -1 && line.starts_with("[download]"))
+						if(pos != -1 && line_starts_with_download)
 						{
 							if(subs)
 							{
@@ -231,7 +244,17 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 										auto percent {std::stod(line.substr(pos2, pos - pos2))};
 										line.pop_back();
 										if(*working)
-											cbprog(static_cast<ULONGLONG>(percent * 10), 1000, line.substr(pos2));
+										{
+											int playlist_complete {1}, playlist_total {0};
+											pos = playlist_line.find(" of ", 28);
+											if(pos != -1)
+											{
+												playlist_complete = std::stod(playlist_line.substr(28, pos - 28));
+												playlist_total = std::stod(playlist_line.substr(pos + 4, playlist_line.size() - pos - 1));
+											}
+											if(percent != 100 || line.find(" in ") != -1)
+												cbprog(static_cast<ULONGLONG>(percent * 10), 1000, line.substr(pos2), playlist_complete-1, playlist_total);
+										}
 									} catch(...) {}
 								}
 							}
@@ -247,7 +270,7 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 							std::string text {strpct + '%'};
 							if(!eta.empty()) text += " " + eta;
 							if(*working)
-								cbprog(static_cast<ULONGLONG>(std::stod(strpct) * 10), 1000, text);
+								cbprog(static_cast<ULONGLONG>(std::stod(strpct) * 10), 1000, text, 0, 0);
 							s += line;
 						}
 						else s += line;
@@ -444,7 +467,7 @@ std::string util::dl_inet_res(std::string res, fs::path fname, bool *working, st
 	return ret;
 }
 
-std::string util::extract_7z(fs::path arc_path, fs::path out_path, bool ffmpeg)
+std::string util::extract_7z(fs::path arc_path, fs::path out_path, bool ffmpeg, bool ytdlp_interface)
 {
 	using namespace bit7z;
 
@@ -461,6 +484,10 @@ std::string util::extract_7z(fs::path arc_path, fs::path out_path, bool ffmpeg)
 		{
 			extractor.extractMatching(arc_path, L"*\\bin\\ffmpeg.exe", out_path);
 			extractor.extractMatching(arc_path, L"*\\bin\\ffprobe.exe", out_path);
+		}
+		else if(ytdlp_interface)
+		{
+			extractor.extractMatching(arc_path, L"ytdlp-interface.exe", out_path);
 		}
 		else extractor.extract(arc_path, out_path);
 		return "";

@@ -1,6 +1,7 @@
 #include <nana/gui/drawing.hpp>
 #include <nana/gui/widgets/progress.hpp>
 #include <array>
+#include <Windows.h>
 
 #pragma warning( disable : 4244 4018)
 
@@ -31,8 +32,8 @@ namespace nana
 				{
 					if(!img.empty() && !graph.empty())
 					{
-						double unit = static_cast<double>(amount()) / static_cast<double>(graph.width()-2);
-						unsigned pixels = static_cast<double>(value()) / unit;
+						const double unit {static_cast<double>(amount()) / static_cast<double>(graph.width() - 2)};
+						unsigned pixels {static_cast<unsigned>(static_cast<double>(value()) / unit)};
 						if(value() == amount()) pixels = graph.width();
 						paint::graphics g {{pixels+1, graph.height()-2}};
 						if(img.alpha())
@@ -46,6 +47,38 @@ namespace nana
 						graph.bitblt({1, 1, pixels, g.height()}, g);
 						if(darkbg)
 							graph.frame_rectangle(rectangle{graph.size()}, color {"#777"}, 0);
+						auto width {graph.width()}, height {graph.height()};
+						auto hdc {reinterpret_cast<HDC>(const_cast<void*>(graph.context()))};
+						if(shadow_amount)
+						{
+							const double unit {static_cast<double>(shadow_amount) / static_cast<double>(width - 2)};
+							const unsigned pixels {static_cast<unsigned>(static_cast<double>(shadow_value) / unit) + 2};
+							for(int y {1}; y < height - 1; y++)
+							{
+								for(int x {1}; x < pixels; x++)
+								{
+									COLORREF color = GetPixel(hdc, x, y);
+									BYTE red {GetRValue(color)};
+									BYTE green {GetGValue(color)};
+									BYTE blue {GetBValue(color)};
+
+									if(darkbg)
+									{
+										red += 20;
+										green += 20;
+										blue += 20;
+									}
+									else
+									{
+										red -= 15;
+										green -= 15;
+										blue -= 15;
+									}
+
+									SetPixel(hdc, x, y, RGB(red, green, blue));
+								}
+							}
+						}
 					}
 
 					switch(tmode)
@@ -121,6 +154,7 @@ namespace nana
 		void image(paint::image &i) { img = i; }
 		void image(paint::image &&i) { img = i; }
 		auto &image() { return img; }
+		void shadow_progress(int amount, int value) { shadow_amount = amount; shadow_value = value; }
 
 	private:
 
@@ -129,6 +163,7 @@ namespace nana
 		text_modes tmode{text_modes::caption};
 		color clr_left{"#ffffff"}, clr_right{"#333333"}, clr_normal{clr_right}, clr_outline;
 		bool contrast {true}, darkbg {false};
+		int shadow_amount {0}, shadow_value {0};
 
 		std::unordered_map<color_presets, std::array<color, 4>> presets
 		{

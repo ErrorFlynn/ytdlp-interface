@@ -1,4 +1,5 @@
-#include "widgets.hpp"
+﻿#include "widgets.hpp"
+#include <codecvt>
 
 using namespace widgets;
 
@@ -141,16 +142,48 @@ void Text::create(nana::window parent, std::string_view text, bool dpi_adjust)
 }
 
 
-void Separator::create(nana::window parent)
+void Separator::create(nana::window parent, std::string title)
 {
+	using namespace nana;
 	panel<false>::create(parent);
-	plc = std::make_unique<nana::place>(*this);
+	plc = std::make_unique<place>(*this);
 	sep1.create(*this);
 	sep2.create(*this);
-	plc->div("vert <sep1> <> <sep2>");
+	paint::graphics g {{100, 100}};
+	g.typeface(paint::font_info {"Verdana", 8, {700}});
+	auto tes {g.text_extent_size(title)};
+	auto padding {util::scale(7)};
+	if(title.empty())
+		plc->div("vert <sep1> <> <sep2>");
+	else plc->div("<weight=" + std::to_string(tes.width + padding) + "px> <vert <<weight=1px><sep1>> <> <sep2>>");
 	plc->field("sep1") << sep1;
 	plc->field("sep2") << sep2;
 	events().expose([this] { refresh_theme(); });
+	if(!title.empty())
+		drawing {parent}.draw([tes, padding, title, this](paint::graphics &g)
+		{
+			auto p {pos()};
+			if(p.y > 0)
+			{
+				auto x {p.x}, y {p.y}, w {static_cast<int>(tes.width)}, h {static_cast<int>(tes.height)};
+				g.palette(false, theme::sep_bg);
+				auto val {(w + padding) - ((y + h / 2) - (y + 2))};
+				g.line({w + padding, y + 2}, {val, y + h / 2});
+				g.line({w + padding + 1, y + 2}, {val + 1, y + h / 2});
+				color clr1 {theme::sep_bg}, clr2 {theme::sep_bg.blend(colors::black, .3)};
+				if(!theme::is_dark())
+				{
+					clr1 = theme::sep_bg.blend(colors::white, .1);
+					clr2 = theme::sep_bg.blend(colors::white, .5);
+				}
+				g.line({x, y + h / 2 + 1}, {val, y + h / 2 + 1}, clr1);
+				g.line({x, y + h / 2 + 2}, {val-1, y + h / 2 + 2}, clr2);
+				p.x += 2;
+				p.y -= h / 2;
+				g.typeface(paint::font_info {"Verdana", 8, {700}});
+				g.string(p, title, theme::sep_bg.blend(theme::is_dark() ? colors::white : colors::black, .2));
+			}
+		});
 }
 
 
@@ -341,6 +374,8 @@ std::string Listbox::favicon_url_from_value(std::wstring val)
 			}
 		}
 	}
+	if(val.find(L"://") == -1)
+		val = L"https://" + val;
 	auto pos {val.rfind('.')};
 	if(pos != -1)
 	{
@@ -1025,7 +1060,17 @@ void JSON_Tree::populate()
 			}
 			else if(val.is_string())
 			{
-				auto node {parent.append(key, key + ":  \"" + val.get<std::string>() + '\"')};
+				auto str {val.get<std::string>()};
+				if(!nana::is_utf8(str))
+				{
+					std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> u16conv;
+					auto u16str {u16conv.from_bytes(str)};
+					std::wstring wstr(u16str.size(), L'\0');
+					memcpy(&wstr.front(), &u16str.front(), wstr.size() * 2);
+					std::wstring_convert<std::codecvt_utf8<wchar_t>> u8conv;
+					str = u8conv.to_bytes(wstr);
+				}
+				auto node {parent.append(key, key + ":  \"" + str + '\"')};
 				node.icon(dark ? "text_dark" : "text_light");
 			}
 			else if(val.is_boolean())

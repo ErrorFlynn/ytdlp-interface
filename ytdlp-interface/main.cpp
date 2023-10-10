@@ -25,8 +25,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		const std::wstring first_arg {argv[1]};
 		if(first_arg == L"update")
 		{
-			fs::path arc_path {argv[2]}, target_dir {argv[3]};
-			auto pid {util::other_instance(target_dir / modpath.filename())};
+			const fs::path arc_path {argv[2]}, target_dir {argv[3]};
+			const bool self_only {argc == 5 && std::wstring {argv[4]} == L"self_only"};
+			const auto pid {util::other_instance(target_dir / modpath.filename())};
 			if(pid)
 			{
 				auto hwnds {util::hwnds_from_pid(pid)};
@@ -34,7 +35,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 					if(IsWindow(hwnd))
 						SendMessage(hwnd, WM_CLOSE, 0, 0);
 			}
-			auto res {util::extract_7z(arc_path, target_dir)};
+			auto res {util::extract_7z(arc_path, target_dir, false, self_only)};
 			fs::remove(arc_path, ec);
 			fs::remove(fs::temp_directory_path() / "7z.dll", ec);
 			if(!res.empty())
@@ -172,7 +173,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			if(jconf.contains("kwhilite")) // v1.5
 			{
 				GUI::conf.kwhilite = jconf["kwhilite"];
-				GUI::conf.com_args = jconf["com_args"];
 				for(auto &el : jconf["argsets"])
 					GUI::conf.argsets.push_back(el);
 				if(jconf.contains("vidinfo"))
@@ -200,7 +200,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			{
 				GUI::conf.cb_queue_autostart = jconf["cb_queue_autostart"];
 			}
-			if(jconf.contains("gpopt_hidden")) // v1.7
+			if(jconf.contains("open_dialog_origin")) // v1.7
 			{
 				GUI::conf.gpopt_hidden = jconf["gpopt_hidden"];
 				GUI::conf.open_dialog_origin = jconf["open_dialog_origin"];
@@ -262,11 +262,20 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				GUI::conf.limit_output_buffer = jconf["limit_output_buffer"];
 				GUI::conf.output_buffer_size = jconf["output_buffer_size"];
 			}
+			if(jconf.contains("update_self_only")) // v2.7
+			{
+				GUI::conf.update_self_only = jconf["update_self_only"];
+				GUI::conf.pref_vcodec = jconf["pref_vcodec"];
+				GUI::conf.pref_acodec = jconf["pref_acodec"];
+				GUI::conf.argset = jconf["argset"];
+			}
 		}
 	}
 	else GUI::conf.outpath = util::get_sys_folder(FOLDERID_Downloads);
 
 	GUI gui;
+	gui.confpath = confpath;
+
 	if(jconf.contains("playsel_strings"))
 	{
 		for(auto &el : jconf["unfinished_queue_items"])
@@ -279,7 +288,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		}
 	}
 
-	gui.events().unload([&]
+	gui.fn_write_conf = [&]
 	{
 		jconf["ytdlp_path"] = GUI::conf.ytdlp_path;
 		jconf["outpath"] = GUI::conf.outpath;
@@ -303,7 +312,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["cbargs"] = GUI::conf.cbargs;
 		jconf["kwhilite"] = GUI::conf.kwhilite;
 		jconf["argsets"] = GUI::conf.argsets;
-		jconf["com_args"] = GUI::conf.com_args;
 		jconf["output_template"] = to_utf8(GUI::conf.output_template);
 		jconf["max_concurrent_downloads"] = GUI::conf.max_concurrent_downloads;
 		jconf["cb_lengthyproc"] = GUI::conf.cb_lengthyproc;
@@ -341,6 +349,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["cbsnap"] = GUI::conf.cbsnap;
 		jconf["limit_output_buffer"] = GUI::conf.limit_output_buffer;
 		jconf["output_buffer_size"] = GUI::conf.output_buffer_size;
+		jconf["update_self_only"] = GUI::conf.update_self_only;
+		jconf["pref_vcodec"] = GUI::conf.pref_vcodec;
+		jconf["pref_acodec"] = GUI::conf.pref_acodec;
+		jconf["argset"] = GUI::conf.argset;
 
 		if(jconf.contains("sblock"))
 		{
@@ -366,12 +378,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		{
 			const std::string url {el};
 			auto &bot {gui.botref().at(url)};
-			if(!bot.playsel_string.empty())
-				jconf["playsel_strings"][url] = std::string {bot.playlist_info["entries"][0]["id"]} + "|" + to_utf8(bot.playsel_string);
+			if(!bot.playsel_string.empty() && !bot.playlist_info["entries"].empty())
+				jconf["playsel_strings"][url] = bot.playlist_info["entries"][0]["id"].get<std::string>() + "|" + to_utf8(bot.playsel_string);
 		}
 
-		std::ofstream {confpath} << std::setw(4) << jconf;
-	});
+		return (std::ofstream {confpath} << std::setw(4) << jconf).good();
+	};
+
+	gui.events().unload(gui.fn_write_conf);
 	nana::exec();
 	CoUninitialize();
 }
