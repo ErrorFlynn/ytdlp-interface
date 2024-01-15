@@ -9,7 +9,7 @@ void GUI::fm_formats()
 	auto &bottom {bottoms.at(url)};
 	auto &vidinfo {bottom.vidinfo};
 
-	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize>{}};
+	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize, appear::sizable>{}};
 	fm.caption(title + " - manual selection of formats");
 	fm.bgcolor(theme::fmbg);
 	fm.snap(conf.cbsnap);
@@ -55,7 +55,6 @@ void GUI::fm_formats()
 	fm["l_datetext"] << l_datetext;
 	fm["thumb"] << thumb;
 	fm["thumb_label"] << thumb_label;
-	thumb_label.events().click([] {puts("thumb_label clicked"); });
 	fm["sep1"] << sep1;
 	fm["sep2"] << sep2;
 	fm["cb_streams"] << cb_streams;
@@ -387,7 +386,11 @@ void GUI::fm_formats()
 					std::string ext;
 					auto pos {thumb_url.rfind('.')};
 					if(pos != -1)
-						ext = thumb_url.substr(pos);
+					{
+						auto idx {pos};
+						while(++idx < thumb_url.size() && isalpha(thumb_url[idx]));
+						ext = thumb_url.substr(pos, idx-pos);
+					}
 					if(ext.empty())
 						thumb_label.caption("thumbnail format unsupported");
 					else thumb_label.caption("thumbnail format unsupported\n(" + ext + ')');
@@ -502,7 +505,8 @@ void GUI::fm_formats()
 		fm.system_theme(true);
 	else fm.dark_theme(conf.cbtheme == 0);
 
-	fm.center(1000, std::max(429.0 + list.item_count() * (cnlang ? 22.4 : 20.4), double(600)));
+	fm.center(1000, std::max(429.0 + list.item_count() * (cnlang ? 22.5 : 20.5), double(600)));
+	api::track_window_size(fm, dpi_transform_size(900, 600), false);
 
 	fm.collocate();
 	fm.modality();

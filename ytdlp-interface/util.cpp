@@ -2,6 +2,7 @@
 #include "bitextractor.hpp"
 #include "bitexception.hpp"
 
+#include <Netlistmgr.h>
 #include <WinInet.h>
 #include <TlHelp32.h>
 #include <iostream>
@@ -293,6 +294,8 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 
 	DWORD exit_code {0};
 	GetExitCodeProcess(pi.hProcess, &exit_code);
+	if(exit_code == 1 && cbprog)
+		ret = "failed";
 	if(exit_code == STILL_ACTIVE)
 	{
 		killproc();
@@ -467,7 +470,7 @@ std::string util::dl_inet_res(std::string res, fs::path fname, bool *working, st
 	return ret;
 }
 
-std::string util::extract_7z(fs::path arc_path, fs::path out_path, bool ffmpeg, bool ytdlp_interface)
+std::string util::extract_7z(fs::path arc_path, fs::path out_path, unsigned ffmpeg, bool ytdlp_interface)
 {
 	using namespace bit7z;
 
@@ -484,6 +487,8 @@ std::string util::extract_7z(fs::path arc_path, fs::path out_path, bool ffmpeg, 
 		{
 			extractor.extractMatching(arc_path, L"*\\bin\\ffmpeg.exe", out_path);
 			extractor.extractMatching(arc_path, L"*\\bin\\ffprobe.exe", out_path);
+			if(ffmpeg > 1)
+				extractor.extractMatching(arc_path, L"*\\bin\\ffplay.exe", out_path);
 		}
 		else if(ytdlp_interface)
 		{
@@ -569,4 +574,51 @@ unsigned util::scale_uint(unsigned val)
 	if(dpi != 96)
 		val = round(val * dpi / 96);
 	return val;
+}
+
+util::INTERNET_STATUS util::check_inet_connection()
+{
+	INTERNET_STATUS connectedStatus = INTERNET_STATUS::CONNECTION_ERROR;
+	HRESULT hr = S_FALSE;
+
+	try
+	{
+		hr = CoInitialize(NULL);
+		if(SUCCEEDED(hr))
+		{
+			INetworkListManager *pNetworkListManager;
+			hr = CoCreateInstance(CLSID_NetworkListManager, NULL, CLSCTX_ALL, __uuidof(INetworkListManager), (LPVOID *)&pNetworkListManager);
+			if(SUCCEEDED(hr))
+			{
+				NLM_CONNECTIVITY nlmConnectivity = NLM_CONNECTIVITY::NLM_CONNECTIVITY_DISCONNECTED;
+				VARIANT_BOOL isConnected = VARIANT_FALSE;
+				hr = pNetworkListManager->get_IsConnectedToInternet(&isConnected);
+				if(SUCCEEDED(hr))
+				{
+					if(isConnected == VARIANT_TRUE)
+						connectedStatus = INTERNET_STATUS::CONNECTED;
+					else
+						connectedStatus = INTERNET_STATUS::DISCONNECTED;
+				}
+
+				if(isConnected == VARIANT_FALSE && SUCCEEDED(pNetworkListManager->GetConnectivity(&nlmConnectivity)))
+				{
+					if(nlmConnectivity & (NLM_CONNECTIVITY_IPV4_LOCALNETWORK | NLM_CONNECTIVITY_IPV4_SUBNET | NLM_CONNECTIVITY_IPV6_LOCALNETWORK | NLM_CONNECTIVITY_IPV6_SUBNET))
+					{
+						connectedStatus = INTERNET_STATUS::CONNECTED_TO_LOCAL;
+					}
+				}
+
+				pNetworkListManager->Release();
+			}
+		}
+
+		CoUninitialize();
+	}
+	catch(...)
+	{
+		connectedStatus = INTERNET_STATUS::CONNECTION_ERROR;
+	}
+
+	return connectedStatus;
 }

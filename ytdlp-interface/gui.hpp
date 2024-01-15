@@ -17,7 +17,7 @@
 #undef max
 
 namespace fs = std::filesystem;
-constexpr int YTDLP_DOWNLOAD {0}, YTDLP_POSTPROCESS {1};
+constexpr int YTDLP_DOWNLOAD {0}, YTDLP_POSTPROCESS {1}, ADD_URL {2};
 constexpr bool X64 {INTPTR_MAX == INT64_MAX};
 
 class GUI : public themed_form, IDropTarget
@@ -44,13 +44,14 @@ public:
 		bool cbsplit {false}, cbchaps {false}, cbsubs {false}, cbthumb {false}, cbtime {true}, cbkeyframes {false}, cbmp3 {false},
 			cbargs {false}, kwhilite {true}, pref_fps {false}, cb_lengthyproc {true}, common_dl_options {true}, cb_autostart {true},
 			cb_queue_autostart {false}, gpopt_hidden {false}, open_dialog_origin {false}, cb_zeropadding {true}, cb_playlist_folder {true},
-			zoomed {false}, get_releases_at_startup {true}, col_format {false}, col_format_note {true}, col_ext {true}, col_fsize {false},
+			zoomed {false}, get_releases_at_startup {false}, col_format {false}, col_format_note {true}, col_ext {true}, col_fsize {false},
 			json_hide_null {false}, col_site_icon {true}, col_site_text {false}, ytdlp_nightly {false}, audio_multistreams {false},
 			cb_sblock_mark {false}, cb_sblock_remove {false}, cb_proxy {false}, cbsnap {true}, limit_output_buffer {true}, 
-			update_self_only {true};
+			update_self_only {true}, cb_premium {true}, cbminw {false}, cb_save_errors {false}, cb_ffplay {false};
 		nana::rectangle winrect;
 		int dpi {96};
 		std::vector<int> sblock_mark, sblock_remove;
+		std::wstring url_passed_as_arg;
 	}
 	conf;
 
@@ -64,14 +65,14 @@ private:
 	std::string inet_error, url_latest_ffmpeg, url_latest_ytdlp, url_latest_ytdlp_relnotes;
 	std::wstring drop_cliptext_temp;
 	std::wstringstream multiple_url_text;
-	long minw {0}, minh {0};
+	long minw {0}, minh {0}; // min frame size
 	unsigned size_latest_ffmpeg {0}, size_latest_ytdlp {0}, number_of_processors {4};
 	bool menu_working {false}, lbq_no_action {false}, thumbthr_working {false}, 
 		autostart_next_item {true}, lbq_can_drag {false}, cnlang {false}, no_draw_freeze {true};
 	std::thread thr, thr_releases, thr_versions, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp, thr_update;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.7.0"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
+	const std::string ver_tag {"v2.8.0"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
 		ytdlp_fname {X64 ? "yt-dlp.exe" : "yt-dlp_x86.exe"};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
@@ -233,7 +234,7 @@ private:
 	widgets::Label l_ver, l_ver_ytdlp, l_ver_ffmpeg, l_channel;
 	widgets::Text l_vertext, l_ytdlp_text, l_ffmpeg_text;
 	widgets::Button btn_changes, btn_update, btn_update_ytdlp, btn_update_ffmpeg;
-	widgets::cbox cb_startup, cb_selfonly, cb_chan_stable, cb_chan_nightly;
+	widgets::cbox cb_startup, cb_selfonly, cb_chan_stable, cb_chan_nightly, cb_ffplay;
 	nana::radio_group rgp_chan;
 	widgets::Progress prog_updater, prog_updater_misc;
 	widgets::Separator sep1, sep2;

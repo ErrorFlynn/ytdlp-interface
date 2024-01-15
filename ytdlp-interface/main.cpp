@@ -35,7 +35,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 					if(IsWindow(hwnd))
 						SendMessage(hwnd, WM_CLOSE, 0, 0);
 			}
-			auto res {util::extract_7z(arc_path, target_dir, false, self_only)};
+			auto res {util::extract_7z(arc_path, target_dir, 0, self_only)};
 			fs::remove(arc_path, ec);
 			fs::remove(fs::temp_directory_path() / "7z.dll", ec);
 			if(!res.empty())
@@ -70,6 +70,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			}
 			return 0;
 		}
+		else GUI::conf.url_passed_as_arg = argv[1];
 	}
 	LocalFree(argv);
 
@@ -83,6 +84,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				ShowWindow(hwnd, SW_RESTORE);
 			SetForegroundWindow(hwnd);
 			BringWindowToTop(hwnd);
+			if(!GUI::conf.url_passed_as_arg.empty())
+			{
+				COPYDATASTRUCT cds;
+				cds.dwData = ADD_URL;
+				cds.cbData = GUI::conf.url_passed_as_arg.size() * 2;
+				cds.lpData = GUI::conf.url_passed_as_arg.data();
+				SendMessageW(hwnd, WM_COPYDATA, NULL, reinterpret_cast<LPARAM>(&cds));
+			}
 			break;
 		}
 		return 0;
@@ -269,6 +278,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				GUI::conf.pref_acodec = jconf["pref_acodec"];
 				GUI::conf.argset = jconf["argset"];
 			}
+			if(jconf.contains("cb_premium")) // v2.8
+			{
+				GUI::conf.cb_premium = jconf["cb_premium"];
+				GUI::conf.cbminw = jconf["cbminw"];
+				GUI::conf.cb_save_errors = jconf["cb_save_errors"];
+				GUI::conf.cb_ffplay = jconf["cb_ffplay"];
+			}
 		}
 	}
 	else GUI::conf.outpath = util::get_sys_folder(FOLDERID_Downloads);
@@ -353,6 +369,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["pref_vcodec"] = GUI::conf.pref_vcodec;
 		jconf["pref_acodec"] = GUI::conf.pref_acodec;
 		jconf["argset"] = GUI::conf.argset;
+		jconf["cb_premium"] = GUI::conf.cb_premium;
+		jconf["cbminw"] = GUI::conf.cbminw;
+		jconf["cb_save_errors"] = GUI::conf.cb_save_errors;
+		jconf["cb_ffplay"] = GUI::conf.cb_ffplay;
 
 		if(jconf.contains("sblock"))
 		{

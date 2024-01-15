@@ -70,6 +70,8 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 				break;
 			}
 		}
+		else if(pcds->dwData == ADD_URL)
+			add_url(url);
 		return true;
 	});
 
@@ -208,7 +210,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 	msg.make_before(WM_GETMINMAXINFO, [&](UINT, WPARAM, LPARAM lparam, LRESULT*)
 	{
 		auto info {reinterpret_cast<PMINMAXINFO>(lparam)};
-		info->ptMinTrackSize.x = minw;
+		info->ptMinTrackSize.x = conf.cbminw ? 0 : minw;
 		info->ptMinTrackSize.y = minh;
 		return false;
 	});
@@ -290,7 +292,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 			if(bot.dl_thread.joinable())
 			{
 				bot.working = false;
-				bot.dl_thread.detach();
+				bot.dl_thread.join();
 			}
 		}
 		if(i_taskbar)
@@ -302,13 +304,15 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 		for(auto item : lbq.at(0))
 		{
 			auto text {item.text(3)};
-			if(text != "done" && text != "error")
+			if(text != "done" && (text != "error" || text == "error" && conf.cb_save_errors))
 				conf.unfinished_queue_items.push_back(to_utf8(item.value<lbqval_t>().url));
 		}
 	});
 
 	for(auto &url : conf.unfinished_queue_items)
 		add_url(to_wstring(url));
+	if(!conf.url_passed_as_arg.empty())
+		add_url(conf.url_passed_as_arg);
 
 	if(conf.cb_queue_autostart && lbq.at(0).size())
 		on_btn_dl(lbq.at(0).at(0).value<lbqval_t>());
@@ -327,7 +331,9 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 	minh = sz.height;
 	if(!conf.winrect.empty())
 	{
-		conf.winrect.width = dpi_transform(conf.winrect.width, conf.dpi);
+		if(!conf.cbminw && conf.winrect.width < minw)
+			conf.winrect.width = dpi_transform(minw, conf.dpi);
+		else conf.winrect.width = dpi_transform(conf.winrect.width, conf.dpi);
 		conf.winrect.height = dpi_transform(conf.winrect.height, conf.dpi);
 		const auto maxh {screen {}.from_window(*this).area().dimension().height};
 		if(conf.winrect.height < size().height)
@@ -428,6 +434,45 @@ bool GUI::process_queue_item(std::wstring url)
 			}
 			else
 			{
+				if(bottom.is_ytlink && conf.cb_premium && conf.pref_res <= 4 && (conf.pref_vcodec != 0 && conf.pref_vcodec != 3 || conf.pref_video == 2))
+				{
+					if(bottom.is_ytchan || bottom.is_yttab || bottom.is_ytplaylist)
+					{
+						if(conf.pref_res == 4)
+							cmd += L" -f \"bv*[format_note*=Premium]+ba / bv*+ba\"";
+					}
+					else
+					{
+						std::string fmtid_premium;
+						const auto &formats {bottom.vidinfo["formats"]};
+						for(auto &el : formats)
+						{
+							if(el.contains("format_note") && el["format_note"] != nullptr && el["format_note"] == "Premium")
+							{
+								fmtid_premium = el["format_id"];
+								break;
+							}
+						}
+						if(!fmtid_premium.empty())
+						{
+							int maxres {1080};
+							if(conf.pref_res < 4)
+							{
+								for(auto &el : formats)
+								{
+									if(el.contains("height") && el["height"] != nullptr)
+									{
+										int height {el["height"]};
+										if(height > maxres)
+											maxres = height;
+									}
+								}
+							}
+							if(maxres == 1080 && !fmtid_premium.empty())
+								cmd += L" -f " + nana::to_wstring(fmtid_premium) + L"+ba";
+						}
+					}
+				}
 				std::wstring strpref {L" -S \""};
 				if(conf.pref_res)
 					strpref += L"res:" + com_res_options[conf.pref_res];
@@ -796,7 +841,7 @@ bool GUI::process_queue_item(std::wstring url)
 			bottom.merger_path.clear();
 			bottom.download_path.clear();
 			auto outpath {bottom.outpath};
-			util::run_piped_process(cmd, &working, cb_append, cb_progress, &graceful_exit, tempfile.filename().string());
+			auto res {util::run_piped_process(cmd, &working, cb_append, cb_progress, &graceful_exit, tempfile.filename().string())};
 			bottom.received_procmsg = false;
 			if(!tempfile.empty() && fs::exists(tempfile))
 			{
@@ -829,7 +874,9 @@ bool GUI::process_queue_item(std::wstring url)
 				if(bottom.timer_proc.started())
 					bottom.timer_proc.stop();
 				item = lbq.item_from_value(url);
-				item.text(3, "done");
+				if(res == "failed")
+					item.text(3, "error");
+				else item.text(3, "done");
 				taskbar_overall_progress();
 				if(i_taskbar && lbq.at(0).size() == 1)
 					i_taskbar->SetProgressState(hwnd, TBPF_NOPROGRESS);
@@ -2055,7 +2102,7 @@ std::wstring GUI::next_startable_url(std::wstring current_url)
 				auto next_item {lbq.at(0).at(pos)};
 				const auto &next_url {next_item.value<lbqval_t>().url};
 				auto text {next_item.text(3)};
-				if(text == "queued" || (text.find("stopped") != -1 && text.find("error") != -1))
+				if(text == "queued" || text.starts_with("stopped"))
 					return next_url;
 			}
 		}

@@ -1,4 +1,5 @@
 #include "../gui.hpp"
+#include <codecvt>
 
 
 void GUI::fm_playlist()
@@ -110,7 +111,16 @@ void GUI::fm_playlist()
 			durstr += ':' + ss.str();
 		}
 
-		const string title {entry["title"]};
+		string title {entry["title"]};
+		if(!is_utf8(title))
+		{
+			std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> u16conv;
+			auto u16str {u16conv.from_bytes(title)};
+			std::wstring wstr(u16str.size(), L'\0');
+			memcpy(&wstr.front(), &u16str.front(), wstr.size() * 2);
+			std::wstring_convert<std::codecvt_utf8<wchar_t>> u8conv;
+			title = u8conv.to_bytes(wstr);
+		}
 		lbv.at(0).append({"", std::to_string(idx), title, durstr});
 		if(!dur && !bottom.is_bcplaylist)
 			bottom.playlist_selection[idx - 1] = false;

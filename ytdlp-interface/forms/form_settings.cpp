@@ -9,16 +9,110 @@ void GUI::fm_settings()
 	using widgets::theme;
 
 	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize>{}};
-	fm.center(820, 500);
+	fm.center(820, 608);
 	fm.caption(title + " - settings");
 	fm.bgcolor(theme::fmbg);
 	fm.snap(conf.cbsnap);
 
-	fm.div(R"(vert margin=20 < <tree weight=150> <weight=20> <switchable <ytdlp> <sblock> <queuing> <gui> <updater>> >)");
+	fm.div(R"(
+			vert margin=20
+			<
+				<tree weight=150> <weight=20> <switchable <ytdlp> <sblock> <queuing> <gui> <updater>>
+			>
+			<weight=20> <sep weight=3px> <weight=20>
+			<weight=35 <> <weight=50> <btn_save weight=360> <weight=15> <checkpic weight=35> <>>
+	)");
+
+	widgets::Button btn_save {fm, "Write the settings file now (Ctrl+S)"};
+	fm["btn_save"] << btn_save;
+	btn_save.tooltip("The settings are written to the settings file every time you exit the program,\nbut if "
+		"a crash happens, any changes you have made (including the state\nof the queue) are lost. You can "
+		"write the settings file now, to preempt that\nscenario.");
+
+	widgets::Separator sep {fm};
+	fm["sep"] << sep;
+	nana::picture checkpic {fm};
+	nana::paint::image checkimg;
+	if(nana::api::screen_dpi(true) > 96)
+		checkimg.open(arr_checkmark48_png, sizeof arr_checkmark48_png);
+	else checkimg.open(arr_checkmark32_png, sizeof arr_checkmark32_png);
+	checkpic.load(checkimg);
+	checkpic.stretchable(false);
+	checkpic.align(nana::align::center, nana::align_v::center);
+	fm["checkpic"] << checkpic;
+	fm.get_place().field_visible("checkpic", false);
+
+	double steps {0};
+	nana::timer t_fade, t_fade_start;
+	t_fade_start.interval(std::chrono::milliseconds {1500});
+	t_fade.interval(std::chrono::milliseconds {35});
+
+	t_fade.elapse([&]
+	{
+		nana::api::effects_bground(checkpic, nana::effects::bground_transparent(0), 1.0 - steps / 1000);
+		steps += 100;
+		if(steps == 1000)
+		{
+			steps = 0;
+			t_fade.stop();
+			fm.get_place().field_visible("checkpic", false);
+			fm.collocate();
+		}
+	});
+
+	t_fade_start.elapse([&]
+	{
+		t_fade_start.stop();
+		if(t_fade.started())
+		{
+			steps = 0;
+			t_fade.stop();
+		}
+		t_fade.start();
+	});
+
+	btn_save.events().click([&]
+	{
+		if(fn_write_conf)
+		{
+			conf.unfinished_queue_items.clear();
+			for(auto item : lbq.at(0))
+			{
+				auto text {item.text(3)};
+				if(text != "done" && text != "error")
+					conf.unfinished_queue_items.push_back(nana::to_utf8(item.value<lbqval_t>().url));
+			}
+			conf.zoomed = is_zoomed(true);
+			if(conf.zoomed || is_zoomed(false)) restore();
+			conf.winrect = nana::rectangle {pos(), size()};
+			if(fn_write_conf())
+			{
+				nana::api::effects_bground(checkpic, nana::effects::bground_transparent(0), 1);
+				fm.get_place().field_visible("checkpic", true);
+				fm.collocate();
+				t_fade_start.start();
+			}
+			else
+			{				
+				nana::msgbox mbox {fm, title};
+				mbox.icon(nana::msgbox::icon_error);
+				(mbox << "Failed to write the settings file:\n\n" << confpath.string() << "\n\n" << strerror(errno))();
+			}
+		}
+	});
+
+	fm.subclass_after(WM_KEYDOWN, [&](UINT, WPARAM wparam, LPARAM, LRESULT *)
+	{
+		if(wparam == 'S')
+		{
+			if(GetAsyncKeyState(VK_CONTROL) & 0xff00)
+				btn_save.events().click.emit({}, btn_save);
+		}
+		return false;
+	});
 
 	widgets::conf_page ytdlp {fm}, queuing {fm}, gui {fm}, sblock {fm};
 	updater.create(fm);
-	updater_init = true;
 	make_updater_page(fm);
 
 	auto page_callback = [this] (std::string name)
@@ -41,14 +135,15 @@ void GUI::fm_settings()
 	fm["gui"] << gui;
 	fm["updater"] << updater;
 
-	widgets::Label l_res {ytdlp, "Preferred resolution:"},
+	widgets::Label l_res {ytdlp, "Preferred resolution:"}, l_vcodec {ytdlp, "Preferred video codec:"},
+		l_acodec {ytdlp, "Preferred audio codec:"},
 		l_video {ytdlp, "Preferred video container:"}, l_audio {ytdlp, "Preferred audio container:"},
 		l_theme {gui, "Color theme:"}, l_contrast {gui, "Contrast:"}, l_ytdlp {ytdlp, "Path to yt-dlp:"},
 		l_template {ytdlp, "Output template:"}, l_maxdl {queuing, "Max concurrent downloads:"}, l_playlist {ytdlp, "Playlist indexing:"},
 		l_opendlg_origin {gui, "When browsing for the output folder, start in:"}, l_sblock {sblock, ""};
 	widgets::path_label l_path {ytdlp, &conf.ytdlp_path};
 	widgets::Textbox tb_template {ytdlp}, tb_playlist {ytdlp}, tb_proxy {ytdlp};
-	widgets::Combox com_res {ytdlp}, com_video {ytdlp}, com_audio {ytdlp};
+	widgets::Combox com_res {ytdlp}, com_video {ytdlp}, com_audio {ytdlp}, com_vcodec {ytdlp}, com_acodec {ytdlp};
 	widgets::cbox cbfps {ytdlp, "Prefer a higher framerate"}, cbtheme_dark {gui, "Dark"}, cbtheme_light {gui, "Light"},
 		cbtheme_system {gui, "System preference"}, cb_lengthyproc {queuing, "Start next item on lengthy processing"},
 		cb_common {queuing, "Each queue item has its own download options"},
@@ -57,7 +152,9 @@ void GUI::fm_settings()
 		cb_zeropadding {ytdlp, "Pad the indexed filenames with zeroes"}, cb_playlist_folder {ytdlp, "Put playlists in their own folders"},
 		cb_origin_progdir {gui, "Program folder"}, cb_origin_curdir {gui, "Currently selected folder"},
 		cb_mark {sblock, "Mark these categories:"}, cb_remove {sblock, "Remove these categories:"}, cb_proxy {ytdlp, "Use this proxy:"},
-		cbsnap {gui, "Snap windows to screen edges"};
+		cbsnap {gui, "Snap windows to screen edges"}, cbminw {gui, "No minimum width for the main window"},
+		cb_premium {ytdlp, "[YouTube] For 1080p, prefer the \"premium\" format with enhanced bitrate"},
+		cb_save_errors {queuing, "Save queue items with \"error\" status to the settings file"};
 	widgets::Separator sep1 {ytdlp}, sep2 {ytdlp}, sep3 {gui}, sep4 {fm};
 	widgets::Button btn_close {fm, " Close"}, btn_default {ytdlp, "Reset to default", true},
 		btn_playlist_default {ytdlp, "Reset to default", true}, btn_info {ytdlp};
@@ -70,9 +167,14 @@ void GUI::fm_settings()
 		<weight=26 <weight=42> <l_res weight=156> <weight=10> <com_res weight=56> <> 
 			<cbfps weight=228> <btn_info weight=26>> <weight=20>
 		<weight=25
-			<l_video weight=198> <weight=10> <com_video weight=61> <>
-			<l_audio weight=200> <weight=10> <com_audio weight=61>
+			<l_video weight=198> <weight=10> <com_video weight=56> <>
+			<l_audio weight=200> <weight=10> <com_audio weight=66>
+		> <weight=20>
+		<weight=26
+			<l_vcodec weight=198> <weight=10> <com_vcodec weight=56> <>
+			<l_acodec weight=198> <weight=10> <com_acodec weight=66>
 		>
+		<spacer_premium weight=20> <row_premium weight=26 <prem_pad weight=36><cb_premium>>
 		<weight=20> <sep1 weight=3px> <weight=20>
 		<weight=25 <l_template weight=132> <weight=10> <tb_template> <weight=15> <btn_default weight=140>> <weight=20>
 		<weight=25 <l_playlist weight=132> <weight=10> <tb_playlist> <weight=15> <btn_playlist_default weight=140>> <weight=20>
@@ -121,14 +223,21 @@ void GUI::fm_settings()
 		return true;
 	});
 
+	cb_premium.check(conf.cb_premium);
+
 	if(cnlang)
 	{
 		ytdlp.get_place().field_display("proxy_padding", false);
 		change_field_attr(ytdlp.get_place(), "cb_proxy", "weight", 132);
+		change_field_attr(ytdlp.get_place(), "prem_pad", "weight", 20);
 	}
 
 	ytdlp["l_res"] << l_res;
 	ytdlp["com_res"] << com_res;
+	ytdlp["l_vcodec"] << l_vcodec;
+	ytdlp["l_acodec"] << l_acodec;
+	ytdlp["com_vcodec"] << com_vcodec;
+	ytdlp["com_acodec"] << com_acodec;
 	ytdlp["cbfps"] << cbfps;
 	ytdlp["btn_info"] << btn_info;
 	ytdlp["l_ytdlp"] << l_ytdlp;
@@ -137,6 +246,7 @@ void GUI::fm_settings()
 	ytdlp["com_video"] << com_video;
 	ytdlp["l_audio"] << l_audio;
 	ytdlp["com_audio"] << com_audio;
+	ytdlp["cb_premium"] << cb_premium;
 	ytdlp["sep1"] << sep1;
 	ytdlp["l_template"] << l_template;
 	ytdlp["tb_template"] << tb_template;
@@ -256,7 +366,8 @@ void GUI::fm_settings()
 		<weight=25 <l_maxdl weight=216> <weight=10> <sb_maxdl weight=40> <> <cb_lengthyproc weight=318>> <weight=20>
 		<weight=25 <cb_autostart weight=508>> <weight=20>
 		<weight=25 <cb_common weight=408>> <weight=20>
-		<weight=25 <cb_queue_autostart weight=548>> <weight=20>
+		<weight=25 <cb_queue_autostart>> <weight=20>
+		<weight=25 <cb_save_errors>> <weight=20>
 	)");
 
 	l_maxdl.text_align(nana::align::left, nana::align_v::center);
@@ -272,13 +383,14 @@ void GUI::fm_settings()
 	queuing["cb_autostart"] << cb_autostart;
 	queuing["cb_common"] << cb_common;
 	queuing["cb_queue_autostart"] << cb_queue_autostart;
+	queuing["cb_save_errors"] << cb_save_errors;
 
 	gui.div(R"(vert		
 		<weight=25 <l_theme weight=100> <weight=20> <cbtheme_dark weight=65> <weight=20> 
 			<cbtheme_light weight=66> <weight=20> <cbtheme_system weight=178> > <weight=20>
 		<weight=25 <l_contrast weight=70> <weight=20> <slider> >
 		<weight=20> <sep3 weight=3px> <weight=20>
-		<weight=25 <cbsnap> <>> <weight=20>
+		<weight=25 <cbsnap> <>> <weight=20> <weight=25 <cbminw weight=75%> <>> <weight=20>
 		<weight=25 <l_opendlg_origin weight=380> <cb_origin_curdir>> <weight=10>
 		<weight=25 <opendlg_spacer weight=380> <cb_origin_progdir>> <weight=20>
 	)");
@@ -297,10 +409,28 @@ void GUI::fm_settings()
 	gui["l_contrast"] << l_contrast;
 	gui["slider"] << slider;
 	gui["cbsnap"] << cbsnap;
+	gui["cbminw"] << cbminw;
 	gui["sep3"] << sep3;
 	gui["l_opendlg_origin"] << l_opendlg_origin;
 	gui["cb_origin_progdir"] << cb_origin_progdir;
 	gui["cb_origin_curdir"] << cb_origin_curdir;
+
+	cb_save_errors.check(conf.cb_save_errors);
+
+	cbminw.check(conf.cbminw);
+	cbminw.events().checked([&, this]
+	{
+		conf.cbminw = cbminw.checked();
+		if(!conf.cbminw)
+		{
+			auto sz {nana::api::window_outline_size(*this)};
+			if(sz.width < minw)
+			{
+				sz.width = minw;
+				nana::api::window_outline_size(*this, sz);
+			}
+		}
+	});
 
 	cbsnap.check(conf.cbsnap);
 	cbsnap.events().checked([&, this]
@@ -371,6 +501,7 @@ void GUI::fm_settings()
 		sb_maxdl.refresh_theme();
 		cbfps.refresh_theme();
 		cb_queue_autostart.refresh_theme();
+		btn_save.refresh_theme();
 		btn_close.refresh_theme();
 		btn_default.refresh_theme();
 		btn_playlist_default.refresh_theme();
@@ -412,7 +543,7 @@ void GUI::fm_settings()
 		else conf.cbtheme = 1;
 	}
 	if(conf.cbtheme == 0) cbtheme_dark.check(true);
-	if(conf.cbtheme == 1)  cbtheme_light.check(true);
+	if(conf.cbtheme == 1) cbtheme_light.check(true);
 
 	nana::radio_group rg_origin;
 	rg_origin.add(cb_origin_progdir);
@@ -420,6 +551,15 @@ void GUI::fm_settings()
 	if(conf.open_dialog_origin)
 		cb_origin_curdir.check(true);
 	else cb_origin_progdir.check(true);
+
+	cb_save_errors.tooltip("When the settings are saved, any incomplete queue items are also saved,\nexcept for those with the "
+		"\"error\" status. This option lets you also save the\nitems with the \"error\" status, which can be useful when a "
+		"download fails\ndue to connection issues, but can be resumed later.");
+
+	cb_premium.tooltip("This option lets you override your video codec preference, in the case when a video\n"
+		"has format 616 available (which has the \"premium\" bitrate). For example, if you're\ndownloading a 1080p video and "
+		"you prefer the H264 codec, this option will override\nthat codec preference by requesting format 616 from yt-dlp "
+		"(with the argument\n\"-f 616+ba\").");
 
 	cbfps.tooltip("If several different formats have the same resolution,\ndownload the one with the highest framerate.");
 
@@ -468,10 +608,40 @@ void GUI::fm_settings()
 
 		proxy_tip {"Tell yt-dlp to use a proxy server (this passes <bold>--proxy</> to yt-dlp)\n\n"
 		"\tHTTP proxy:  <bold>IP_ADDRESS:PORT</>\n\n\tSOCKS proxy:  <bold>socks5://IP_ADDRESS:PORT</>\n\n"
-		"\tSOCKS proxy with authentication:  <bold>socks5://USER:PASS@IP_ADDRESS:PORT</>\t"};
+		"\tSOCKS proxy with authentication:  <bold>socks5://USER:PASS@IP_ADDRESS:PORT</>\t"},
+
+		codec_tip {"In the context of digital video and audio, a codec is a processing algorithm\nused to compress data, and the "
+		"process of compressing data with a codec\nis called \"encoding\".\n\nA website like YouTube may offer multiple formats that "
+		"use the same\ncontainer, but different codecs, so specifying a preferred codec can prevent\nunwanted formats from being downloaded."};
 
 	cb_proxy.tooltip(proxy_tip);
 	tb_proxy.tooltip(proxy_tip);
+
+	auto premium_handler = [&, this]
+	{
+		auto &plc {ytdlp.get_place()};
+		if(com_res.option() > 4 || com_vcodec.option() == 0 || com_vcodec.option() == 3)
+		{
+			plc.field_display("row_premium", false);
+			plc.field_display("spacer_premium", false);
+			plc.collocate();
+		}
+		else
+		{
+			plc.field_display("row_premium", true);
+			plc.field_display("spacer_premium", true);
+			plc.collocate();
+		}
+	};
+
+	for(auto &opt : com_vcodec_options)
+		com_vcodec.push_back(" " + nana::to_utf8(opt));
+	com_vcodec.events().selected(premium_handler);
+	com_vcodec.option(conf.pref_vcodec);
+
+	for(auto &opt : com_acodec_options)
+		com_acodec.push_back(" " + nana::to_utf8(opt));
+	com_acodec.option(conf.pref_acodec);
 
 	for(auto &opt : com_video_options)
 		com_video.push_back(" " + nana::to_utf8(opt));
@@ -484,6 +654,7 @@ void GUI::fm_settings()
 	for(auto &opt : com_res_options)
 		com_res.push_back(" " + nana::to_utf8(opt));
 
+	com_res.events().selected(premium_handler);
 	com_res.option(conf.pref_res);
 	com_res.tooltip(res_tip);
 	l_res.tooltip(res_tip);
@@ -497,6 +668,10 @@ void GUI::fm_settings()
 	l_audio.tooltip(container_tip);
 	com_video.tooltip(container_tip);
 	com_audio.tooltip(container_tip);
+	l_vcodec.tooltip(codec_tip);
+	com_vcodec.tooltip(codec_tip);
+	l_acodec.tooltip(codec_tip);
+	com_acodec.tooltip(codec_tip);
 
 	com_res.option(conf.pref_res);
 	com_video.option(conf.pref_video);
@@ -539,6 +714,8 @@ void GUI::fm_settings()
 		conf.pref_res = com_res.option();
 		conf.pref_video = com_video.option();
 		conf.pref_audio = com_audio.option();
+		conf.pref_vcodec = com_vcodec.option();
+		conf.pref_acodec = com_acodec.option();
 		conf.pref_fps = cbfps.checked();
 		output_template = tb_template.caption_wstring();
 		conf.playlist_indexing = tb_playlist.caption_wstring();
@@ -553,6 +730,9 @@ void GUI::fm_settings()
 		conf.cb_sblock_remove = cb_remove.checked();
 		conf.cb_proxy = cb_proxy.checked();
 		conf.proxy = tb_proxy.caption_wstring();
+		conf.update_self_only = cb_selfonly.checked();
+		conf.cb_premium = cb_premium.checked();
+		conf.cb_save_errors = cb_save_errors.checked();
 
 		conf.sblock_mark.clear();
 		for(auto ip : lbmark.at(0))
@@ -587,6 +767,7 @@ void GUI::fm_settings()
 
 		updater_working = false;
 		conf.get_releases_at_startup = cb_startup.checked();
+		conf.cb_ffplay = cb_ffplay.checked();
 
 		if(thr.joinable())
 			thr.join();
@@ -607,6 +788,7 @@ void GUI::fm_settings()
 		ytdlp.bgcolor(theme::fmbg);
 		queuing.bgcolor(theme::fmbg);
 		gui.bgcolor(theme::fmbg);
+		checkpic.bgcolor(theme::fmbg);
 		l_sblock.caption(std::regex_replace(sblock_text, std::regex {"\\b(0x)"}, theme::is_dark() ? link_dark : link_light));
 		updater_display_version_ytdlp();
 		updater_display_version_ffmpeg();
@@ -694,14 +876,17 @@ do that. That feature can be useful in certain cases, but yt-dlp does a good job
 void GUI::make_updater_page(themed_form &parent)
 {
 	updater.div(R"(vert
-		<cb_startup weight=25> <weight=15>
+		<weight=5> <sep1 weight=3px> <weight=20>
 		<weight=30 <l_ver weight=110> <weight=10> <l_vertext> <weight=20> <btn_changes weight=150> >
+		<weight=15> <cb_startup weight=25>
+		<weight=15> <cb_selfonly weight=25>
 		<weight=20>
 		<weight=30 <btn_update weight=100> <weight=20> <prog> > <weight=25>
-		<separator weight=3px> <weight=20>
-		<weight=25 <l_channel weight=170> <weight=20> <cb_chan_stable weight=75> <weight=10> <cb_chan_nightly weight=85> <> > <weight=15>
+		<sep2 weight=3px> <weight=20>
 		<weight=30 <l_ver_ytdlp weight=170> <weight=10> <l_ytdlp_text> > <weight=10>
-		<weight=30 <l_ver_ffmpeg weight=170> <weight=10> <l_ffmpeg_text> > <weight=20>
+		<weight=30 <l_ver_ffmpeg weight=170> <weight=10> <l_ffmpeg_text> > <weight=12>
+		<weight=25 <l_channel weight=170> <weight=20> <cb_chan_stable weight=75> <weight=10> <cb_chan_nightly weight=85> <> > <weight=17>
+		<weight=25 <weight=14> <cb_ffplay>> <weight=20>
 		<weight=30 <prog_misc> > <weight=25>
 		<weight=30 <> <btn_update_ytdlp weight=150> <weight=20> <btn_update_ffmpeg weight=160> <> >
 	)");
@@ -723,22 +908,28 @@ void GUI::make_updater_page(themed_form &parent)
 	btn_update_ytdlp.create(updater, "Update yt-dlp");
 	btn_update_ffmpeg.create(updater, "Update FFmpeg");
 	cb_startup.create(updater, "Check at program startup and display any new version in the title bar");
+	cb_selfonly.create(updater, "Only extract ytdlp-interface.exe from the downloaded archive");
 	cb_chan_stable.create(updater, "Stable");
 	cb_chan_nightly.create(updater, "Nightly");
+	cb_ffplay.create(updater, "When updating ffmpeg, also extract \"ffplay.exe\"");
 	prog_updater.create(updater);
 	prog_updater_misc.create(updater);
-	separator.create(updater);
+	sep1.create(updater, "ytdlp-interface");
+	sep2.create(updater, "ffmpeg & yt-dlp");
 
+	updater["sep1"] << sep1;
 	updater["cb_startup"] << cb_startup;
+	updater["cb_selfonly"] << cb_selfonly;
 	updater["l_ver"] << l_ver;
 	updater["l_vertext"] << l_vertext;
 	updater["btn_changes"] << btn_changes;
 	updater["btn_update"] << btn_update;
 	updater["prog"] << prog_updater;
-	updater["separator"] << separator;
+	updater["sep2"] << sep2;
 	updater["l_channel"] << l_channel;
 	updater["cb_chan_stable"] << cb_chan_stable;
 	updater["cb_chan_nightly"] << cb_chan_nightly;
+	updater["cb_ffplay"] << cb_ffplay;
 	updater["l_ver_ytdlp"] << l_ver_ytdlp;
 	updater["l_ver_ffmpeg"] << l_ver_ffmpeg;
 	updater["l_ytdlp_text"] << l_ytdlp_text;
@@ -747,13 +938,19 @@ void GUI::make_updater_page(themed_form &parent)
 	updater["btn_update_ffmpeg"] << btn_update_ffmpeg;
 	updater["prog_misc"] << prog_updater_misc;
 
+	cb_selfonly.check(conf.update_self_only);
 	cb_startup.check(conf.get_releases_at_startup);
+	cb_ffplay.check(conf.cb_ffplay);
 	cb_chan_stable.radio(true);
 	cb_chan_nightly.radio(true);
 
 	cb_chan_stable.tooltip("\"Stable\" releases are well tested and have no major bugs,\n"
 		"but there's a relatively long time until one comes out.");
-	cb_chan_nightly.tooltip("\"Nightly\" releases come out frequently and contain the\nlatest changes, but some features may be broken.");
+	cb_chan_nightly.tooltip("\"Nightly\" releases come out every day around midnight\nUTC and contain the latest patches and changes. "
+		"This is\nthe recommended channel for regular users of yt-dlp.");
+	cb_selfonly.tooltip("To update the program, an archive is downloaded from GitHub,\nwhich contains the following files:\n\n<bold>"
+		"7z.dll\nffmpeg.exe\nffprobe.exe\nyt-dlp.exe\nytdlp-interface.exe</>\n\nCheck this option if you don't want your current "
+		"versions of\nyt-dlp and ffmpeg to be overwritten with those in the archive.");
 
 	if(!rgp_chan.size())
 	{
@@ -879,7 +1076,7 @@ void GUI::make_updater_page(themed_form &parent)
 			if(!url_latest_ytdlp_relnotes.empty())
 			{
 				nana::api::effects_edge_nimbus(l_ytdlp_text, nana::effects::edge_nimbus::over);
-				l_ytdlp_text.tooltip("Click to view release notes in web browser.");
+				l_ytdlp_text.tooltip(url_latest_ytdlp_relnotes);
 				l_ytdlp_text.events().click.clear();
 				l_ytdlp_text.events().click([this]
 				{
@@ -1052,6 +1249,8 @@ void GUI::updater_update_self(themed_form &parent)
 						fs::remove(temp_7zlib, ec);
 						fs::copy_file(appdir / "7z.dll", temp_7zlib);
 						std::wstring params {L"update \"" + arc_path.wstring() + L"\" \"" + appdir.wstring() + L"\""};
+						if(conf.update_self_only)
+							params += L" self_only";
 						ShellExecuteW(NULL, L"runas", tempself.wstring().data(), params.data(), NULL, SW_SHOW);
 						updater_working = false;
 						parent.close();
@@ -1148,7 +1347,7 @@ void GUI::updater_update_misc(bool ytdlp, fs::path target)
 						if(fs::exists(tempdir))
 						{
 							prog_updater_misc.caption("Extracting files to temporary folder...");
-							auto error {util::extract_7z(arc_path, tempdir, true)};
+							auto error {util::extract_7z(arc_path, tempdir, cb_ffplay.checked() + 1)};
 							if(error.empty())
 							{
 								prog_updater_misc.caption(std::string {"Copying files to "} + (target == appdir ?
@@ -1224,7 +1423,6 @@ void GUI::updater_update_misc(bool ytdlp, fs::path target)
 
 void GUI::updater_init_page()
 {
-	updater_init = false;
 	l_ffmpeg_text.error_mode(false);
 	l_ffmpeg_text.caption("checking...");
 	l_vertext.caption("checking...");

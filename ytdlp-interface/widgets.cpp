@@ -1266,7 +1266,7 @@ sblock_listbox::sblock_listbox(nana::window parent, bool high_contrast) : listbo
 	checkable(true);
 	enable_single(true, false);
 	typeface(nana::paint::font_info {"Calibri", 12});
-	scheme().item_height_ex = 8;
+	scheme().item_height_ex = util::scale(10);
 	scheme().text_margin = util::scale(10) + (nana::api::screen_dpi(true) > 96) * 4;
 	append_header("", util::scale(286));
 	show_header(false);
