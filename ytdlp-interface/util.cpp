@@ -13,7 +13,7 @@
 std::recursive_mutex subclass::mutex_;
 std::map<HWND, subclass*> subclass::table_;
 
-std::string util::format_int(unsigned i)
+std::string util::format_int(std::uint64_t i)
 {
 	std::stringstream ss;
 	ss.imbue(std::locale {ss.getloc(), new Sep<char>{}});
@@ -21,24 +21,24 @@ std::string util::format_int(unsigned i)
 	return ss.str();
 }
 
-std::string util::format_float(float f, unsigned precision)
+std::string util::format_double(double f, unsigned precision)
 {
 	std::stringstream ss;
 	ss << std::fixed << std::setprecision(precision) << f;
 	return ss.str();
 }
 
-std::string util::int_to_filesize(unsigned i, bool with_bytes)
+std::string util::int_to_filesize(std::uint64_t i, bool with_bytes)
 {
-	float f {static_cast<float>(i)};
+	double f {static_cast<double>(i)};
 	std::string s, bytes {" (" + format_int(i) + ")"};
 	if(i < 1024)
 		s = format_int(i);
 	else if(i < 1024*1024)
 		s = std::to_string(i/1024) + " KB" + (with_bytes ? bytes : "");
 	else if(i < 1024*1024*1024)
-		s = format_float(f/(1024*1024)) + " MB" + (with_bytes ? bytes : "");
-	else s = format_float(f/(1024*1024*1024)) + " GB" + (with_bytes ? bytes : "");
+		s = format_double(f/(1024*1024)) + " MB" + (with_bytes ? bytes : "");
+	else s = format_double(f/(1024*1024*1024)) + " GB" + (with_bytes ? bytes : "");
 	return s;
 }
 

@@ -35,9 +35,9 @@ namespace util
 	using progress_callback = std::function<void(ULONGLONG, ULONGLONG, std::string, int, int)>;
 	using append_callback = std::function<void(std::string, bool)>;
 
-	std::string format_int(unsigned i);
-	std::string format_float(float f, unsigned precision = 2);
-	std::string int_to_filesize(unsigned i, bool with_bytes = true);
+	std::string format_int(std::uint64_t i);
+	std::string format_double(double f, unsigned precision = 2);
+	std::string int_to_filesize(std::uint64_t i, bool with_bytes = true);
 	std::string GetLastErrorStr(bool inet = false);
 	HWND hwnd_from_pid(DWORD pid);
 	std::vector<HWND> hwnds_from_pid(DWORD pid);

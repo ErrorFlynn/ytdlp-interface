@@ -348,7 +348,7 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 	if(prevbot)
 		tbrate.caption(prevbot->tbrate.caption());
 	else if(conf.ratelim)
-		tbrate.caption(util::format_float(conf.ratelim, 1));
+		tbrate.caption(util::format_double(conf.ratelim, 1));
 
 	tbrate.set_accept([this](wchar_t wc)->bool
 	{

@@ -229,13 +229,16 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 	modpath.erase(modpath.rfind('\\'));
 	appdir = modpath;
 
-	if(fs::exists(appdir / "ffmpeg.exe"))
-		ffmpeg_loc = appdir / "ffmpeg.exe";
-	else if(!conf.ytdlp_path.empty())
+	if(conf.ffmpeg_path.empty())
 	{
-		auto tmp {fs::path {conf.ytdlp_path}.replace_filename("ffmpeg.exe")};
-		if(fs::exists(tmp))
-			ffmpeg_loc = tmp;
+		if(fs::exists(appdir / "ffmpeg.exe"))
+			conf.ffmpeg_path = appdir;
+		else if(!conf.ytdlp_path.empty())
+		{
+			auto tmp {fs::path {conf.ytdlp_path}.replace_filename("ffmpeg.exe")};
+			if(fs::exists(tmp))
+				conf.ffmpeg_path = tmp.parent_path();
+		}
 	}
 
 	::widgets::theme::contrast(conf.contrast);
@@ -281,6 +284,8 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 			thr_releases_ytdlp.detach();
 		if(thr_versions.joinable())
 			thr_versions.detach();
+		if(thr_ver_ffmpeg.joinable())
+			thr_ver_ffmpeg.detach();
 		for(auto &bottom : bottoms)
 		{
 			auto &bot {*bottom.second};
@@ -308,6 +313,8 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 				conf.unfinished_queue_items.push_back(to_utf8(item.value<lbqval_t>().url));
 		}
 	});
+
+	use_ffmpeg_location = !ffmpeg_location_in_conf_file();
 
 	for(auto &url : conf.unfinished_queue_items)
 		add_url(to_wstring(url));
@@ -392,6 +399,7 @@ bool GUI::process_queue_item(std::wstring url)
 	{
 		bottom.btndl.caption("Stop download");
 		bottom.btndl.cancel_mode(true);
+		bottom.idx_error = 0;
 		if(tbpipe.current() == url)
 		{
 			tbpipe.clear();
@@ -524,9 +532,9 @@ bool GUI::process_queue_item(std::wstring url)
 			cmd += L"--no-mtime ";
 		if(conf.cbkeyframes && argset.find(L"--force-keyframes-at-cuts") == -1)
 			cmd += L"--force-keyframes-at-cuts ";
-		if(!ffmpeg_loc.empty() && ffmpeg_loc.parent_path() != self_path.parent_path())
-			if(argset.find(L"--ffmpeg-location") == -1)
-				cmd += L"--ffmpeg-location \"" + ffmpeg_loc.wstring() + L"\" ";
+		if(!conf.ffmpeg_path.empty() && conf.ffmpeg_path != conf.ytdlp_path.parent_path())
+			if(argset.find(L"--ffmpeg-location") == -1 && use_ffmpeg_location)
+				cmd += L"--ffmpeg-location \"" + conf.ffmpeg_path.wstring() + L"\" ";
 		if(tbrate.to_double() && argset.find(L"-r ") == -1)
 			cmd += L"-r " + tbrate.caption_wstring() + (com_rate.option() ? L"M " : L"K ");
 		if(cbmp3.checked() && argset.find(L"--audio-format") == -1)
@@ -875,7 +883,25 @@ bool GUI::process_queue_item(std::wstring url)
 					bottom.timer_proc.stop();
 				item = lbq.item_from_value(url);
 				if(res == "failed")
+				{
 					item.text(3, "error");
+					auto progtext {prog.progress::caption()};
+					auto pos1 {progtext.find('[')};
+					if(pos1 != -1)
+					{
+						auto pos2 {progtext.find(" of ")};
+						if(pos2 != -1)
+						{
+							auto pos3 {progtext.find(']')};
+							if(pos3 != -1 && pos1 < pos2 && pos2 < pos3)
+							{
+								auto strval {progtext.substr(++pos1, pos2 - pos1)};
+								try { bottom.idx_error = std::stoi(strval); }
+								catch(...) { }
+							}
+						}
+					}
+				}
 				else item.text(3, "done");
 				taskbar_overall_progress();
 				if(i_taskbar && lbq.at(0).size() == 1)
@@ -1311,6 +1337,7 @@ void GUI::add_url(std::wstring url, bool refresh)
 									m.text(pos, (bottom.is_ytplaylist ? "Select videos (" : "Select songs (") + str + '/' + str + ")");
 								else m.text(pos, (bottom.is_ytplaylist ? "Select videos (" : "Select songs (") + std::to_string(bottom.playlist_selected()) + '/' + str + ")");
 								m.enabled(pos, true);
+								m.enabled(pos+1, true);
 								api::refresh_window(m.handle());
 								vidsel_item.m = nullptr;
 							}
@@ -1325,8 +1352,10 @@ void GUI::add_url(std::wstring url, bool refresh)
 					{
 						if(bottom.is_bclink)
 							media_website = "bandcamp.com";
-						else media_website = bottom.vidinfo["webpage_url_domain"];
-						media_title = bottom.vidinfo["title"];
+						else if(bottom.vidinfo_contains("webpage_url_domain"))
+							media_website = bottom.vidinfo["webpage_url_domain"];
+						if(bottom.vidinfo_contains("title"))
+							media_title = bottom.vidinfo["title"];
 						if(bottom.vidinfo_contains("is_live") && bottom.vidinfo["is_live"] ||
 							bottom.vidinfo_contains("live_status") && bottom.vidinfo["live_status"] == "is_live")
 							media_title = "[live] " + media_title;
@@ -1340,12 +1369,12 @@ void GUI::add_url(std::wstring url, bool refresh)
 							ext = bottom.vidinfo["ext"];
 						if(bottom.vidinfo_contains("filesize"))
 						{
-							unsigned fsize {bottom.vidinfo["filesize"]};
+							auto fsize {bottom.vidinfo["filesize"].get<std::uint64_t>()};
 							filesize = util::int_to_filesize(fsize, false);
 						}
 						else if(bottom.vidinfo_contains("filesize_approx"))
 						{
-							unsigned fsize {bottom.vidinfo["filesize_approx"]};
+							auto fsize {bottom.vidinfo["filesize_approx"].get<std::uint64_t>()};
 							if(bottom.vidinfo_contains("requested_formats"))
 							{
 								auto &reqfmt {bottom.vidinfo["requested_formats"]};
@@ -1853,47 +1882,10 @@ void GUI::get_versions()
 {
 	thr_versions = std::thread {[this]
 	{
-		std::thread thr_ffmpeg([this]
-		{
-			if(!ffmpeg_loc.empty())
-			{
-				std::wstring cmd {L'\"' + ffmpeg_loc.wstring() + L"\" -version"};
-				auto ver {util::run_piped_process(cmd)};
-				auto pos {ver.find("--extra-version=")};
-				if(pos != -1)
-				{
-					auto rawver {ver.substr(pos + 16, 8)};
-					ver_ffmpeg.year = stoi(rawver.substr(0, 4));
-					ver_ffmpeg.month = stoi(rawver.substr(4, 2));
-					ver_ffmpeg.day = stoi(rawver.substr(6, 2));
-				}
-			}
-		});
-
-		if(!conf.ytdlp_path.empty())
-		{
-			if(fs::exists(conf.ytdlp_path))
-			{
-				auto ver {util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L"\" --version")};
-				if(ver.size() >= 10)
-				{
-					auto rawver {ver.substr(0, 10)};
-					try { ver_ytdlp.year = stoi(rawver.substr(0, 4)); }
-					catch(const std::invalid_argument&)
-					{
-						thr_versions.detach();
-						if(thr_ffmpeg.joinable())
-							thr_ffmpeg.join();
-						return;
-					}
-					ver_ytdlp.month = stoi(rawver.substr(5, 2));
-					ver_ytdlp.day = stoi(rawver.substr(8, 2));
-				}
-			}
-			else conf.ytdlp_path.clear();
-		}
-		if(thr_ffmpeg.joinable())
-			thr_ffmpeg.join();
+		get_version_ffmpeg(false);
+		get_version_ytdlp();
+		if(thr_ver_ffmpeg.joinable())
+			thr_ver_ffmpeg.join();
 		if(thr_versions.joinable())
 			thr_versions.detach();
 	}};
@@ -1922,6 +1914,32 @@ void GUI::get_version_ytdlp()
 }
 
 
+void GUI::get_version_ffmpeg(bool auto_detach)
+{
+	if(!thr_ver_ffmpeg.joinable())
+	{
+		thr_ver_ffmpeg = std::thread {[=, this]
+		{
+			if(!conf.ffmpeg_path.empty())
+			{
+				std::wstring cmd {L'\"' + (conf.ffmpeg_path / "ffmpeg.exe").wstring() + L"\" -version"};
+				auto ver {util::run_piped_process(cmd)};
+				auto pos {ver.find("--extra-version=")};
+				if(pos != -1)
+				{
+					auto rawver {ver.substr(pos + 16, 8)};
+					ver_ffmpeg.year = stoi(rawver.substr(0, 4));
+					ver_ffmpeg.month = stoi(rawver.substr(4, 2));
+					ver_ffmpeg.day = stoi(rawver.substr(6, 2));
+				}
+			}
+			if(auto_detach && thr_ver_ffmpeg.joinable())
+				thr_ver_ffmpeg.detach();
+		}};
+	}
+}
+
+
 bool GUI::is_ytlink(std::wstring url)
 {
 	auto pos {url.find(L"www.")};
@@ -1944,7 +1962,7 @@ bool GUI::is_ytchan(std::wstring url)
 		url.find(L"youtube.com/channel/") != -1 || url.find(L"youtube.com/user/") != -1)
 		return true;
 	auto pos {url.find(L"youtube.com/")};
-	if(pos != -1 && url.size() > pos + 12 && url.find(L"watch?v=") == -1 && url.find(L"list=") == -1)
+	if(pos != -1 && url.size() > pos + 12 && url.find(L"watch?v=") == -1 && url.find(L"list=") == -1 && url.find(L"/live/") == -1)
 		return true;
 	return false;
 }
@@ -1989,6 +2007,7 @@ void GUI::taskbar_overall_progress()
 
 void GUI::on_btn_dl(std::wstring url)
 {
+	use_ffmpeg_location = !ffmpeg_location_in_conf_file();
 	taskbar_overall_progress();
 	if(!process_queue_item(url))
 		return; // the queue item was stopped, not started
@@ -2146,6 +2165,20 @@ void GUI::adjust_lbq_headers()
 
 	const auto two_computed {lbq.size().width - (zero + one + three + four + five + six + seven) - scale(9)};
 	lbq.column_at(2).width(two_computed);
+}
+
+
+bool GUI::ffmpeg_location_in_conf_file()
+{
+	std::ifstream infile {conf.ytdlp_path.parent_path() / "yt-dlp.conf"};
+	if(infile)
+	{
+		std::stringstream ss;
+		ss << infile.rdbuf();
+		if(ss.str().find("--ffmpeg-location") != -1)
+			return true;
+	}
+	return false;
 }
 
 

@@ -28,7 +28,7 @@ public:
 
 	static struct settings_t
 	{
-		fs::path ytdlp_path, outpath;
+		fs::path ytdlp_path, ffmpeg_path, outpath;
 		const std::wstring output_template_default {L"%(title)s.%(ext)s"}, playlist_indexing_default {L"%(playlist_index)d - "},
 			output_template_default_bandcamp {L"%(artist)s - %(album)s - %(track_number)02d - %(track)s.%(ext)s"};
 		std::wstring fmt1, fmt2, output_template {output_template_default}, playlist_indexing {playlist_indexing_default},
@@ -61,18 +61,18 @@ public:
 private:
 
 	nlohmann::json releases;
-	fs::path self_path, appdir, ffmpeg_loc;
+	fs::path self_path, appdir;
 	std::string inet_error, url_latest_ffmpeg, url_latest_ytdlp, url_latest_ytdlp_relnotes;
 	std::wstring drop_cliptext_temp;
 	std::wstringstream multiple_url_text;
 	long minw {0}, minh {0}; // min frame size
 	unsigned size_latest_ffmpeg {0}, size_latest_ytdlp {0}, number_of_processors {4};
-	bool menu_working {false}, lbq_no_action {false}, thumbthr_working {false}, 
+	bool menu_working {false}, lbq_no_action {false}, thumbthr_working {false}, use_ffmpeg_location {false},
 		autostart_next_item {true}, lbq_can_drag {false}, cnlang {false}, no_draw_freeze {true};
-	std::thread thr, thr_releases, thr_versions, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp, thr_update;
+	std::thread thr, thr_releases, thr_versions, thr_ver_ffmpeg, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp, thr_update;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.8.0"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
+	const std::string ver_tag {"v2.9.0"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
 		ytdlp_fname {X64 ? "yt-dlp.exe" : "yt-dlp_x86.exe"};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
@@ -110,6 +110,7 @@ private:
 		std::wstring url, strfmt, fmt1, fmt2, playsel_string, cmdinfo, playlist_vid_cmdinfo;
 		std::thread dl_thread, info_thread;
 		int index {0};
+		unsigned idx_error {0};
 
 		widgets::Group gpopt;
 		nana::place plc;
@@ -269,6 +270,7 @@ private:
 	void get_latest_ytdlp();
 	void get_versions();
 	void get_version_ytdlp();
+	void get_version_ffmpeg(bool auto_detach = true);
 	bool is_ytlink(std::wstring url);
 	bool is_ytchan(std::wstring url);
 	void make_updater_page(themed_form &parent);
@@ -284,6 +286,7 @@ private:
 	bool lbq_has_scrollbar();
 	void adjust_lbq_headers();
 	void write_settings() { events().unload.emit({}, *this); }
+	bool ffmpeg_location_in_conf_file();
 
 	std::unordered_map<std::string, std::pair<std::string, std::string>> sblock_infos
 	{

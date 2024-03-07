@@ -80,8 +80,8 @@ void GUI::fm_playlist()
 	lbv.typeface(paint::font_info {"Calibri", 12});
 	lbv.scheme().item_height_ex = 8;
 	lbv.append_header("", dpi_transform(25));
-	lbv.append_header("#", dpi_transform(33));
-	lbv.append_header(bottom.is_bcplaylist ? "Song title" : "Video title", dpi_transform(theme::is_dark() ? 756 : 752));
+	lbv.append_header("#", dpi_transform(45));
+	lbv.append_header(bottom.is_bcplaylist ? "Song title" : "Video title", dpi_transform(theme::is_dark() ? 743 : 739));
 	lbv.append_header("Duration", dpi_transform(75));
 	lbv.column_movable(false);
 	lbv.column_resizable(false);
@@ -124,7 +124,12 @@ void GUI::fm_playlist()
 		lbv.at(0).append({"", std::to_string(idx), title, durstr});
 		if(!dur && !bottom.is_bcplaylist)
 			bottom.playlist_selection[idx - 1] = false;
-		else lbv.at(0).back().check(bottom.playlist_selection[idx - 1]);
+		else 
+		{
+			if(idx < bottom.idx_error)
+				bottom.playlist_selection[idx - 1] = false;
+			lbv.at(0).back().check(bottom.playlist_selection[idx - 1]);
+		}
 		idx++;
 	}
 

@@ -1080,12 +1080,12 @@ void JSON_Tree::populate()
 			}
 			else if(val.is_number_unsigned())
 			{
-				auto node {parent.append(key, key + ":  " + std::to_string(val.get<unsigned>()))};
+				auto node {parent.append(key, key + ":  " + std::to_string(val.get<std::uint64_t>()))};
 				node.icon(dark ? "number_dark" : "number_light");
 			}
 			else if(val.is_number_integer())
 			{
-				auto node {parent.append(key, key + ":  " + std::to_string(val.get<int>()))};
+				auto node {parent.append(key, key + ":  " + std::to_string(val.get<std::int64_t>()))};
 				node.icon(dark ? "number_dark" : "number_light");
 			}
 			else if(val.is_number_float())

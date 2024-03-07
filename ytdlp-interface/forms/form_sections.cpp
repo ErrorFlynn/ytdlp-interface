@@ -36,14 +36,18 @@ void GUI::fm_sections()
 	class tbox : public ::widgets::Textbox
 	{
 	public:
-		tbox(nana::window parent) : Textbox(parent)
+		tbox(window parent) : Textbox(parent)
 		{
 			multi_lines(false);
 			text_align(align::center);
-			typeface(nana::paint::font_info {"", 11});
+			typeface(paint::font_info {"", 11});
 			caption("0");
 			set_accept([this](char c)
 			{
+				/*if(c == 0x16)
+				{
+					auto cliptext {util::get_clipboard_text()};
+				}*/
 				return c == keyboard::backspace || c == keyboard::del || (text().size() < 9 && (isdigit(c) || c == ':'));
 			});
 			events().focus([this](const arg_focus &arg)

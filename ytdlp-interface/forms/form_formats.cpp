@@ -182,13 +182,49 @@ void GUI::fm_formats()
 	btncancel.events().click([&, this]
 	{
 		auto &bottom {bottoms.current()};
+		std::string format_id {"---"}, format_note {"---"}, ext {"---"}, filesize {"---"};
+		if(bottom.use_strfmt)
+		{
+			if(bottom.vidinfo_contains("format_id"))
+				format_id = bottom.vidinfo["format_id"];
+			if(bottom.vidinfo_contains("resolution"))
+				format_note = bottom.vidinfo["resolution"];
+			else if(bottom.vidinfo_contains("format_note"))
+				format_note = bottom.vidinfo["format_note"];
+			if(bottom.vidinfo_contains("ext"))
+				ext = bottom.vidinfo["ext"];
+			if(bottom.vidinfo_contains("filesize"))
+			{
+				auto fsize {bottom.vidinfo["filesize"].get<std::uint64_t>()};
+				filesize = util::int_to_filesize(fsize, false);
+			}
+			else if(bottom.vidinfo_contains("filesize_approx"))
+			{
+				auto fsize {bottom.vidinfo["filesize_approx"].get<std::uint64_t>()};
+				if(bottom.vidinfo_contains("requested_formats"))
+				{
+					auto &reqfmt {bottom.vidinfo["requested_formats"]};
+					if(reqfmt.size() == 2)
+					{
+						if(reqfmt[0].contains("filesize") && reqfmt[1].contains("filesize"))
+							filesize = '~' + util::int_to_filesize(fsize, false);
+						else filesize = "---";
+					}
+				}
+				else filesize = '~' + util::int_to_filesize(fsize, false);
+			}
+			lbq.item_from_value(url).text(4, format_id);
+			lbq.item_from_value(url).text(5, format_note);
+			lbq.item_from_value(url).text(6, ext);
+			lbq.item_from_value(url).text(7, filesize);
+		}
 		bottom.use_strfmt = false;
 		fm.close();
 	});
 
 	auto get_int = [](const nlohmann::json &j, const std::string &key) -> std::string
 	{
-		return (j.contains(key) && j[key] != nullptr) ? std::to_string(j[key].get<unsigned>()) : "---";
+		return (j.contains(key) && j[key] != nullptr) ? std::to_string(j[key].get<std::uint64_t>()) : "---";
 	};
 
 	auto get_string = [](const nlohmann::json &j, const std::string &key) -> std::string
@@ -262,7 +298,7 @@ void GUI::fm_formats()
 			{
 				auto &fmt {*it};
 				if(fmt.contains("filesize") && fmt["filesize"] != nullptr)
-					fsize = util::int_to_filesize(fmt["filesize"], false);
+					fsize = util::int_to_filesize(fmt["filesize"].get<std::uint64_t>(), false);
 				if(list.at(sel.front().cat).text() == "Audio only")
 					fmt_note = get_string(fmt, "format_note");
 				else fmt_note = get_string(fmt, "resolution");
@@ -273,6 +309,38 @@ void GUI::fm_formats()
 				item.text(6, ext);
 				if(fsize != "---")
 					fsize = '~' + fsize;
+				item.text(7, fsize);
+			}
+		}
+		else
+		{
+			auto item {lbq.at(lbq.selected().front())};
+			auto it1 {std::find_if(vidinfo["formats"].begin(), vidinfo["formats"].end(), [&](const auto &el)
+			{
+				return el["format_id"].get<std::string>() == nana::to_utf8(fmt1);
+			})};
+			auto it2 {std::find_if(vidinfo["formats"].begin(), vidinfo["formats"].end(), [&](const auto &el)
+			{
+				return el["format_id"].get<std::string>() == nana::to_utf8(fmt2);
+			})};
+
+			if(it1 != vidinfo["formats"].end() && it2 != vidinfo["formats"].end())
+			{
+				std::string fsize, fsize1 {"---"}, fsize2 {"---"}, fmt_note, ext;
+				if(it1->contains("filesize") && (*it1)["filesize"] != nullptr)
+					fsize1 = util::int_to_filesize((*it1)["filesize"].get<std::uint64_t>(), false);
+				fmt_note = get_string(*it1, "resolution");
+				ext = get_string(*it1, "ext");
+				auto size1 {fsize1 == "---" ? 0 : (*it1)["filesize"].get<std::uint64_t>()};
+				item.text(4, strfmt);
+				item.text(5, fmt_note);
+				item.text(6, ext);
+				if(it2->contains("filesize") && (*it2)["filesize"] != nullptr)
+					fsize2 = util::int_to_filesize((*it2)["filesize"].get<std::uint64_t>(), false);
+				auto size2 {fsize2 == "---" ? 0 : (*it2)["filesize"].get<std::uint64_t>()};
+				if(size1 && size2)
+					fsize = '~' + util::int_to_filesize(size1 + size2, false);
+				else fsize = "---";
 				item.text(7, fsize);
 			}
 		}
@@ -447,7 +515,7 @@ void GUI::fm_formats()
 			acodec = get_string(fmt, "acodec");
 			vcodec = get_string(fmt, "vcodec");
 			if(fmt.contains("filesize") && fmt["filesize"] != nullptr)
-				filesize = util::int_to_filesize(fmt["filesize"]);
+				filesize = util::int_to_filesize(fmt["filesize"].get<std::uint64_t>());
 			unsigned catidx {0};
 			if(acodec == "none")
 				catidx = 2; // video only

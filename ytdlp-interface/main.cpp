@@ -143,7 +143,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				else if(fs::exists(appdir / ytdlp_fname))
 					GUI::conf.ytdlp_path = appdir / ytdlp_fname;
 			}
-			GUI::conf.outpath = std::string {jconf["outpath"]};
+			GUI::conf.outpath = jconf["outpath"].get<std::string>();
 			GUI::conf.fmt1 = to_wstring(jconf["fmt1"].get<std::string>());
 			GUI::conf.fmt2 = to_wstring(jconf["fmt2"].get<std::string>());
 			GUI::conf.ratelim = jconf["ratelim"];
@@ -285,6 +285,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				GUI::conf.cb_save_errors = jconf["cb_save_errors"];
 				GUI::conf.cb_ffplay = jconf["cb_ffplay"];
 			}
+			if(jconf.contains("ffmpeg_path")) // v2.9
+			{
+				GUI::conf.ffmpeg_path = jconf["ffmpeg_path"].get<std::string>();
+			}
 		}
 	}
 	else GUI::conf.outpath = util::get_sys_folder(FOLDERID_Downloads);
@@ -373,6 +377,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["cbminw"] = GUI::conf.cbminw;
 		jconf["cb_save_errors"] = GUI::conf.cb_save_errors;
 		jconf["cb_ffplay"] = GUI::conf.cb_ffplay;
+		jconf["ffmpeg_path"] = GUI::conf.ffmpeg_path;
 
 		if(jconf.contains("sblock"))
 		{

@@ -424,7 +424,7 @@ std::wstring GUI::pop_queue_menu(int x, int y)
 				ShellExecuteW(NULL, L"open", file.wstring().data(), NULL, NULL, SW_NORMAL);
 			});
 
-			if(item.text(3) != "error")
+			if(item.text(3) != "error" || !bottom.vidinfo.empty())
 			{
 				m.append_splitter();
 				if(bottom.is_ytplaylist || bottom.is_bcplaylist)

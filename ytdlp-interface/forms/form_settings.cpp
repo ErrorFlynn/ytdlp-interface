@@ -115,10 +115,30 @@ void GUI::fm_settings()
 	updater.create(fm);
 	make_updater_page(fm);
 
-	auto page_callback = [this] (std::string name)
+	std::function<bool(bool)> ytdlp_page_refresh;
+
+	auto page_callback = [&, this] (std::string name)
 	{
-		if(name == "updater" && !cb_chan_stable.checked() && !cb_chan_nightly.checked())
-			updater_init_page();
+		if(name == "updater")
+		{
+			if(!cb_chan_stable.checked() && !cb_chan_nightly.checked())
+				updater_init_page();
+			else updater_display_version_ffmpeg();
+			if(conf.ytdlp_path.filename().string() == "ytdl-patched-red.exe")
+			{
+				cb_chan_stable.enabled(false);
+				cb_chan_nightly.enabled(false);
+			}
+			else
+			{
+				cb_chan_stable.enabled(true);
+				cb_chan_nightly.enabled(true);
+			}
+		}
+		else if(name == "ytdlp")
+		{
+			if(ytdlp_page_refresh) ytdlp_page_refresh(false);
+		}
 	};
 
 	widgets::conf_tree tree {fm, &fm.get_place(), page_callback};
@@ -138,10 +158,10 @@ void GUI::fm_settings()
 	widgets::Label l_res {ytdlp, "Preferred resolution:"}, l_vcodec {ytdlp, "Preferred video codec:"},
 		l_acodec {ytdlp, "Preferred audio codec:"},
 		l_video {ytdlp, "Preferred video container:"}, l_audio {ytdlp, "Preferred audio container:"},
-		l_theme {gui, "Color theme:"}, l_contrast {gui, "Contrast:"}, l_ytdlp {ytdlp, "Path to yt-dlp:"},
+		l_theme {gui, "Color theme:"}, l_contrast {gui, "Contrast:"}, l_ytdlp {ytdlp, "Path to yt-dlp:"}, l_ffmpeg {ytdlp, "FFmpeg folder:"},
 		l_template {ytdlp, "Output template:"}, l_maxdl {queuing, "Max concurrent downloads:"}, l_playlist {ytdlp, "Playlist indexing:"},
 		l_opendlg_origin {gui, "When browsing for the output folder, start in:"}, l_sblock {sblock, ""};
-	widgets::path_label l_path {ytdlp, &conf.ytdlp_path};
+	widgets::path_label l_ytdlp_path {ytdlp, &conf.ytdlp_path}, l_ffmpeg_path {ytdlp, &conf.ffmpeg_path};
 	widgets::Textbox tb_template {ytdlp}, tb_playlist {ytdlp}, tb_proxy {ytdlp};
 	widgets::Combox com_res {ytdlp}, com_video {ytdlp}, com_audio {ytdlp}, com_vcodec {ytdlp}, com_acodec {ytdlp};
 	widgets::cbox cbfps {ytdlp, "Prefer a higher framerate"}, cbtheme_dark {gui, "Dark"}, cbtheme_light {gui, "Light"},
@@ -180,48 +200,64 @@ void GUI::fm_settings()
 		<weight=25 <l_playlist weight=132> <weight=10> <tb_playlist> <weight=15> <btn_playlist_default weight=140>> <weight=20>
 		<weight=25 <cb_zeropadding weight=323> <weight=20> <cb_playlist_folder>>
 		<weight=20> <sep2 weight=3px> <weight=20>
-		<weight=25 <l_ytdlp weight=132> <weight=10> <l_path> > <weight=20>
+		<weight=25 <l_ytdlp weight=132> <weight=10> <l_ytdlp_path> > <weight=20>
+		<weight=25 <l_ffmpeg weight=132> <weight=10> <l_ffmpeg_path> > <weight=20>
 		<weight=25 <proxy_padding weight=11> <cb_proxy weight=121> <weight=10> <tb_proxy>>
 	)");
 
-	fm.subclass_before(WM_SETFOCUS, [&](UINT, WPARAM, LPARAM, LRESULT *)
+	ytdlp_page_refresh = [&, this] (bool ffmpeg_only)
 	{
-		bool upd {false}, path_empty {conf.ytdlp_path.empty()}, path_gone {!fs::exists(conf.ytdlp_path)};
-		if(path_empty || path_gone)
+		if(!fs::exists(conf.ffmpeg_path / "ffmpeg.exe"))
 		{
-			if(fs::exists(appdir / "ytdl-patched-red.exe"))
+			if(conf.ffmpeg_path == appdir.parent_path())
+				l_ffmpeg_path.caption("!!!  FFMPEG.EXE NOT FOUND IN THE PROGRAM FOLDER  !!!");
+			else l_ffmpeg_path.caption("!!!  FFMPEG.EXE NOT FOUND IN THE SELECTED FOLDER  !!!");
+			ver_ffmpeg = {0, 0, 0};
+			l_ffmpeg_path.refresh_theme();
+			updater_t1.start();
+			if(ffmpeg_only) return false;
+		}
+		else 
+		{
+			l_ffmpeg_path.update_caption();
+			l_ffmpeg_path.refresh_theme();
+		}
+
+		if(!ffmpeg_only)
+		{
+			bool path_empty {conf.ytdlp_path.empty()}, path_gone {!fs::exists(conf.ytdlp_path)};
+			if(path_empty || path_gone)
 			{
-				GUI::conf.ytdlp_path = appdir / "ytdl-patched-red.exe";
-				l_path.update_caption();
-				l_path.refresh_theme();
-				get_version_ytdlp();
-				upd = true;
-			}
-			else if(fs::exists(appdir / ytdlp_fname))
-			{
-				GUI::conf.ytdlp_path = appdir / ytdlp_fname;
-				l_path.update_caption();
-				l_path.refresh_theme();
-				get_version_ytdlp();
-				upd = true;
-			}
-			else
-			{
-				if(path_empty)
-					l_path.caption("!!!  YT-DLP.EXE NOT FOUND IN PROGRAM FOLDER  !!!");
+				if(fs::exists(appdir / "ytdl-patched-red.exe"))
+				{
+					GUI::conf.ytdlp_path = appdir / "ytdl-patched-red.exe";
+					l_ytdlp_path.update_caption();
+					get_version_ytdlp();
+				}
+				else if(fs::exists(appdir / ytdlp_fname))
+				{
+					GUI::conf.ytdlp_path = appdir / ytdlp_fname;
+					l_ytdlp_path.update_caption();
+					get_version_ytdlp();
+				}
 				else
 				{
-					l_path.caption("!!!  YT-DLP.EXE NOT FOUND AT ITS SAVED LOCATION  !!!");
-					conf.ytdlp_path.clear();
+					if(path_empty)
+						l_ytdlp_path.caption("!!!  YT-DLP.EXE NOT FOUND IN PROGRAM FOLDER  !!!");
+					else
+					{
+						l_ytdlp_path.caption("!!!  YT-DLP.EXE NOT FOUND AT ITS SAVED LOCATION  !!!");
+						conf.ytdlp_path.clear();
+					}
+					ver_ytdlp = {0, 0, 0};
 				}
-				l_path.refresh_theme();
-				ver_ytdlp = {0, 0, 0};
+				updater_t2.start();
 			}
-			updater_t2.start();
+			else l_ytdlp_path.update_caption();
+			l_ytdlp_path.refresh_theme();
 		}
-		else l_path.update_caption();
 		return true;
-	});
+	};
 
 	cb_premium.check(conf.cb_premium);
 
@@ -241,7 +277,9 @@ void GUI::fm_settings()
 	ytdlp["cbfps"] << cbfps;
 	ytdlp["btn_info"] << btn_info;
 	ytdlp["l_ytdlp"] << l_ytdlp;
-	ytdlp["l_path"] << l_path;
+	ytdlp["l_ytdlp_path"] << l_ytdlp_path;
+	ytdlp["l_ffmpeg"] << l_ffmpeg;
+	ytdlp["l_ffmpeg_path"] << l_ffmpeg_path;
 	ytdlp["l_video"] << l_video;
 	ytdlp["com_video"] << com_video;
 	ytdlp["l_audio"] << l_audio;
@@ -612,7 +650,14 @@ void GUI::fm_settings()
 
 		codec_tip {"In the context of digital video and audio, a codec is a processing algorithm\nused to compress data, and the "
 		"process of compressing data with a codec\nis called \"encoding\".\n\nA website like YouTube may offer multiple formats that "
-		"use the same\ncontainer, but different codecs, so specifying a preferred codec can prevent\nunwanted formats from being downloaded."};
+		"use the same\ncontainer, but different codecs, so specifying a preferred codec can prevent\nunwanted formats from being downloaded."},
+
+		ffmpeg_tip {"Here you can tell the program where to put the FFmpeg files when\nit updates FFmpeg (via Settings->Updater). "
+			"If the folder you choose\nis not the yt-dlp folder, the program will offer to set up yt-dlp\n(via config file) "
+			"to look for the FFmpeg files in that folder."};
+
+	l_ffmpeg.tooltip(ffmpeg_tip);
+	l_ffmpeg_path.tooltip(ffmpeg_tip);
 
 	cb_proxy.tooltip(proxy_tip);
 	tb_proxy.tooltip(proxy_tip);
@@ -684,7 +729,7 @@ void GUI::fm_settings()
 	cb_zeropadding.check(conf.cb_zeropadding);
 	cb_playlist_folder.check(conf.cb_playlist_folder);
 
-	l_path.events().click([&, this]
+	l_ytdlp_path.events().click([&, this]
 	{
 		nana::filebox fb {fm, true};
 		if(!conf.ytdlp_path.empty())
@@ -701,11 +746,152 @@ void GUI::fm_settings()
 			{
 				conf.ytdlp_path = path;
 				get_versions();
-				l_path.update_caption();
-				auto tmp {fs::path {conf.ytdlp_path}.replace_filename("ffmpeg.exe")};
+				l_ytdlp_path.update_caption();
+				/*auto tmp {fs::path {conf.ytdlp_path}.replace_filename("ffmpeg.exe")};
 				if(fs::exists(tmp))
-					ffmpeg_loc = tmp;
+					conf.ffmpeg_path = tmp;*/
 			}
+		}
+	});
+
+	l_ffmpeg_path.events().click([&, this] (const nana::arg_click &arg)
+	{
+		nana::folderbox fb {fm, conf.ffmpeg_path.empty() ? (conf.ytdlp_path.empty() ? appdir : conf.ytdlp_path.parent_path()) : conf.ffmpeg_path};
+		fb.allow_multi_select(false);
+		fb.title("Locate and select the FFmpeg folder");
+		auto res {fb()};
+		if(res.size())
+		{
+			const auto orig_path {conf.ffmpeg_path};
+			conf.ffmpeg_path = res.front();
+			if(!ytdlp_page_refresh(true))
+			{
+				nana::msgbox mbox {fm, "Custom FFmpeg folder", nana::msgbox::yes_no};
+				mbox.icon(nana::msgbox::icon_question);
+				mbox << conf.ffmpeg_path.string() << "\n\nThe selected folder doesn't seem to contain ffmpeg.exe. "
+					"Are you sure you want to use this folder for the FFmpeg files?\n\nPress \"Yes\" if you intend to "
+					"add the FFmpeg files to the folder (you can use the updater to download the latest version).\n\n"
+					"Press \"No\" to choose a different folder.";
+				if(mbox() == nana::msgbox::pick_no)
+				{
+					conf.ffmpeg_path = orig_path;
+					ytdlp_page_refresh(true);
+					l_ffmpeg_path.events().click.emit(arg, arg.window_handle);
+					return;
+				}
+			}
+
+			get_version_ffmpeg();
+			if(!conf.ytdlp_path.empty())
+			{
+				auto ytdlp_dir {conf.ytdlp_path.parent_path()};
+				if(ytdlp_dir != conf.ffmpeg_path)
+				{
+					if(!fs::exists(ytdlp_dir / "yt-dlp.conf"))
+					{
+						nana::msgbox mbox {fm, "Custom FFmpeg folder", nana::msgbox::yes_no};
+						mbox.icon(nana::msgbox::icon_question);
+						std::string msg {"When updating FFmpeg, the program will put the FFmpeg files in the "
+							"folder you selected. There's just one problem though, the folder you selected is not "
+							"the same as the folder that contains yt-dlp.exe, so yt-dlp will not know how to find "
+							"the FFmpeg files.\n\n[ Yes ] To fix that, a configuration file (yt-dlp.conf) containing the "
+							"argument \"--ffmpeg-location\" can be created in the yt-dlp folder.\n\n[ No ] Or, the program "
+							"can pass \"--ffmpeg-location\" to yt-dlp through the command line.\n\n"
+							"Should the program create yt-dlp.conf for you now?"};
+						if((mbox << msg)() == nana::msgbox::pick_yes)
+						{
+							auto conf_path {ytdlp_dir / "yt-dlp.conf"};
+							std::ofstream of {conf_path};
+							if(of.good())
+							{
+								of << "--ffmpeg-location " << conf.ffmpeg_path;
+								nana::msgbox mb {fm, "Custom FFmpeg folder"};
+								mb.icon(nana::msgbox::icon_information) << conf_path.string() <<
+									"\n\nThe file has been created, and yt-dlp should now know where to find the FFmpeg files.";
+								mb.show();
+							}
+							else
+							{
+								nana::msgbox err {fm, "Custom FFmpeg folder"};
+								err.icon(nana::msgbox::icon_error);
+								err << conf_path.string() << "\n\nCould not open the file for writing! "
+									"Make sure the yt-dlp folder isn't \"Program Files\" or any other "
+									"folder that requires elevated priviliges for write access. Otherwise, "
+									"you must use \"Run as administrator\" to launch ytdlp-interface.";
+								err.show();
+							}
+						}
+					}
+					else
+					{
+						// if yt-dlp.conf doesn't contain --ffmpeg-location, warn user
+						std::ifstream infile {ytdlp_dir / "yt-dlp.conf"};
+						if(infile)
+						{
+							std::stringstream ss;
+							ss << infile.rdbuf();
+							infile.close();
+							const auto &str {ss.str()};
+							auto pos {str.find("--ffmpeg-location")};
+							if(pos == -1)
+							{
+								nana::msgbox mbox {fm, "Custom FFmpeg folder", nana::msgbox::yes_no};
+								mbox.icon(nana::msgbox::icon_question);
+								std::string msg {"The yt-dlp folder contains a configuration file (yt-dlp.conf), "
+									"but the file doesn't contain the argument \"--ffmpeg-location\". That argument "
+									"must be present to tell yt-dlp where to find the FFmpeg files. "
+									"Should the program add the argument to the config file?\n\n"
+									"If you select \"no\", the program will have to pass \"--ffmpeg-location\" "
+									"to yt-dlp through the command line."};
+								if((mbox << msg)() == nana::msgbox::pick_yes)
+								{
+									std::ofstream ofs {ytdlp_dir / "yt-dlp.conf", std::ios_base::app};
+									if(ofs.good())
+									{
+										ofs << "\n\n--ffmpeg-location " << conf.ffmpeg_path;
+										nana::msgbox mb {fm, "Custom FFmpeg folder"};
+										mb.icon(nana::msgbox::icon_information) << "The argument has been added.";
+										mb.show();
+									}
+									else
+									{
+										nana::msgbox err {fm, "Custom FFmpeg folder"};
+										err.icon(nana::msgbox::icon_error);
+										err << "Could not open file for writing! "
+											"Make sure the yt-dlp folder isn't \"Program Files\" or any other "
+											"folder that requires elevated priviliges for write access. Otherwise, "
+											"you must use \"Run as administrator\" to launch ytdlp-interface.";
+										err.show();
+									}
+								}
+							}
+							else // the config file contains --ffmpeg-location, attempt to update it
+							{
+								pos += 18;
+								if(pos < str.size() - 1 && str[pos] == '\"')
+								{
+									auto pos2 {str.find('\"', pos + 1)};
+									if(pos2 != -1)
+									{
+										auto path_from_config_file {str.substr(pos + 1, pos2 - pos - 1)};
+										if(conf.ffmpeg_path != path_from_config_file)
+										{
+											std::ofstream ofs {ytdlp_dir / "yt-dlp.conf", std::ios_base::trunc};
+											if(ofs.good())
+											{
+												ofs.write(str.data(), pos);
+												ofs << conf.ffmpeg_path;
+												if(pos2 + 1 < str.size())
+													ofs << str.substr(pos2 + 1);
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}			
 		}
 	});
 
@@ -779,6 +965,8 @@ void GUI::fm_settings()
 			thr_releases_ytdlp.detach();
 		if(thr_versions.joinable())
 			thr_versions.detach();
+		if(thr_ver_ffmpeg.joinable())
+			thr_ver_ffmpeg.detach();
 	});
 
 	fm.theme_callback([&, this](bool dark)
@@ -978,8 +1166,8 @@ void GUI::make_updater_page(themed_form &parent)
 
 	btn_update_ffmpeg.events().click([&parent, this]
 	{
-		bool use_ytdlp_folder {!ffmpeg_loc.empty() && ffmpeg_loc.parent_path() == conf.ytdlp_path.parent_path()};
-		if(ffmpeg_loc.empty())
+		bool use_ytdlp_folder {!conf.ffmpeg_path.empty() && conf.ffmpeg_path == conf.ytdlp_path.parent_path()};
+		if(conf.ffmpeg_path.empty())
 		{
 			if(util::is_dir_writable(appdir))
 			{
@@ -992,9 +1180,9 @@ void GUI::make_updater_page(themed_form &parent)
 		if(use_ytdlp_folder && !util::is_dir_writable(conf.ytdlp_path.parent_path()))
 			use_ytdlp_folder = false;
 
-		if(!use_ytdlp_folder && !ffmpeg_loc.empty())
+		if(!use_ytdlp_folder && !conf.ffmpeg_path.empty())
 		{
-			if(!util::is_dir_writable(ffmpeg_loc.parent_path()))
+			if(!util::is_dir_writable(conf.ffmpeg_path))
 			{
 				if(util::is_dir_writable(appdir))
 					updater_update_misc(false, appdir);
@@ -1008,7 +1196,7 @@ void GUI::make_updater_page(themed_form &parent)
 				return;
 			}
 		}
-		updater_update_misc(false, use_ytdlp_folder ? conf.ytdlp_path.parent_path() : ffmpeg_loc.parent_path());
+		updater_update_misc(false, use_ytdlp_folder ? conf.ytdlp_path.parent_path() : conf.ffmpeg_path);
 	});
 
 	btn_update_ytdlp.events().click([&parent, this]
@@ -1158,7 +1346,7 @@ void GUI::updater_display_version_ffmpeg()
 		{
 			std::string errclr {widgets::theme::is_dark() ? "<color=0xe09999>" : "<color=0xbb5555>"};
 			l_ffmpeg_text.caption(ver_ffmpeg_latest.string() + "  (current = " +
-				(ffmpeg_loc.empty() && !fs::exists(appdir / "ffmpeg.exe") ? errclr + "not present</>)" : ver_ffmpeg.string() + ")"));
+				(!fs::exists(conf.ffmpeg_path / "ffmpeg.exe") ? errclr + "not present</>)" : ver_ffmpeg.string() + ")"));
 			btn_update_ffmpeg.enabled(true);
 			btn_update_ffmpeg.tooltip(url_latest_ffmpeg);
 		}
@@ -1351,7 +1539,7 @@ void GUI::updater_update_misc(bool ytdlp, fs::path target)
 							if(error.empty())
 							{
 								prog_updater_misc.caption(std::string {"Copying files to "} + (target == appdir ?
-																					   "program folder..." : "yt-dlp folder..."));
+																					   "program folder..." : "FFmpeg folder..."));
 								for(auto const &dir_entry : fs::recursive_directory_iterator {tempdir})
 								{
 									if(dir_entry.is_regular_file())
@@ -1369,7 +1557,7 @@ void GUI::updater_update_misc(bool ytdlp, fs::path target)
 								}
 								if(!ec)
 								{
-									ffmpeg_loc = target / "ffmpeg.exe";
+									conf.ffmpeg_path = target;
 									ver_ffmpeg = ver_ffmpeg_latest;
 									btnffmpeg_state = false;
 									prog_updater_misc.caption("FFmpeg update complete");
@@ -1487,10 +1675,4 @@ void GUI::updater_init_page()
 	if(conf.ytdlp_nightly)
 		cb_chan_nightly.check(true);
 	else cb_chan_stable.check(true);
-
-	if(conf.ytdlp_path.filename().string() == "ytdl-patched-red.exe")
-	{
-		cb_chan_stable.enabled(false);
-		cb_chan_nightly.enabled(false);
-	}
 }
