@@ -210,6 +210,8 @@
     <ClInclude Include="gui.hpp" />
     <ClInclude Include="icons.hpp" />
     <ClInclude Include="json.hpp" />
+    <ClInclude Include="msgbox.hpp" />
+    <ClInclude Include="msgbox_icons.hpp" />
     <ClInclude Include="progress_ex.hpp" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="themed_form.hpp" />

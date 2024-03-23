@@ -20,11 +20,14 @@ public:
 	void refresh_widgets();
 	nana::size dpi_transform_size(double w, double h = 0);
 	int dpi_transform(int val, double from_dpi = 96);
-	bool center(double w = 0, double h = 0);
+	bool center(double w = 0, double h = 0, bool autoscale = true);
 	void snap(bool enable) { snap_ = enable; }
 	HWND native_handle() { return hwnd; }
 	void subclass_before(UINT msgid, std::function<bool(UINT, WPARAM, LPARAM, LRESULT*)> handler) { msg.make_before(msgid, handler); }
 	void subclass_after(UINT msgid, std::function<bool(UINT, WPARAM, LPARAM, LRESULT*)> handler) { msg.make_after(msgid, handler); }
+
+	void change_field_attr(nana::place &plc, std::string field, std::string attr, unsigned new_val);
+	void change_field_attr(std::string field, std::string attr, unsigned new_val) { change_field_attr(get_place(), field, attr, new_val); }
 
 protected:
 	HWND hwnd {nullptr};

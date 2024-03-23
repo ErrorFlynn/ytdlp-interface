@@ -9,7 +9,7 @@ void GUI::fm_settings()
 	using widgets::theme;
 
 	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize>{}};
-	fm.center(820, 608);
+	fm.center(820, 530);
 	fm.caption(title + " - settings");
 	fm.bgcolor(theme::fmbg);
 	fm.snap(conf.cbsnap);
@@ -19,15 +19,7 @@ void GUI::fm_settings()
 			<
 				<tree weight=150> <weight=20> <switchable <ytdlp> <sblock> <queuing> <gui> <updater>>
 			>
-			<weight=20> <sep weight=3px> <weight=20>
-			<weight=35 <> <weight=50> <btn_save weight=360> <weight=15> <checkpic weight=35> <>>
 	)");
-
-	widgets::Button btn_save {fm, "Write the settings file now (Ctrl+S)"};
-	fm["btn_save"] << btn_save;
-	btn_save.tooltip("The settings are written to the settings file every time you exit the program,\nbut if "
-		"a crash happens, any changes you have made (including the state\nof the queue) are lost. You can "
-		"write the settings file now, to preempt that\nscenario.");
 
 	widgets::Separator sep {fm};
 	fm["sep"] << sep;
@@ -42,75 +34,6 @@ void GUI::fm_settings()
 	fm["checkpic"] << checkpic;
 	fm.get_place().field_visible("checkpic", false);
 
-	double steps {0};
-	nana::timer t_fade, t_fade_start;
-	t_fade_start.interval(std::chrono::milliseconds {1500});
-	t_fade.interval(std::chrono::milliseconds {35});
-
-	t_fade.elapse([&]
-	{
-		nana::api::effects_bground(checkpic, nana::effects::bground_transparent(0), 1.0 - steps / 1000);
-		steps += 100;
-		if(steps == 1000)
-		{
-			steps = 0;
-			t_fade.stop();
-			fm.get_place().field_visible("checkpic", false);
-			fm.collocate();
-		}
-	});
-
-	t_fade_start.elapse([&]
-	{
-		t_fade_start.stop();
-		if(t_fade.started())
-		{
-			steps = 0;
-			t_fade.stop();
-		}
-		t_fade.start();
-	});
-
-	btn_save.events().click([&]
-	{
-		if(fn_write_conf)
-		{
-			conf.unfinished_queue_items.clear();
-			for(auto item : lbq.at(0))
-			{
-				auto text {item.text(3)};
-				if(text != "done" && text != "error")
-					conf.unfinished_queue_items.push_back(nana::to_utf8(item.value<lbqval_t>().url));
-			}
-			conf.zoomed = is_zoomed(true);
-			if(conf.zoomed || is_zoomed(false)) restore();
-			conf.winrect = nana::rectangle {pos(), size()};
-			if(fn_write_conf())
-			{
-				nana::api::effects_bground(checkpic, nana::effects::bground_transparent(0), 1);
-				fm.get_place().field_visible("checkpic", true);
-				fm.collocate();
-				t_fade_start.start();
-			}
-			else
-			{				
-				nana::msgbox mbox {fm, title};
-				mbox.icon(nana::msgbox::icon_error);
-				(mbox << "Failed to write the settings file:\n\n" << confpath.string() << "\n\n" << strerror(errno))();
-			}
-		}
-	});
-
-	fm.subclass_after(WM_KEYDOWN, [&](UINT, WPARAM wparam, LPARAM, LRESULT *)
-	{
-		if(wparam == 'S')
-		{
-			if(GetAsyncKeyState(VK_CONTROL) & 0xff00)
-				btn_save.events().click.emit({}, btn_save);
-		}
-		return false;
-	});
-
 	widgets::conf_page ytdlp {fm}, queuing {fm}, gui {fm}, sblock {fm};
 	updater.create(fm);
 	make_updater_page(fm);
@@ -122,7 +45,7 @@ void GUI::fm_settings()
 		if(name == "updater")
 		{
 			if(!cb_chan_stable.checked() && !cb_chan_nightly.checked())
-				updater_init_page();
+				updater_init_page(fm);
 			else updater_display_version_ffmpeg();
 			if(conf.ytdlp_path.filename().string() == "ytdl-patched-red.exe")
 			{
@@ -539,7 +462,6 @@ void GUI::fm_settings()
 		sb_maxdl.refresh_theme();
 		cbfps.refresh_theme();
 		cb_queue_autostart.refresh_theme();
-		btn_save.refresh_theme();
 		btn_close.refresh_theme();
 		btn_default.refresh_theme();
 		btn_playlist_default.refresh_theme();
@@ -766,13 +688,13 @@ void GUI::fm_settings()
 			conf.ffmpeg_path = res.front();
 			if(!ytdlp_page_refresh(true))
 			{
-				nana::msgbox mbox {fm, "Custom FFmpeg folder", nana::msgbox::yes_no};
+				widgets::msgbox mbox {fm, "Custom FFmpeg folder", nana::msgbox::yes_no};
 				mbox.icon(nana::msgbox::icon_question);
 				mbox << conf.ffmpeg_path.string() << "\n\nThe selected folder doesn't seem to contain ffmpeg.exe. "
 					"Are you sure you want to use this folder for the FFmpeg files?\n\nPress \"Yes\" if you intend to "
 					"add the FFmpeg files to the folder (you can use the updater to download the latest version).\n\n"
 					"Press \"No\" to choose a different folder.";
-				if(mbox() == nana::msgbox::pick_no)
+				if(mbox() == IDNO)
 				{
 					conf.ffmpeg_path = orig_path;
 					ytdlp_page_refresh(true);
@@ -789,7 +711,7 @@ void GUI::fm_settings()
 				{
 					if(!fs::exists(ytdlp_dir / "yt-dlp.conf"))
 					{
-						nana::msgbox mbox {fm, "Custom FFmpeg folder", nana::msgbox::yes_no};
+						widgets::msgbox mbox {fm, "Custom FFmpeg folder", nana::msgbox::yes_no};
 						mbox.icon(nana::msgbox::icon_question);
 						std::string msg {"When updating FFmpeg, the program will put the FFmpeg files in the "
 							"folder you selected. There's just one problem though, the folder you selected is not "
@@ -798,21 +720,21 @@ void GUI::fm_settings()
 							"argument \"--ffmpeg-location\" can be created in the yt-dlp folder.\n\n[ No ] Or, the program "
 							"can pass \"--ffmpeg-location\" to yt-dlp through the command line.\n\n"
 							"Should the program create yt-dlp.conf for you now?"};
-						if((mbox << msg)() == nana::msgbox::pick_yes)
+						if((mbox << msg)() == IDYES)
 						{
 							auto conf_path {ytdlp_dir / "yt-dlp.conf"};
 							std::ofstream of {conf_path};
 							if(of.good())
 							{
 								of << "--ffmpeg-location " << conf.ffmpeg_path;
-								nana::msgbox mb {fm, "Custom FFmpeg folder"};
+								widgets::msgbox mb {fm, "Custom FFmpeg folder"};
 								mb.icon(nana::msgbox::icon_information) << conf_path.string() <<
 									"\n\nThe file has been created, and yt-dlp should now know where to find the FFmpeg files.";
 								mb.show();
 							}
 							else
 							{
-								nana::msgbox err {fm, "Custom FFmpeg folder"};
+								widgets::msgbox err {fm, "Custom FFmpeg folder"};
 								err.icon(nana::msgbox::icon_error);
 								err << conf_path.string() << "\n\nCould not open the file for writing! "
 									"Make sure the yt-dlp folder isn't \"Program Files\" or any other "
@@ -835,7 +757,7 @@ void GUI::fm_settings()
 							auto pos {str.find("--ffmpeg-location")};
 							if(pos == -1)
 							{
-								nana::msgbox mbox {fm, "Custom FFmpeg folder", nana::msgbox::yes_no};
+								widgets::msgbox mbox {fm, "Custom FFmpeg folder", nana::msgbox::yes_no};
 								mbox.icon(nana::msgbox::icon_question);
 								std::string msg {"The yt-dlp folder contains a configuration file (yt-dlp.conf), "
 									"but the file doesn't contain the argument \"--ffmpeg-location\". That argument "
@@ -843,7 +765,7 @@ void GUI::fm_settings()
 									"Should the program add the argument to the config file?\n\n"
 									"If you select \"no\", the program will have to pass \"--ffmpeg-location\" "
 									"to yt-dlp through the command line."};
-								if((mbox << msg)() == nana::msgbox::pick_yes)
+								if((mbox << msg)() == IDYES)
 								{
 									std::ofstream ofs {ytdlp_dir / "yt-dlp.conf", std::ios_base::app};
 									if(ofs.good())
@@ -855,7 +777,7 @@ void GUI::fm_settings()
 									}
 									else
 									{
-										nana::msgbox err {fm, "Custom FFmpeg folder"};
+										widgets::msgbox err {fm, "Custom FFmpeg folder"};
 										err.icon(nana::msgbox::icon_error);
 										err << "Could not open file for writing! "
 											"Make sure the yt-dlp folder isn't \"Program Files\" or any other "
@@ -1294,7 +1216,7 @@ void GUI::make_updater_page(themed_form &parent)
 			cb_chan_nightly.enabled(false);
 			l_ytdlp_text.caption("checking...");
 			conf.ytdlp_nightly = arg.widget->handle() == cb_chan_nightly;
-			get_latest_ytdlp();
+			get_latest_ytdlp(parent);
 			updater_t2.start();
 		}
 	});
@@ -1399,7 +1321,7 @@ void GUI::updater_update_self(themed_form &parent)
 			updater_working = true;
 			if(!X64 && releases[0]["assets"].size() < 2)
 			{
-				nana::msgbox mbox {*this, "ytdlp-interface update error"};
+				nana::msgbox mbox {parent, "ytdlp-interface update error"};
 				mbox.icon(nana::msgbox::icon_error);
 				(mbox << "The latest release on GitHub doesn't seem to contain a 32-bit build!")();
 				btn_update.caption("Update");
@@ -1609,7 +1531,7 @@ void GUI::updater_update_misc(bool ytdlp, fs::path target)
 };
 
 
-void GUI::updater_init_page()
+void GUI::updater_init_page(nana::window parent_for_msgbox)
 {
 	l_ffmpeg_text.error_mode(false);
 	l_ffmpeg_text.caption("checking...");
@@ -1629,14 +1551,14 @@ void GUI::updater_init_page()
 	}
 	else if(releases.empty())
 	{
-		get_releases();
+		get_releases(parent_for_msgbox);
 		updater_t0.start();
 	}
 	else updater_display_version();
 
 	if(url_latest_ffmpeg.empty())
 	{
-		get_latest_ffmpeg();
+		get_latest_ffmpeg(parent_for_msgbox);
 		updater_t1.start();
 	}
 	else updater_display_version_ffmpeg();
@@ -1646,7 +1568,7 @@ void GUI::updater_init_page()
 		const auto fname {url_latest_ytdlp.substr(url_latest_ytdlp.rfind('/') + 1)};
 		if(fname != conf.ytdlp_path.filename().string())
 		{
-			get_latest_ytdlp();
+			get_latest_ytdlp(parent_for_msgbox);
 			updater_t2.start();
 		}
 	}
@@ -1657,7 +1579,7 @@ void GUI::updater_init_page()
 		l_ytdlp_text.error_mode(false);
 		l_ytdlp_text.caption("checking...");
 		nana::api::refresh_window(updater);
-		get_latest_ytdlp();
+		get_latest_ytdlp(parent_for_msgbox);
 		updater_t2.start();
 	}
 

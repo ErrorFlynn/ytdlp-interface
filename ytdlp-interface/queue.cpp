@@ -322,7 +322,7 @@ void GUI::make_queue_listbox()
 			if(!url.empty())
 			{
 				lbq.auto_draw(false);
-				remove_queue_item(url);
+				queue_remove_item(url);
 				lbq.auto_draw(true);
 			}
 		}
@@ -491,10 +491,15 @@ std::wstring GUI::pop_queue_menu(int x, int y)
 						{
 							auto item {lbq.item_from_value(url)};
 							if(item != lbq.at(0).end())
-								remove_queue_item(url);
+								queue_remove_item(url, false);
 						}
 						autostart_next_item = true;
+						auto sel {lbq.selected()};
+						if(sel.size() > 1)
+							for(auto n {1}; n < sel.size(); n++)
+								lbq.at(sel[n]).select(false);
 						lbq.auto_draw(true);
+						queue_save();
 					});
 				}
 				if(!startable.empty())
@@ -662,6 +667,7 @@ void GUI::queue_remove_all()
 	}
 	adjust_lbq_headers();
 	lbq.auto_draw(true);
+	queue_save();
 }
 
 
@@ -723,6 +729,7 @@ void GUI::queue_remove_selected()
 
 	adjust_lbq_headers();
 	lbq.auto_draw(true);
+	queue_save();
 }
 
 
@@ -771,5 +778,82 @@ void GUI::make_columns_menu(nana::menu *m)
 			adjust_lbq_headers();
 			lbq.auto_draw(true);
 		}).checked(conf.col_fsize);
+	}
+}
+
+
+bool GUI::queue_save()
+{
+	if(fn_write_conf && lbq.at(0).size())
+	{
+		conf.unfinished_queue_items.clear();
+		for(auto item : lbq.at(0))
+		{
+			auto text {item.text(3)};
+			if(text != "done" && (text != "error" || text == "error" && conf.cb_save_errors))
+				conf.unfinished_queue_items.push_back(nana::to_utf8(item.value<lbqval_t>().url));
+		}
+		return fn_write_conf();
+	}
+	return true;
+}
+
+
+void GUI::queue_remove_item(std::wstring url, bool save)
+{
+	auto item {lbq.item_from_value(url)};
+	auto next_url {next_startable_url()};
+	if(item != lbq.at(0).end())
+	{
+		auto &bottom {bottoms.at(url)};
+		if(lbq.at(0).size() > 1)
+			for(auto it {item}; it != lbq.at(0).end(); it++)
+			{
+				const auto stridx {std::to_string(std::stoi(it.text(0)) - 1)};
+				it.text(0, stridx);
+				if(!conf.common_dl_options)
+					bottoms.at(it.value<lbqval_t>()).gpopt.caption("Download options for queue item #" + stridx);
+			}
+
+		auto prev_idx {std::stoi(item.text(0)) - 1};
+		auto next_item {lbq.erase(item)};
+		nana::api::refresh_window(lbq);
+		taskbar_overall_progress();
+		adjust_lbq_headers();
+		if(next_item != lbq.at(0).end())
+			next_item.select(true);
+		else if(lbq.at(0).size() != 0)
+			lbq.at(0).at(prev_idx > -1 ? prev_idx : 0).select(true);
+		else
+		{
+			bottoms.show(L"");
+			qurl = L"";
+			l_url.update_caption();
+		}
+		if(bottom.timer_proc.started())
+			bottom.timer_proc.stop();
+		if(bottom.info_thread.joinable())
+		{
+			bottom.working_info = false;
+			bottom.info_thread.join();
+		}
+		if(bottom.dl_thread.joinable())
+		{
+			bottom.working = false;
+			bottom.dl_thread.join();
+			if(!next_url.empty())
+				on_btn_dl(next_url);
+		}
+		bottoms.erase(url);
+		outbox.erase(url);
+		if(bottoms.size() == 2)
+		{
+			SendMessageA(hwnd, WM_SETREDRAW, FALSE, 0);
+			if(bottoms.at(1).plc.field_display("btncopy"))
+				bottoms.at(1).show_btncopy(false);
+			SendMessageA(hwnd, WM_SETREDRAW, TRUE, 0);
+			nana::api::refresh_window(*this);
+		}
+		if(save) queue_save();
 	}
 }

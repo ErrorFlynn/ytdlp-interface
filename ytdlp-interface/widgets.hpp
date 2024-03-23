@@ -71,7 +71,7 @@ namespace widgets
 			sep_bg, tbfg, tbbg, tbkw, tbkw_id, tbkw_special, tbkw_warning, tbkw_error, gpbg, lb_headerbg, title_fg, overlay_fg, border,
 			tb_selbg, tb_selbg_unfocused, expcol_fg, tree_selbg, tree_selfg, tree_hilitebg, tree_hilitefg, tree_selhilitebg, tree_selhilitefg,
 			tree_parent_node, tree_expander, tree_expander_hovered, tree_bg, tree_key_fg, tree_val_fg, list_check_highlight_fg,
-			list_check_highlight_bg;
+			list_check_highlight_bg, msg_label_fg;
 		static std::string gpfg;
 
 		static void make_light();

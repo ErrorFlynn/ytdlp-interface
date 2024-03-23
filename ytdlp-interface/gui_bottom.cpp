@@ -300,7 +300,7 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 				{
 					auto &bot {*pbot.second};
 					if(bot.handle() != *this)
-						bot.com_args.caption(caption());
+						bot.com_args.caption(conf.argset);
 				}
 			}
 		}

@@ -12,6 +12,7 @@
 #include "widgets.hpp"
 #include "themed_form.hpp"
 #include "types.hpp"
+#include "msgbox.hpp"
 
 #undef min
 #undef max
@@ -72,11 +73,13 @@ private:
 	std::thread thr, thr_releases, thr_versions, thr_ver_ffmpeg, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp, thr_update;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.9.0"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 4)*/},
+	const std::string ver_tag {"v2.10.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 5)},
 		ytdlp_fname {X64 ? "yt-dlp.exe" : "yt-dlp_x86.exe"};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
-	nana::timer tproc;
+	nana::timer tmsg;
+	std::string tmsg_title, tmsg_text;
+	nana::window tmsg_parent;
 
 	struct { nana::menu *m {nullptr}; std::size_t pos {0}; } vidsel_item;
 
@@ -242,7 +245,7 @@ private:
 	nana::timer updater_t0, updater_t1, updater_t2;
 	bool updater_working {false};
 
-	void updater_init_page();
+	void updater_init_page(nana::window parent_for_msgbox);
 	void updater_display_version();
 	void updater_display_version_ffmpeg();
 	void updater_display_version_ytdlp();
@@ -265,28 +268,28 @@ private:
 	bool process_queue_item(std::wstring url);
 	void make_form();
 	bool apply_theme(bool dark);
-	void get_releases();
-	void get_latest_ffmpeg();
-	void get_latest_ytdlp();
+	void get_releases(nana::window parent_for_msgbox);
+	void get_latest_ffmpeg(nana::window parent_for_msgbox);
+	void get_latest_ytdlp(nana::window parent_for_msgbox);
 	void get_versions();
 	void get_version_ytdlp();
 	void get_version_ffmpeg(bool auto_detach = true);
 	bool is_ytlink(std::wstring url);
 	bool is_ytchan(std::wstring url);
 	void make_updater_page(themed_form &parent);
-	void change_field_attr(nana::place &plc, std::string field, std::string attr, unsigned new_val);
 	bool is_tag_a_new_version(std::string tag_name) { return semver_t {tag_name} > semver_t {ver_tag}; }
 	void show_queue(bool freeze_redraw = true);
 	void show_output();
 	void add_url(std::wstring url, bool refresh = false);
 	void taskbar_overall_progress();
 	void on_btn_dl(std::wstring url);
-	void remove_queue_item(std::wstring url);
+	void queue_remove_item(std::wstring url, bool save = true);
 	std::wstring next_startable_url(std::wstring current_url = L"current");
 	bool lbq_has_scrollbar();
 	void adjust_lbq_headers();
 	void write_settings() { events().unload.emit({}, *this); }
 	bool ffmpeg_location_in_conf_file();
+	bool queue_save();
 
 	std::unordered_map<std::string, std::pair<std::string, std::string>> sblock_infos
 	{

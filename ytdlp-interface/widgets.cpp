@@ -13,7 +13,7 @@ nana::color theme::nimbus, theme::fmbg, theme::Label_fg, theme::Text_fg, theme::
 	theme::border, theme::tb_selbg, theme::tb_selbg_unfocused, theme::expcol_fg, theme::tree_selbg, theme::tree_selfg, theme::tree_hilitebg, 
 	theme::tree_hilitefg, theme::tree_selhilitebg, theme::tree_selhilitefg, theme::tree_parent_node, theme::tree_expander, 
 	theme::tree_expander_hovered, theme::tree_bg, theme::tree_key_fg, theme::tree_val_fg, theme::list_check_highlight_fg, 
-	theme::list_check_highlight_bg;
+	theme::list_check_highlight_bg, theme::msg_label_fg;
 
 void theme::make_light()
 {
@@ -58,6 +58,7 @@ void theme::make_light()
 	tree_val_fg = color {"#474"};
 	list_check_highlight_fg = color {"#036"};
 	list_check_highlight_bg = color {"#D5D8e0"};
+	msg_label_fg = color {"#457"};
 }
 
 
@@ -104,6 +105,7 @@ void theme::make_dark()
 	tree_val_fg = color {"#d8e8ff"};
 	list_check_highlight_fg = colors::white;
 	list_check_highlight_bg = color {"#6D4941"};
+	msg_label_fg = Label_fg;
 }
 
 

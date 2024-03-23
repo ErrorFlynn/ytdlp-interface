@@ -141,7 +141,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 						if(fwnd != bottom.com_args && fwnd != bottom.tbrate)
 						{
 							outbox.clear(bottom.url);
-							remove_queue_item(bottom.url);
+							queue_remove_item(bottom.url);
 						}
 					}
 					else
@@ -174,7 +174,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 			if(!url.empty())
 			{
 				lbq.auto_draw(false);
-				remove_queue_item(url);
+				queue_remove_item(url);
 				lbq.auto_draw(true);
 			}
 		}
@@ -243,6 +243,23 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 
 	::widgets::theme::contrast(conf.contrast);
 
+	tmsg.interval(std::chrono::milliseconds {300});
+	tmsg.elapse([this]
+	{
+		if(!tmsg_text.empty())
+		{
+			if(api::is_window(tmsg_parent))
+			{
+				::widgets::msgbox mbox {tmsg_parent, tmsg_title};
+				mbox.icon(MB_ICONERROR) << tmsg_text;
+				tmsg_text.clear();
+				tmsg_title.clear();
+				mbox();
+			}
+		}
+	});
+	tmsg.start();
+
 	if(conf.cbtheme == 2)
 	{
 		if(system_supports_darkmode())
@@ -252,8 +269,9 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 	else if(conf.cbtheme == 0) dark_theme(true);
 	if(conf.cbtheme == 1) dark_theme(false);
 
+	tmsg.interval(std::chrono::milliseconds {0});
 	if(conf.get_releases_at_startup)
-		get_releases();
+		get_releases(*this);
 	caption(title);
 	snap(conf.cbsnap);
 	make_form();
@@ -1168,7 +1186,8 @@ void GUI::add_url(std::wstring url, bool refresh)
 							lbq.item_from_value(url).text(6, "---");
 							lbq.item_from_value(url).text(7, "---");
 							bottom.vidinfo.clear();
-							active_threads--;
+							if(--active_threads == 0)
+								queue_save();
 							if(bottom.working_info)
 								bottom.info_thread.detach();
 							return;
@@ -1276,7 +1295,8 @@ void GUI::add_url(std::wstring url, bool refresh)
 							vidsel_item.m = nullptr;
 						}
 
-						active_threads--;
+						if(--active_threads == 0)
+							queue_save();
 						if(bottom.working_info)
 							bottom.info_thread.detach();
 						return;
@@ -1285,7 +1305,7 @@ void GUI::add_url(std::wstring url, bool refresh)
 			}
 			else // not YouTube
 			{
-				std::wstring cmd {L" --no-warnings -j " + (conf.output_template.empty() ? L"" : L"-o \"" + conf.output_template + L'\"') + 
+				std::wstring cmd {L" --no-warnings --compat-options manifest-filesize-approx -j " + (conf.output_template.empty() ? L"" : L"-o \"" + conf.output_template + L'\"') + 
 					fmt_sort + L'\"' + url + L'\"'};
 				if(conf.cb_proxy && !conf.proxy.empty())
 					cmd = L" --proxy " + conf.proxy + cmd;
@@ -1477,7 +1497,8 @@ void GUI::add_url(std::wstring url, bool refresh)
 				api::refresh_window(m.handle());
 				vidsel_item.m = nullptr;
 			}
-			active_threads--;
+			if(--active_threads == 0)
+				queue_save();
 			if(bottom.working_info && bottom.info_thread.joinable())
 				bottom.info_thread.detach();
 		});
@@ -1605,7 +1626,7 @@ void GUI::make_form()
 		if(!url.empty())
 		{
 			lbq.auto_draw(false);
-			remove_queue_item(url);
+			queue_remove_item(url);
 			lbq.auto_draw(true);
 		}
 	});
@@ -1658,7 +1679,7 @@ void GUI::show_queue(bool freeze_redraw)
 	if(freeze_redraw)
 		SendMessageA(hwnd, WM_SETREDRAW, FALSE, 0);
 	const auto px {nana::API::screen_dpi(true) >= 144};
-	change_field_attr(get_place(), "Bottom", "weight", 298 - 240 * bottoms.current().expcol.collapsed() - px);
+	change_field_attr("Bottom", "weight", 298 - 240 * bottoms.current().expcol.collapsed() - px);
 	for(auto &bot : bottoms)
 	{
 		auto &plc {bot.second->plc};
@@ -1680,7 +1701,7 @@ void GUI::show_queue(bool freeze_redraw)
 void GUI::show_output()
 {
 	SendMessageA(hwnd, WM_SETREDRAW, FALSE, 0);
-	change_field_attr(get_place(), "Bottom", "weight", 325 - 240 * bottoms.current().expcol.collapsed());
+	change_field_attr("Bottom", "weight", 325 - 240 * bottoms.current().expcol.collapsed());
 	for(auto &bot : bottoms)
 		bot.second->btnq.caption("Show queue");
 	auto &curbot {bottoms.current()};
@@ -1695,9 +1716,9 @@ void GUI::show_output()
 }
 
 
-void GUI::get_releases()
+void GUI::get_releases(nana::window parent_for_msgbox)
 {
-	thr_releases = std::thread {[this]
+	thr_releases = std::thread {[parent_for_msgbox, this]
 	{
 		using json = nlohmann::json;
 		auto jtext {util::get_inet_res("https://api.github.com/repos/ErrorFlynn/ytdlp-interface/releases", &inet_error)};
@@ -1707,64 +1728,61 @@ void GUI::get_releases()
 			catch(nlohmann::detail::exception e)
 			{
 				releases.clear();
-				nana::msgbox mbox {*this, "ytdlp-interface JSON error"};
-				mbox.icon(nana::msgbox::icon_error);
+				tmsg_parent = parent_for_msgbox;
+				tmsg_title = "ytdlp-interface JSON error";
 				std::string str;
 				if(jtext.size() > 600)
-				{
-					jtext.erase(600);
 					str = " (showing the first 600 characters)";
-				}
-				(mbox << "Got an unexpected response when checking GitHub for a new version" + str + ":\n\n" << jtext
-					<< "\n\nError from the JSON parser:\n\n" << e.what())();
+				tmsg_text = "Got an unexpected response when checking GitHub for a new version" + str + ":\n\n" + jtext.substr(0, 600) +
+					"\n\nError from the JSON parser:\n\n" + e.what();				
 				thr_releases.detach();
 				return;
 			}
 			if(releases.is_array())
 			{
 				if(releases[0].contains("tag_name"))
-				{
+				{					
 					std::string tag_name {releases[0]["tag_name"]};
 					if(tag_name.size() < 4)
 					{
-						nana::msgbox mbox {*this, "ytdlp-interface error"};
-						mbox.icon(nana::msgbox::icon_error);
-						(mbox << "Got an unexpected response when checking GitHub for a new version. "
-							<< "The response is valid JSON and is properly formatted, but the value of the key \"tag_name\" "
-							<< "for the latest release is less that 4 characters in length: \"" << tag_name << "\"")();
 						releases.clear();
+						tmsg_parent = parent_for_msgbox;
+						tmsg_title = "ytdlp-interface error";
+						tmsg_text = std::string {"Got an unexpected response when checking GitHub for a new version. "} +
+							"The response is valid JSON and is properly formatted, but the value of the key \"tag_name\" " +
+							"for the latest release is less that 4 characters in length: \"" + tag_name + "\"";						
 					}
 					else if(is_tag_a_new_version(tag_name) && conf.get_releases_at_startup)
 						caption(title + "   (" + tag_name + " is available)");
 				}
 				else
 				{
-					nana::msgbox mbox {*this, "ytdlp-interface error"};
-					mbox.icon(nana::msgbox::icon_error);
+					tmsg_parent = parent_for_msgbox;
+					tmsg_title = "ytdlp-interface error";
 					std::string str;
 					if(jtext.size() > 600)
 					{
 						jtext.erase(600);
 						str = " (showing the first 600 characters)";
 					}
-					(mbox << "Got an unexpected response when checking GitHub for a new version" + str + ":\n\n" << jtext
-						<< "\n\nThe response is valid JSON and is formatted as an array (as expected), but the first element "
-						<< "does not contain the key \"tag_name\".")();
+					tmsg_text = "Got an unexpected response when checking GitHub for a new version" + str + ":\n\n" + jtext +
+						"\n\nThe response is valid JSON and is formatted as an array (as expected), but the first element " +
+						"does not contain the key \"tag_name\".";
 					releases.clear();
 				}
 			}
 			else
 			{
-				nana::msgbox mbox {*this, "ytdlp-interface error"};
-				mbox.icon(nana::msgbox::icon_error);
+				tmsg_parent = parent_for_msgbox;
+				tmsg_title = "ytdlp-interface error";
 				std::string str;
 				if(jtext.size() > 600)
 				{
 					jtext.erase(600);
 					str = " (showing the first 600 characters)";
 				}
-				(mbox << "Got an unexpected response when checking GitHub for a new version" + str +":\n\n" << jtext
-					<< "\n\nThe response is valid JSON, but is not formatted as an array.")();
+				tmsg_text = "Got an unexpected response when checking GitHub for a new version" + str + ":\n\n" + jtext +
+					"\n\nThe response is valid JSON, but is not formatted as an array.";
 				releases.clear();
 			}
 		}
@@ -1773,11 +1791,11 @@ void GUI::get_releases()
 }
 
 
-void GUI::get_latest_ffmpeg()
+void GUI::get_latest_ffmpeg(nana::window parent_for_msgbox)
 {
 	using json = nlohmann::json;
 
-	thr_releases_ffmpeg = std::thread {[this]
+	thr_releases_ffmpeg = std::thread {[=]
 	{
 		auto jtext {util::get_inet_res("https://api.github.com/repos/yt-dlp/FFmpeg-Builds/releases", &inet_error)};
 		if(!jtext.empty())
@@ -1786,12 +1804,16 @@ void GUI::get_latest_ffmpeg()
 			try { json_ffmpeg = json::parse(jtext); }
 			catch(nlohmann::detail::exception e)
 			{
-				nana::msgbox mbox {*this, "ytdlp-interface JSON error"};
-				mbox.icon(nana::msgbox::icon_error);
-				if(jtext.size() > 700)
-					jtext.erase(700);
-				(mbox << "Got an unexpected response when checking GitHub for a new FFmpeg version:\n\n" << jtext
-					<< "\n\nError from the JSON parser:\n\n" << e.what())();
+				tmsg_parent = parent_for_msgbox;
+				tmsg_title = "ytdlp-interface error";
+				std::string str;
+				if(jtext.size() > 600)
+				{
+					jtext.erase(600);
+					str = " (showing the first 600 characters)";
+				}
+				tmsg_text = "Got an unexpected response when checking GitHub for a new FFmpeg version" + str + ":\n\n" + jtext +
+					"\n\nError from the JSON parser:\n\n" + e.what();
 				if(thr_releases_ffmpeg.joinable())
 					thr_releases_ffmpeg.detach();
 				return;
@@ -1820,11 +1842,11 @@ void GUI::get_latest_ffmpeg()
 }
 
 
-void GUI::get_latest_ytdlp()
+void GUI::get_latest_ytdlp(nana::window parent_for_msgbox)
 {
 	using json = nlohmann::json;
 
-	thr_releases_ytdlp = std::thread {[this]
+	thr_releases_ytdlp = std::thread {[=]
 	{
 		std::string jtext;
 		auto fname {conf.ytdlp_path.filename().string()};
@@ -1843,12 +1865,16 @@ void GUI::get_latest_ytdlp()
 			try { json_ytdlp = json::parse(jtext); }
 			catch(nlohmann::detail::exception e)
 			{
-				nana::msgbox mbox {*this, "ytdlp-interface JSON error"};
-				mbox.icon(nana::msgbox::icon_error);
-				if(jtext.size() > 700)
-					jtext.erase(700);
-				(mbox << "Got an unexpected response when checking GitHub for a new yt-dlp version:\n\n" << jtext
-					<< "\n\nError from the JSON parser:\n\n" << e.what())();
+				tmsg_parent = parent_for_msgbox;
+				tmsg_title = "ytdlp-interface error";
+				std::string str;
+				if(jtext.size() > 600)
+				{
+					jtext.erase(600);
+					str = " (showing the first 600 characters)";
+				}
+				tmsg_text = "Got an unexpected response when checking GitHub for a new yt-dlp version" + str + ":\n\n" + jtext +
+					"\n\nError from the JSON parser:\n\n" + e.what();
 				if(thr_releases_ytdlp.joinable())
 					thr_releases_ytdlp.detach();
 				return;
@@ -1968,26 +1994,6 @@ bool GUI::is_ytchan(std::wstring url)
 }
 
 
-void GUI::change_field_attr(nana::place &plc, std::string field, std::string attr, unsigned new_val)
-{
-	std::string divtext {plc.div()};
-	auto pos {divtext.find(field)};
-	if(pos != -1)
-	{
-		pos = divtext.find(attr + '=', pos);
-		if(pos != -1)
-		{
-			pos += attr.size()+1;
-			auto cut_pos {pos};
-			while(isdigit(divtext[pos]))
-				pos++;
-			plc.div(divtext.substr(0, cut_pos) + std::to_string(new_val) + divtext.substr(pos));
-			plc.collocate();
-		}
-	}
-}
-
-
 void GUI::taskbar_overall_progress()
 {
 	if(i_taskbar && lbq.at(0).size() > 1)
@@ -2032,65 +2038,6 @@ void GUI::on_btn_dl(std::wstring url)
 				process_queue_item(next_url);
 				items_currently_downloading++;
 			}
-		}
-	}
-}
-
-
-void GUI::remove_queue_item(std::wstring url)
-{
-	auto item {lbq.item_from_value(url)};
-	auto next_url {next_startable_url()};
-	if(item != lbq.at(0).end())
-	{
-		auto &bottom {bottoms.at(url)};
-		if(lbq.at(0).size() > 1)
-			for(auto it {item}; it != lbq.at(0).end(); it++)
-			{
-				const auto stridx {std::to_string(std::stoi(it.text(0)) - 1)};
-				it.text(0, stridx);
-				if(!conf.common_dl_options)
-					bottoms.at(it.value<lbqval_t>()).gpopt.caption("Download options for queue item #" + stridx);
-			}
-
-		auto prev_idx {std::stoi(item.text(0)) - 1};
-		auto next_item {lbq.erase(item)};
-		nana::api::refresh_window(lbq);
-		taskbar_overall_progress();
-		adjust_lbq_headers();
-		if(next_item != lbq.at(0).end())
-			next_item.select(true);
-		else if(lbq.at(0).size() != 0)
-			lbq.at(0).at(prev_idx > -1 ? prev_idx : 0).select(true);
-		else
-		{
-			bottoms.show(L"");
-			qurl = L"";
-			l_url.update_caption();
-		}
-		if(bottom.timer_proc.started())
-			bottom.timer_proc.stop();
-		if(bottom.info_thread.joinable())
-		{
-			bottom.working_info = false;
-			bottom.info_thread.join();
-		}
-		if(bottom.dl_thread.joinable())
-		{
-			bottom.working = false;
-			bottom.dl_thread.join();
-			if(!next_url.empty())
-				on_btn_dl(next_url);
-		}
-		bottoms.erase(url);
-		outbox.erase(url);
-		if(bottoms.size() == 2)
-		{
-			SendMessageA(hwnd, WM_SETREDRAW, FALSE, 0);
-			if(bottoms.at(1).plc.field_display("btncopy"))
-				bottoms.at(1).show_btncopy(false);
-			SendMessageA(hwnd, WM_SETREDRAW, TRUE, 0);
-			nana::api::refresh_window(*this);
 		}
 	}
 }

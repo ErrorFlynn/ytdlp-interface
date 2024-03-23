@@ -208,7 +208,7 @@ int themed_form::dpi_transform(int val, double from_dpi)
 }
 
 
-bool themed_form::center(double w, double h)
+bool themed_form::center(double w, double h, bool autoscale)
 {
 	using namespace nana;
 
@@ -221,8 +221,11 @@ bool themed_form::center(double w, double h)
 	int mon_x {moninfo.rcWork.left}, mon_y {moninfo.rcWork.top};
 
 	nana::rectangle r;
-	w = dpi_transform(w);
-	h = dpi_transform(h);
+	if(autoscale)
+	{
+		w = dpi_transform(w);
+		h = dpi_transform(h);
+	}
 	r.x = mon_x + (w > maxw ? maxw : (maxw - w) / 2);
 	r.y = mon_y + (h > maxh ? maxh : (maxh - h) / 2);
 	r.width = min(w, maxw);
@@ -257,4 +260,24 @@ bool themed_form::center(double w, double h)
 		MoveWindow(hwnd, x, y, w > maxw ? maxw : w, h > maxh ? maxh : h, TRUE);
 	}
 	return frame_h > maxh;
+}
+
+
+void themed_form::change_field_attr(nana::place &plc, std::string field, std::string attr, unsigned new_val)
+{
+	std::string divtext {plc.div()};
+	auto pos {divtext.find(field)};
+	if(pos != -1)
+	{
+		pos = divtext.find(attr + '=', pos);
+		if(pos != -1)
+		{
+			pos += attr.size() + 1;
+			auto cut_pos {pos};
+			while(isdigit(divtext[pos]))
+				pos++;
+			plc.div(divtext.substr(0, cut_pos) + std::to_string(new_val) + divtext.substr(pos));
+			plc.collocate();
+		}
+	}
 }

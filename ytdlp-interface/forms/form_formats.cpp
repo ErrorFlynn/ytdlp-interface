@@ -76,6 +76,7 @@ void GUI::fm_formats()
 	list.append_header("fps", dpi_transform(32));
 	list.append_header("vbr", dpi_transform(40));
 	list.append_header("abr", dpi_transform(40));
+	list.append_header("tbr", dpi_transform(40));
 	list.append_header("asr", dpi_transform(50));
 	list.append_header("filesize", dpi_transform(cnlang ? 170 : 160));
 
@@ -299,6 +300,8 @@ void GUI::fm_formats()
 				auto &fmt {*it};
 				if(fmt.contains("filesize") && fmt["filesize"] != nullptr)
 					fsize = util::int_to_filesize(fmt["filesize"].get<std::uint64_t>(), false);
+				else if(fmt.contains("filesize_approx") && fmt["filesize_approx"] != nullptr)
+					fsize = util::int_to_filesize(fmt["filesize_approx"].get<std::uint64_t>(), false);
 				if(list.at(sel.front().cat).text() == "Audio only")
 					fmt_note = get_string(fmt, "format_note");
 				else fmt_note = get_string(fmt, "resolution");
@@ -327,20 +330,27 @@ void GUI::fm_formats()
 			if(it1 != vidinfo["formats"].end() && it2 != vidinfo["formats"].end())
 			{
 				std::string fsize, fsize1 {"---"}, fsize2 {"---"}, fmt_note, ext;
+				std::uint64_t size1 {0}, size2 {0};
 				if(it1->contains("filesize") && (*it1)["filesize"] != nullptr)
-					fsize1 = util::int_to_filesize((*it1)["filesize"].get<std::uint64_t>(), false);
+					size1 = (*it1)["filesize"].get<std::uint64_t>();
+				else if(it1->contains("filesize_approx") && (*it1)["filesize_approx"] != nullptr)
+					size1 = (*it1)["filesize_approx"].get<std::uint64_t>();
 				fmt_note = get_string(*it1, "resolution");
 				ext = get_string(*it1, "ext");
-				auto size1 {fsize1 == "---" ? 0 : (*it1)["filesize"].get<std::uint64_t>()};
-				item.text(4, strfmt);
-				item.text(5, fmt_note);
-				item.text(6, ext);
+				if(size1) fsize1 = util::int_to_filesize(size1, false);
+
 				if(it2->contains("filesize") && (*it2)["filesize"] != nullptr)
-					fsize2 = util::int_to_filesize((*it2)["filesize"].get<std::uint64_t>(), false);
-				auto size2 {fsize2 == "---" ? 0 : (*it2)["filesize"].get<std::uint64_t>()};
+					size2 = (*it2)["filesize"].get<std::uint64_t>();
+				else if(it2->contains("filesize_approx") && (*it2)["filesize_approx"] != nullptr)
+					size2 = (*it2)["filesize_approx"].get<std::uint64_t>();
+				if(size2) fsize2 = util::int_to_filesize(size2, false);
 				if(size1 && size2)
 					fsize = '~' + util::int_to_filesize(size1 + size2, false);
 				else fsize = "---";
+
+				item.text(4, strfmt);
+				item.text(5, fmt_note);
+				item.text(6, ext);
 				item.text(7, fsize);
 			}
 		}
@@ -501,14 +511,15 @@ void GUI::fm_formats()
 		else format_id1 = format_id;
 	}
 
-	std::vector<bool> colmask(9, false);
+	std::vector<bool> colmask(10, false);
 	for(auto &fmt : vidinfo["formats"])
 	{
-		std::string format {fmt["format"]}, acodec, vcodec, ext, fps, vbr, abr, asr, filesize {"---"};
+		std::string format {fmt["format"]}, acodec, vcodec, ext, fps, vbr, abr, tbr, asr, filesize {"---"};
 		if(format.find("storyboard") == -1)
 		{
 			abr = get_int(fmt, "abr");
 			vbr = get_int(fmt, "vbr");
+			tbr = get_int(fmt, "tbr");
 			asr = get_int(fmt, "asr");
 			fps = get_int(fmt, "fps");
 			ext = get_string(fmt, "ext");
@@ -516,12 +527,14 @@ void GUI::fm_formats()
 			vcodec = get_string(fmt, "vcodec");
 			if(fmt.contains("filesize") && fmt["filesize"] != nullptr)
 				filesize = util::int_to_filesize(fmt["filesize"].get<std::uint64_t>());
+			else if(fmt.contains("filesize_approx") && fmt["filesize_approx"] != nullptr)
+				filesize = "~" + util::int_to_filesize(fmt["filesize_approx"].get<std::uint64_t>());
 			unsigned catidx {0};
 			if(acodec == "none")
 				catidx = 2; // video only
 			else if(vcodec == "none")
 				catidx = 1; // audio only
-			list.at(catidx).append({format, acodec, vcodec, ext, fps, vbr, abr, asr, filesize});
+			list.at(catidx).append({format, acodec, vcodec, ext, fps, vbr, abr, tbr, asr, filesize});
 			auto idstr {to_wstring(fmt["format_id"].get<std::string>())};
 			auto item {list.at(catidx).back()};
 			item.value(idstr);
@@ -531,7 +544,7 @@ void GUI::fm_formats()
 				item.text(0, format + " *");
 			if(!format_id2.empty() && format_id2 == to_utf8(idstr))
 				item.text(0, format + " *");
-			for(int n {1}; n < 9; n++)
+			for(int n {1}; n < 10; n++)
 			{
 				const auto text {item.text(n)};
 				if(!colmask[n] && text != "---" && text != "none")
