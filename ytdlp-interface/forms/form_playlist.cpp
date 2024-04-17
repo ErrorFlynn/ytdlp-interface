@@ -79,10 +79,10 @@ void GUI::fm_playlist()
 	lbv.enable_single(true, false);
 	lbv.typeface(paint::font_info {"Calibri", 12});
 	lbv.scheme().item_height_ex = 8;
-	lbv.append_header("", dpi_transform(25));
-	lbv.append_header("#", dpi_transform(45));
-	lbv.append_header(bottom.is_bcplaylist ? "Song title" : "Video title", dpi_transform(theme::is_dark() ? 743 : 739));
-	lbv.append_header("Duration", dpi_transform(75));
+	lbv.append_header("", dpi_scale(25));
+	lbv.append_header("#", dpi_scale(45));
+	lbv.append_header(bottom.is_bcplaylist ? "Song title" : "Video title", dpi_scale(theme::is_dark() ? 743 : 739));
+	lbv.append_header("Duration", dpi_scale(75));
 	lbv.column_movable(false);
 	lbv.column_resizable(false);
 
@@ -316,7 +316,7 @@ void GUI::fm_playlist()
 	const auto item_height {text_height + lbv.scheme().item_height_ex};
 	fm.center(950, std::max(212.0 - !range_row_visible * 45 + lbv.item_count() * item_height, 0.0));
 	if(lbv.at(0).size() * item_height < lbv.size().height - 26)
-		lbv.column_at(2).width(lbv.column_at(2).width() + dpi_transform(16));
+		lbv.column_at(2).width(lbv.column_at(2).width() + dpi_scale(16));
 
 	fm.modality();
 }

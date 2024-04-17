@@ -405,7 +405,7 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 						gui.conf.gpopt_hidden = true;
 						SendMessageA(gui.hwnd, WM_SETREDRAW, FALSE, 0);
 					}
-					auto dh {gui.dpi_transform(240)};
+					auto dh {gui.dpi_scale(240)};
 					wdsz.height -= dh;
 					gui.minh -= dh;
 					api::window_size(gui, wdsz);
@@ -429,7 +429,7 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 						gui.conf.gpopt_hidden = false;
 						SendMessageA(gui.hwnd, WM_SETREDRAW, FALSE, 0);
 					}
-					auto dh {gui.dpi_transform(240)};
+					auto dh {gui.dpi_scale(240)};
 					wdsz.height += dh;
 					gui.minh += dh;
 					api::window_size(gui, wdsz);
@@ -550,7 +550,7 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 			{
 				if(path != outpath)
 				{
-					m.append(to_utf8(clip_text(path, gui.dpi_transform(250))), [&, this](menu::item_proxy &)
+					m.append(to_utf8(clip_text(path, gui.dpi_scale(250))), [&, this](menu::item_proxy &)
 					{
 						outpath = conf.outpath = path;
 						l_outpath.update_caption();
@@ -560,8 +560,8 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 					});
 				}
 			}
-			m.max_pixels(gui.dpi_transform(280));
-			m.item_pixels(gui.dpi_transform(24));
+			m.max_pixels(gui.dpi_scale(280));
+			m.item_pixels(gui.dpi_scale(24));
 			auto curpos {api::cursor_position()};
 			m.popup_await(nullptr, curpos.x - 142, curpos.y);
 			gui.queue_panel.focus();

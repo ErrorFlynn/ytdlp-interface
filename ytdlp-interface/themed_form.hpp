@@ -18,8 +18,8 @@ public:
 	bool is_system_theme_dark() { return _ShouldAppsUseDarkMode(); }
 	void theme_callback(theme_cb cb) { callback = cb; }
 	void refresh_widgets();
-	nana::size dpi_transform_size(double w, double h = 0);
-	int dpi_transform(int val, double from_dpi = 96);
+	nana::size dpi_scale_size(double w, double h = 0);
+	int dpi_scale(int val, double from_dpi = 96);
 	bool center(double w = 0, double h = 0, bool autoscale = true);
 	void snap(bool enable) { snap_ = enable; }
 	HWND native_handle() { return hwnd; }
@@ -191,5 +191,5 @@ private:
 
 	void InitDarkMode();
 
-	BOOL IsSnapClose(int a, int b) { return (abs(a - b) < dpi_transform(snap_margin)); }
+	BOOL IsSnapClose(int a, int b) { return (abs(a - b) < dpi_scale(snap_margin)); }
 };

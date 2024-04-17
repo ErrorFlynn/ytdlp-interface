@@ -68,7 +68,7 @@ themed_form::themed_form(theme_cb theme_change_callback, nana::window owner, nan
 
 			int offset {0};
 			if(width > correct_width)
-				offset = dpi_transform((width - correct_width) / 2) + 1;
+				offset = dpi_scale((width - correct_width) / 2) + 1;
 
 			GetCursorPos(&snap_cur_pos);
 			OffsetRect(pr_current, snap_cur_pos.x - (pr_current->left + snap_x), snap_cur_pos.y - (pr_current->top + snap_y));
@@ -185,7 +185,7 @@ void themed_form::refresh_widgets()
 }
 
 
-nana::size themed_form::dpi_transform_size(double w, double h)
+nana::size themed_form::dpi_scale_size(double w, double h)
 {
 	double dpi_horz {static_cast<double>(nana::API::screen_dpi(true))},
 		dpi_vert {static_cast<double>(nana::API::screen_dpi(false))};
@@ -199,7 +199,7 @@ nana::size themed_form::dpi_transform_size(double w, double h)
 }
 
 
-int themed_form::dpi_transform(int val, double from_dpi)
+int themed_form::dpi_scale(int val, double from_dpi)
 {
 	double dpi {static_cast<double>(nana::API::screen_dpi(true))};
 	if(dpi != from_dpi)
@@ -223,8 +223,8 @@ bool themed_form::center(double w, double h, bool autoscale)
 	nana::rectangle r;
 	if(autoscale)
 	{
-		w = dpi_transform(w);
-		h = dpi_transform(h);
+		w = dpi_scale(w);
+		h = dpi_scale(h);
 	}
 	r.x = mon_x + (w > maxw ? maxw : (maxw - w) / 2);
 	r.y = mon_y + (h > maxh ? maxh : (maxh - h) / 2);

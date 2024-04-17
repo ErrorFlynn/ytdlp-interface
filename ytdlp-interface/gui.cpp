@@ -50,7 +50,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 					{
 						bottom.received_procmsg = true;
 						bottom.timer_proc.interval(conf.max_proc_dur);
-						bottom.timer_proc.elapse([&, url, this]
+						bottom.timer_proc.elapse([&, url]
 						{
 							if(bottoms.contains(url))
 							{
@@ -215,6 +215,31 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 		return false;
 	});
 
+	msg.make_before(WM_SETFOCUS, [&](UINT, WPARAM, LPARAM lparam, LRESULT*)
+	{
+		if(conf.cb_add_on_focus)
+		{
+			auto text {util::get_clipboard_text()};
+			if((text.starts_with(L"http://") || text.starts_with(L"https://")) && text.find('\n') == -1)
+			{
+				if(text.starts_with(LR"(https://www.youtube.com/watch?v=)"))
+					if(text.find(L"&list=") == 43)
+						text.erase(43);
+				auto item {lbq.item_from_value(text)};
+				if(item == lbq.at(0).end())
+				{
+					l_url.update_caption();
+					add_url(text);
+				}
+
+				if(::widgets::theme::is_dark())
+					l_url.fgcolor(::widgets::theme::path_link_fg);
+				else l_url.fgcolor(::widgets::theme::path_link_fg);
+			}
+		}
+		return false;
+	});
+
 	auto langid {GetUserDefaultUILanguage()};
 	if(langid == 2052 || langid == 3076 || langid == 5124 || langid == 4100 || langid == 1028)
 		cnlang = true;
@@ -260,6 +285,45 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 	});
 	tmsg.start();
 
+	tqueue.interval(std::chrono::milliseconds {500});
+	tqueue.elapse([this]
+	{
+		if(conf.cb_clear_done)
+		{
+			std::vector<std::wstring> completed;
+
+			for(auto &item : lbq.at(0))
+			{
+				const auto text {item.text(3)};
+				if(text == "done")
+					completed.push_back(item.value<lbqval_t>().url);
+			}
+
+			if(!completed.empty())
+			{
+				lbq.auto_draw(false);
+				autostart_next_item = false;
+				for(auto &url : completed)
+				{
+					if(!bottoms.at(url).dl_thread.joinable())
+					{
+						auto item {lbq.item_from_value(url)};
+						if(item != lbq.at(0).end())
+							queue_remove_item(url, false);
+					}
+				}
+				autostart_next_item = true;
+				auto sel {lbq.selected()};
+				if(sel.size() > 1)
+					for(auto n {1}; n < sel.size(); n++)
+						lbq.at(sel[n]).select(false);
+				lbq.auto_draw(true);
+				queue_save();
+			}
+		}
+	});
+	tqueue.start();
+
 	if(conf.cbtheme == 2)
 	{
 		if(system_supports_darkmode())
@@ -269,7 +333,6 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 	else if(conf.cbtheme == 0) dark_theme(true);
 	if(conf.cbtheme == 1) dark_theme(false);
 
-	tmsg.interval(std::chrono::milliseconds {0});
 	if(conf.get_releases_at_startup)
 		get_releases(*this);
 	caption(title);
@@ -357,9 +420,9 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 	if(!conf.winrect.empty())
 	{
 		if(!conf.cbminw && conf.winrect.width < minw)
-			conf.winrect.width = dpi_transform(minw, conf.dpi);
-		else conf.winrect.width = dpi_transform(conf.winrect.width, conf.dpi);
-		conf.winrect.height = dpi_transform(conf.winrect.height, conf.dpi);
+			conf.winrect.width = dpi_scale(minw, conf.dpi);
+		else conf.winrect.width = dpi_scale(conf.winrect.width, conf.dpi);
+		conf.winrect.height = dpi_scale(conf.winrect.height, conf.dpi);
 		const auto maxh {screen {}.from_window(*this).area().dimension().height};
 		if(conf.winrect.height < size().height)
 			conf.winrect.height = size().height;
@@ -454,7 +517,25 @@ bool GUI::process_queue_item(std::wstring url)
 		{
 			if(bottom.use_strfmt)
 			{
-				if(bottom.fmt2.find('+') != -1 || bottom.fmt2 == L"mergeall")
+				if(bottom.fmt1.empty() && conf.pref_audio == 6)
+				{
+					auto it {std::find_if(bottom.vidinfo["formats"].begin(), bottom.vidinfo["formats"].end(), [&](const auto &el)
+					{
+						return el["format"].get<std::string>().rfind(nana::to_utf8(bottom.fmt2)) != -1;
+					})};
+					if(it != bottom.vidinfo["formats"].end())
+					{
+						std::string acodec, aext;
+						auto &fmt {*it};
+						if(fmt.contains("acodec") && fmt["acodec"] != nullptr)
+							acodec = fmt["acodec"];
+						if(fmt.contains("audio_ext") && fmt["audio_ext"] != nullptr)
+							aext = fmt["audio_ext"];
+						if(acodec == "opus" && aext != "opus")
+							cmd += L" -x";
+					}
+				}
+				else if(bottom.fmt2.find('+') != -1 || bottom.fmt2 == L"mergeall")
 					cmd += L" --audio-multistreams";
 				cmd += L" -f " + bottom.strfmt;
 			}
@@ -715,7 +796,7 @@ bool GUI::process_queue_item(std::wstring url)
 		if(tbpipe.current() == url)
 			tbpipe.clear();
 
-		bottom.dl_thread = std::thread([&, this, tempfile, display_cmd, cmd, url]
+		bottom.dl_thread = std::thread([&, tempfile, display_cmd, cmd, url]
 		{
 			working = true;
 			auto ca {tbpipe.colored_area_access()};
@@ -748,7 +829,7 @@ bool GUI::process_queue_item(std::wstring url)
 			ULONGLONG prev_val {0};
 			bool playlist_progress {false};
 
-			auto cb_progress = [&, this, url](ULONGLONG completed, ULONGLONG total, std::string text, int playlist_completed, int playlist_total)
+			auto cb_progress = [&, url](ULONGLONG completed, ULONGLONG total, std::string text, int playlist_completed, int playlist_total)
 			{
 				if(playlist_total && !playlist_progress)
 				{
@@ -766,7 +847,7 @@ bool GUI::process_queue_item(std::wstring url)
 						auto strprog {"[" + std::to_string(playlist_completed + 1) + "/" + std::to_string(playlist_total) + "] "};
 						item.text(3, strprog + strpct);
 						if(i_taskbar && lbq.at(0).size() == 1)
-							i_taskbar->SetProgressValue(hwnd, playlist_completed, playlist_total);
+							i_taskbar->SetProgressValue(hwnd, playlist_completed, playlist_total > 1 ? playlist_total - 1 : playlist_total);
 					}
 					else 
 					{
@@ -921,6 +1002,7 @@ bool GUI::process_queue_item(std::wstring url)
 					}
 				}
 				else item.text(3, "done");
+
 				taskbar_overall_progress();
 				if(i_taskbar && lbq.at(0).size() == 1)
 					i_taskbar->SetProgressState(hwnd, TBPF_NOPROGRESS);
@@ -1029,7 +1111,7 @@ void GUI::add_url(std::wstring url, bool refresh)
 				bottom.show_btncopy(true);
 		}
 
-		bottom.info_thread = std::thread([&, this, url, refresh]
+		bottom.info_thread = std::thread([&, url, refresh]
 		{
 			bottom.working_info = true;
 			static std::atomic_int active_threads {0};
@@ -1519,7 +1601,7 @@ void GUI::make_form()
 	bottom.btndl.enabled(false);
 	auto &tbpipe {outbox};
 	auto &tbpipe_overlay {overlay};
-	overlay.events().dbl_click([&, this] { show_queue(); queue_panel.focus(); });
+	overlay.events().dbl_click([&] { show_queue(); queue_panel.focus(); });
 	btn_settings.tooltip("Ctrl+S");
 
 	plc_queue.div(R"(

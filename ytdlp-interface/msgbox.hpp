@@ -121,8 +121,8 @@ namespace widgets
 				else dark_theme(p_owner->dark_theme());
 			}
 			l_msg.caption(msg.str());
-			auto h_top {std::max(l_msg.measure(dpi_transform(580 - 35 - 58)).height, (unsigned)dpi_transform(80))};
-			center(dpi_transform(580), dpi_transform(40) + dpi_transform(74) + h_top, false);
+			auto h_top {std::max(l_msg.measure(dpi_scale(580 - 35 - 58)).height, (unsigned)dpi_scale(40))};
+			center(dpi_scale(580), dpi_scale(40) + dpi_scale(74) + h_top, false);
 			bring_top(true);
 			modality();
 			return user_choice;

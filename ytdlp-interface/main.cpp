@@ -289,6 +289,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			{
 				GUI::conf.ffmpeg_path = jconf["ffmpeg_path"].get<std::string>();
 			}
+			if(jconf.contains("cb_clear_done")) // v2.11
+			{
+				GUI::conf.cb_clear_done = jconf["cb_clear_done"];
+				GUI::conf.cb_formats_fsize_bytes = jconf["cb_formats_fsize_bytes"];
+				GUI::conf.cb_add_on_focus = jconf["cb_add_on_focus"];
+			}
 		}
 	}
 	else GUI::conf.outpath = util::get_sys_folder(FOLDERID_Downloads);
@@ -378,6 +384,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["cb_save_errors"] = GUI::conf.cb_save_errors;
 		jconf["cb_ffplay"] = GUI::conf.cb_ffplay;
 		jconf["ffmpeg_path"] = GUI::conf.ffmpeg_path;
+		jconf["cb_clear_done"] = GUI::conf.cb_clear_done;
+		jconf["cb_formats_fsize_bytes"] = GUI::conf.cb_formats_fsize_bytes;
+		jconf["cb_add_on_focus"] = GUI::conf.cb_add_on_focus;
 
 		if(jconf.contains("sblock"))
 		{

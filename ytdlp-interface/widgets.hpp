@@ -228,6 +228,7 @@ namespace widgets
 		nana::drawerbase::listbox::item_proxy item_from_value(std::wstring val, size_t cat = 0);
 		void hilight_checked(bool enable) { hilite_checked = enable; refresh_theme(); }
 		void refresh_theme();
+		void fit_column_content();
 	};
 
 
@@ -619,6 +620,7 @@ namespace widgets
 		void refresh_theme();
 		void add(std::string item_text, std::string field_name);
 		void select(std::string field_name);
+		auto selected_page() const { return selected().value<std::string>(); }
 	};
 
 	class conf_page : public nana::panel<true>

@@ -7,6 +7,7 @@
 void GUI::fm_settings()
 {
 	using widgets::theme;
+	static std::string start_page {"ytdlp"};
 
 	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize>{}};
 	fm.center(820, 530);
@@ -20,6 +21,17 @@ void GUI::fm_settings()
 				<tree weight=150> <weight=20> <switchable <ytdlp> <sblock> <queuing> <gui> <updater>>
 			>
 	)");
+
+
+	fm.subclass_after(WM_KEYDOWN, [&](UINT, WPARAM wparam, LPARAM, LRESULT *)
+	{
+		if(wparam == 'S')
+		{
+			if(GetAsyncKeyState(VK_CONTROL) & 0xff00)
+				fm.close();
+		}
+		return true;
+	});
 
 	widgets::Separator sep {fm};
 	fm["sep"] << sep;
@@ -57,6 +69,7 @@ void GUI::fm_settings()
 				cb_chan_stable.enabled(true);
 				cb_chan_nightly.enabled(true);
 			}
+			nana::api::refresh_window(updater);
 		}
 		else if(name == "ytdlp")
 		{
@@ -97,7 +110,10 @@ void GUI::fm_settings()
 		cb_mark {sblock, "Mark these categories:"}, cb_remove {sblock, "Remove these categories:"}, cb_proxy {ytdlp, "Use this proxy:"},
 		cbsnap {gui, "Snap windows to screen edges"}, cbminw {gui, "No minimum width for the main window"},
 		cb_premium {ytdlp, "[YouTube] For 1080p, prefer the \"premium\" format with enhanced bitrate"},
-		cb_save_errors {queuing, "Save queue items with \"error\" status to the settings file"};
+		cb_save_errors {queuing, "Save queue items with \"error\" status to the settings file"},
+		cb_clear_done {queuing, "Automatically remove completed items (with \"done\" status)"},
+		cb_formats_fsize_bytes {gui, "Formats window: display file sizes with exact byte value"},
+		cb_add_on_focus {queuing, "When the main window is activated, automatically add the URL from clipboard"};
 	widgets::Separator sep1 {ytdlp}, sep2 {ytdlp}, sep3 {gui}, sep4 {fm};
 	widgets::Button btn_close {fm, " Close"}, btn_default {ytdlp, "Reset to default", true},
 		btn_playlist_default {ytdlp, "Reset to default", true}, btn_info {ytdlp};
@@ -329,6 +345,8 @@ void GUI::fm_settings()
 		<weight=25 <cb_common weight=408>> <weight=20>
 		<weight=25 <cb_queue_autostart>> <weight=20>
 		<weight=25 <cb_save_errors>> <weight=20>
+		<weight=25 <cb_clear_done>> <weight=20>
+		<weight=25 <cb_add_on_focus>> <weight=20>
 	)");
 
 	l_maxdl.text_align(nana::align::left, nana::align_v::center);
@@ -345,6 +363,8 @@ void GUI::fm_settings()
 	queuing["cb_common"] << cb_common;
 	queuing["cb_queue_autostart"] << cb_queue_autostart;
 	queuing["cb_save_errors"] << cb_save_errors;
+	queuing["cb_clear_done"] << cb_clear_done;
+	queuing["cb_add_on_focus"] << cb_add_on_focus;
 
 	gui.div(R"(vert		
 		<weight=25 <l_theme weight=100> <weight=20> <cbtheme_dark weight=65> <weight=20> 
@@ -352,6 +372,7 @@ void GUI::fm_settings()
 		<weight=25 <l_contrast weight=70> <weight=20> <slider> >
 		<weight=20> <sep3 weight=3px> <weight=20>
 		<weight=25 <cbsnap> <>> <weight=20> <weight=25 <cbminw weight=75%> <>> <weight=20>
+		<weight=25 <cb_formats_fsize_bytes>> <weight=20>
 		<weight=25 <l_opendlg_origin weight=380> <cb_origin_curdir>> <weight=10>
 		<weight=25 <opendlg_spacer weight=380> <cb_origin_progdir>> <weight=20>
 	)");
@@ -375,8 +396,12 @@ void GUI::fm_settings()
 	gui["l_opendlg_origin"] << l_opendlg_origin;
 	gui["cb_origin_progdir"] << cb_origin_progdir;
 	gui["cb_origin_curdir"] << cb_origin_curdir;
+	gui["cb_formats_fsize_bytes"] << cb_formats_fsize_bytes;
 
 	cb_save_errors.check(conf.cb_save_errors);
+	cb_clear_done.check(conf.cb_clear_done);
+	cb_formats_fsize_bytes.check(conf.cb_formats_fsize_bytes);
+	cb_add_on_focus.check(conf.cb_add_on_focus);
 
 	cbminw.check(conf.cbminw);
 	cbminw.events().checked([&, this]
@@ -540,6 +565,11 @@ void GUI::fm_settings()
 		"whenever a playlist is downloaded\n\nSince v1.9, this setting also applies to channels and channel tabs.\n\n"
 		"Since v2.1, this setting also applies to Bandcamp albums (prepends\n<bold>\"%(artist)s\\%(album)s\\\"</> to the output template).");
 
+	cb_add_on_focus.tooltip("If this option is checked, whenever the main window receives the input focus,\nany URL in the clipboard will "
+		"be automatically added to the queue (if it's not\nalready there). This only works for a single URL (if you have a multi-line list "
+		"of\nURLs, you'll have to add it manually)."
+	);
+
 	const auto res_tip {"Download the best video with the largest resolution available that is\n"
 		"not higher than the selected value. Resolution is determined using the\n"
 		"smallest dimension, so this works correctly for vertical videos as well."},
@@ -667,11 +697,8 @@ void GUI::fm_settings()
 			if(fname == "yt-dlp.exe" || fname == "ytdl-patched-red.exe")
 			{
 				conf.ytdlp_path = path;
-				get_versions();
+				get_version_ytdlp();
 				l_ytdlp_path.update_caption();
-				/*auto tmp {fs::path {conf.ytdlp_path}.replace_filename("ffmpeg.exe")};
-				if(fs::exists(tmp))
-					conf.ffmpeg_path = tmp;*/
 			}
 		}
 	});
@@ -819,6 +846,7 @@ void GUI::fm_settings()
 
 	fm.events().unload([&, this]
 	{
+		start_page = tree.selected_page();
 		conf.pref_res = com_res.option();
 		conf.pref_video = com_video.option();
 		conf.pref_audio = com_audio.option();
@@ -841,6 +869,9 @@ void GUI::fm_settings()
 		conf.update_self_only = cb_selfonly.checked();
 		conf.cb_premium = cb_premium.checked();
 		conf.cb_save_errors = cb_save_errors.checked();
+		conf.cb_clear_done = cb_clear_done.checked();
+		conf.cb_formats_fsize_bytes = cb_formats_fsize_bytes.checked();
+		conf.cb_add_on_focus = cb_add_on_focus.checked();
 
 		conf.sblock_mark.clear();
 		for(auto ip : lbmark.at(0))
@@ -909,9 +940,9 @@ void GUI::fm_settings()
 		fm.system_theme(true);
 	else fm.dark_theme(conf.cbtheme == 0);
 
+	tree.select(start_page);
 	fm.collocate();
 
-	tree.select("ytdlp");
 	fm.modality();
 }
 
@@ -1110,7 +1141,7 @@ void GUI::make_updater_page(themed_form &parent)
 					updater_update_misc(false, appdir);
 				else
 				{
-					nana::msgbox mbox {parent, "No place to put the ffmpeg files"};
+					::widgets::msgbox mbox {parent, "No place to put the ffmpeg files"};
 					mbox.icon(nana::msgbox::icon_error);
 					(mbox << "Neither the program folder, nor the specified yt-dlp folder can be written in. Run the program "
 						"as administrator to fix that.")();
@@ -1131,7 +1162,7 @@ void GUI::make_updater_page(themed_form &parent)
 			}
 			else
 			{
-				nana::msgbox mbox {parent, "No place to put yt-dlp.exe"};
+				::widgets::msgbox mbox {parent, "No place to put yt-dlp.exe"};
 				mbox.icon(nana::msgbox::icon_error);
 				(mbox << "The path for yt-dlp is not defined, and the program can't write in the folder "
 					"it's currently in (running it as administrator should fix that).")();
@@ -1149,7 +1180,7 @@ void GUI::make_updater_page(themed_form &parent)
 					updater_update_misc(true, appdir);
 				else
 				{
-					nana::msgbox mbox {parent, "No place to put yt-dlp.exe"};
+					::widgets::msgbox mbox {parent, "No place to put yt-dlp.exe"};
 					mbox.icon(nana::msgbox::icon_error);
 					(mbox << "Neither the program folder, nor the specified yt-dlp folder can be written in. Running the program "
 						"as administrator should fix that.")();
@@ -1210,14 +1241,20 @@ void GUI::make_updater_page(themed_form &parent)
 	{
 		if(arg.widget->checked())
 		{
-			if(thr_releases_ytdlp.joinable())
-				thr_releases_ytdlp.detach();
-			cb_chan_stable.enabled(false);
-			cb_chan_nightly.enabled(false);
-			l_ytdlp_text.caption("checking...");
+			bool was_nightly {conf.ytdlp_nightly};
 			conf.ytdlp_nightly = arg.widget->handle() == cb_chan_nightly;
-			get_latest_ytdlp(parent);
-			updater_t2.start();
+			const auto fname {url_latest_ytdlp.substr(url_latest_ytdlp.rfind('/') + 1)};
+			if(was_nightly && !conf.ytdlp_nightly || !was_nightly && conf.ytdlp_nightly || url_latest_ytdlp.empty() || fname != conf.ytdlp_path.filename().string())
+			{
+				if(thr_releases_ytdlp.joinable())
+					thr_releases_ytdlp.detach();
+				cb_chan_stable.enabled(false);
+				cb_chan_nightly.enabled(false);
+				l_ytdlp_text.error_mode(false);
+				l_ytdlp_text.caption("checking...");
+				get_latest_ytdlp(parent);
+				updater_t2.start();
+			}
 		}
 	});
 }
@@ -1321,7 +1358,7 @@ void GUI::updater_update_self(themed_form &parent)
 			updater_working = true;
 			if(!X64 && releases[0]["assets"].size() < 2)
 			{
-				nana::msgbox mbox {parent, "ytdlp-interface update error"};
+				::widgets::msgbox mbox {parent, "ytdlp-interface update error"};
 				mbox.icon(nana::msgbox::icon_error);
 				(mbox << "The latest release on GitHub doesn't seem to contain a 32-bit build!")();
 				btn_update.caption("Update");
@@ -1367,7 +1404,7 @@ void GUI::updater_update_self(themed_form &parent)
 						close();
 					}
 					catch(fs::filesystem_error const &e) {
-						nana::msgbox mbox {parent, "File copy error"};
+						::widgets::msgbox mbox {parent, "File copy error"};
 						mbox.icon(nana::msgbox::icon_error);
 						(mbox << e.what())();
 					}
@@ -1563,7 +1600,7 @@ void GUI::updater_init_page(nana::window parent_for_msgbox)
 	}
 	else updater_display_version_ffmpeg();
 
-	if(!url_latest_ytdlp.empty())
+	/*if(!url_latest_ytdlp.empty())
 	{
 		const auto fname {url_latest_ytdlp.substr(url_latest_ytdlp.rfind('/') + 1)};
 		if(fname != conf.ytdlp_path.filename().string())
@@ -1581,7 +1618,7 @@ void GUI::updater_init_page(nana::window parent_for_msgbox)
 		nana::api::refresh_window(updater);
 		get_latest_ytdlp(parent_for_msgbox);
 		updater_t2.start();
-	}
+	}*/
 
 	if(!url_latest_ytdlp_relnotes.empty() && fs::path {url_latest_ytdlp}.filename() == conf.ytdlp_path.filename())
 	{

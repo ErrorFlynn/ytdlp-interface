@@ -175,17 +175,17 @@ void GUI::fm_sections()
 		timepoint tp1 {first}, tp2 {second};
 		if(first == "0" && second == "0")
 		{
-			(nana::msgbox {fm, "validation error"}.icon(nana::msgbox::icon_error) << "section spans entire length")();
+			(::widgets::msgbox {fm, "validation error"}.icon(nana::msgbox::icon_error) << "section spans entire length")();
 			return;
 		}
 		if(tp1.equal(tp2))
 		{
-			(nana::msgbox {fm, "validation error"}.icon(nana::msgbox::icon_error) << "timepoints are identical")();
+			(::widgets::msgbox {fm, "validation error"}.icon(nana::msgbox::icon_error) << "timepoints are identical")();
 			return;
 		}
 		else if(tp1 > tp2 && second != "0")
 		{
-			(nana::msgbox {fm, "validation error"}.icon(nana::msgbox::icon_error) << "second timepoint precedes the first one")();
+			(::widgets::msgbox {fm, "validation error"}.icon(nana::msgbox::icon_error) << "second timepoint precedes the first one")();
 			return;
 		}
 
@@ -222,6 +222,6 @@ void GUI::fm_sections()
 	else fm.dark_theme(conf.cbtheme == 0);
 
 	fm.collocate();
-	lbs.append_header("", lbs.size().width - fm.dpi_transform(25));
+	lbs.append_header("", lbs.size().width - fm.dpi_scale(25));
 	fm.modality();
 }

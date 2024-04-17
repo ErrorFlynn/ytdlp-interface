@@ -146,6 +146,7 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 	};
 	std::string playlist_line;
 	bool procexit {false}, subs {false};
+	chronometer chrono;
 	while(!procexit)
 	{
 		procexit = WaitForSingleObject(pi.hProcess, 50) == WAIT_OBJECT_0;
@@ -254,7 +255,17 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 												playlist_total = std::stod(playlist_line.substr(pos + 4, playlist_line.size() - pos - 1));
 											}
 											if(percent != 100 || line.find(" in ") != -1)
-												cbprog(static_cast<ULONGLONG>(percent * 10), 1000, line.substr(pos2), playlist_complete-1, playlist_total);
+											{
+												if(playlist_total)
+												{
+													if(chrono.elapsed_ms() >= 300 || line.find(" in ") != -1)
+													{
+														chrono.reset();
+														cbprog(static_cast<ULONGLONG>(percent * 10), 1000, line.substr(pos2), playlist_complete - 1, playlist_total);
+													}
+												}
+												else cbprog(static_cast<ULONGLONG>(percent * 10), 1000, line.substr(pos2), playlist_complete - 1, playlist_total);
+											}
 										}
 									} catch(...) {}
 								}

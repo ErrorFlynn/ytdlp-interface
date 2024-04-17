@@ -48,7 +48,8 @@ public:
 			zoomed {false}, get_releases_at_startup {false}, col_format {false}, col_format_note {true}, col_ext {true}, col_fsize {false},
 			json_hide_null {false}, col_site_icon {true}, col_site_text {false}, ytdlp_nightly {false}, audio_multistreams {false},
 			cb_sblock_mark {false}, cb_sblock_remove {false}, cb_proxy {false}, cbsnap {true}, limit_output_buffer {true}, 
-			update_self_only {true}, cb_premium {true}, cbminw {false}, cb_save_errors {false}, cb_ffplay {false};
+			update_self_only {true}, cb_premium {true}, cbminw {false}, cb_save_errors {false}, cb_ffplay {false}, cb_clear_done {false},
+			cb_formats_fsize_bytes {false}, cb_add_on_focus {false};
 		nana::rectangle winrect;
 		int dpi {96};
 		std::vector<int> sblock_mark, sblock_remove;
@@ -73,11 +74,11 @@ private:
 	std::thread thr, thr_releases, thr_versions, thr_ver_ffmpeg, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp, thr_update;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.10.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 5)},
+	const std::string ver_tag {"v2.11.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 5)},
 		ytdlp_fname {X64 ? "yt-dlp.exe" : "yt-dlp_x86.exe"};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
-	nana::timer tmsg;
+	nana::timer tmsg, tqueue;
 	std::string tmsg_title, tmsg_text;
 	nana::window tmsg_parent;
 
@@ -85,7 +86,7 @@ private:
 
 	const std::vector<std::wstring>
 		com_res_options {L"none", L"4320", L"2160", L"1440", L"1080", L"720", L"480", L"360"},
-		com_audio_options {L"none", L"m4a", L"mp3", L"ogg", L"webm", L"flac"},
+		com_audio_options {L"none", L"m4a", L"mp3", L"ogg", L"webm", L"flac", L"opus"},
 		com_video_options {L"none", L"mp4", L"webm"},
 		com_vcodec_options {L"none", L"av01", L"vp9.2", L"vp9", L"h265", L"h264", L"vp8", L"h263", L"theora"},
 		com_acodec_options {L"none", L"flac", L"alac", L"wav", L"aiff", L"opus", L"vorbis", L"aac", L"mp4a", 

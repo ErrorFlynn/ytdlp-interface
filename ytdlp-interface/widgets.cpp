@@ -441,6 +441,20 @@ void Listbox::refresh_theme()
 	}
 }
 
+void widgets::Listbox::fit_column_content()
+{
+	const auto number_of_columns {column_size()};
+	//size_t total_column_width {0};
+	for(size_t n {0}; n < number_of_columns; n++)
+	{
+		if(column_at(n).visible())
+		{
+			column_at(n).fit_content();
+			//total_column_width += column_at(n).width();
+		}
+	}
+}
+
 
 void Progress::create(nana::window parent)
 {
@@ -1041,7 +1055,7 @@ void JSON_Tree::populate()
 	const auto dark {theme::is_dark()};
 	auto root {insert("root", "JSON").expand(true).icon(dark ? "json_dark" : "json_light")};
 
-	std::function<void(item_proxy, json)> recpop = [&, this](item_proxy parent, const json &j)
+	std::function<void(item_proxy, json)> recpop = [&](item_proxy parent, const json &j)
 	{
 		for(const auto &el : j.items())
 		{
@@ -1056,7 +1070,7 @@ void JSON_Tree::populate()
 			}
 			else if(val.is_array())
 			{
-				auto node {parent.append(key, key)};
+				auto node {parent.append(key, key + " (" + std::to_string(val.size()) + ")")};
 				node.icon(dark ? "array_dark" : "array_light");
 				recpop(node, el.value());
 			}
@@ -1191,17 +1205,12 @@ void conf_tree::create(nana::window parent, nana::place *place, page_callback ca
 	events().expose([this] { refresh_theme(); });
 	events().selected([callback, this](const nana::arg_treebox &arg)
 	{
-		static std::string last;
 		if(arg.item.selected())
 		{
 			auto field_name {arg.item.value<std::string>().data()};
-			if(last != field_name)
-			{
-				last = field_name;
-				plc->field_display(field_name, true);
-				plc->collocate();
-				callback(field_name);
-			}
+			plc->field_display(field_name, true);
+			plc->collocate();
+			if(callback) callback(field_name);
 		}
 	});
 }

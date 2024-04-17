@@ -217,3 +217,30 @@ private:
 	static std::recursive_mutex mutex_;
 	static std::map<HWND, subclass*> table_;
 };
+
+
+class chronometer
+{
+	long long start, elapsed_;
+	bool stopped;
+	struct time { long long h, m, s; };
+
+public:
+	chronometer() { reset(); }
+	void stop() { stopped = true; elapsed_ = (std::chrono::system_clock::now().time_since_epoch().count() - start) / 10000; }
+	void reset() { stopped = false; elapsed_ = 0; start = std::chrono::system_clock::now().time_since_epoch().count(); }
+
+	long long elapsed_ms()
+	{
+		if(stopped) return elapsed_;
+		else return (std::chrono::system_clock::now().time_since_epoch().count() - start) / 10000;
+	}
+
+	long long elapsed_s() { return elapsed_ms() / 1000; }
+
+	time elapsed()
+	{
+		auto es = elapsed_s();
+		return {es / 3600, (es % 3600) / 60, (es % 3600) % 60};
+	}
+};

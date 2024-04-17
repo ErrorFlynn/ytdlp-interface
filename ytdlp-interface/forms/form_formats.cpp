@@ -69,16 +69,16 @@ void GUI::fm_formats()
 	list.hilight_checked(true);
 	list.enable_single(true, false);
 	list.scheme().text_margin = util::scale(10) + (nana::api::screen_dpi(true) > 96) * 4;
-	list.append_header("format", dpi_transform(280));
-	list.append_header("acodec", dpi_transform(90));
-	list.append_header("vcodec", dpi_transform(90));
-	list.append_header("ext", dpi_transform(50));
-	list.append_header("fps", dpi_transform(32));
-	list.append_header("vbr", dpi_transform(40));
-	list.append_header("abr", dpi_transform(40));
-	list.append_header("tbr", dpi_transform(40));
-	list.append_header("asr", dpi_transform(50));
-	list.append_header("filesize", dpi_transform(cnlang ? 170 : 160));
+	list.append_header("format", dpi_scale(280));
+	list.append_header("acodec", dpi_scale(90));
+	list.append_header("vcodec", dpi_scale(90));
+	list.append_header("ext", dpi_scale(50));
+	list.append_header("fps", dpi_scale(32));
+	list.append_header("vbr", dpi_scale(40));
+	list.append_header("abr", dpi_scale(40));
+	list.append_header("tbr", dpi_scale(40));
+	list.append_header("asr", dpi_scale(50));
+	list.append_header("filesize", dpi_scale(cnlang ? 170 : 160));
 
 	list.events().selected([&](const arg_listbox &arg)
 	{
@@ -358,7 +358,7 @@ void GUI::fm_formats()
 		bottom.use_strfmt = true;
 		if(bottom.using_custom_fmt())
 		{
-			nana::msgbox mbox {fm, "Warning: conflicting -f arguments"};
+			::widgets::msgbox mbox {fm, "Warning: conflicting -f arguments"};
 			std::string text {"The \"Custom arguments\" checkbox is checked, and \"-f\" is present as a custom argument.\n\n"
 				"If you don't uncheck that checkbox, the \"-f\" custom argument will override the selection you have made here."};
 			mbox.icon(nana::msgbox::icon_warning);
@@ -511,6 +511,7 @@ void GUI::fm_formats()
 		else format_id1 = format_id;
 	}
 
+	list.auto_draw(false);
 	std::vector<bool> colmask(10, false);
 	for(auto &fmt : vidinfo["formats"])
 	{
@@ -526,9 +527,9 @@ void GUI::fm_formats()
 			acodec = get_string(fmt, "acodec");
 			vcodec = get_string(fmt, "vcodec");
 			if(fmt.contains("filesize") && fmt["filesize"] != nullptr)
-				filesize = util::int_to_filesize(fmt["filesize"].get<std::uint64_t>());
+				filesize = util::int_to_filesize(fmt["filesize"].get<std::uint64_t>(), conf.cb_formats_fsize_bytes);
 			else if(fmt.contains("filesize_approx") && fmt["filesize_approx"] != nullptr)
-				filesize = "~" + util::int_to_filesize(fmt["filesize_approx"].get<std::uint64_t>());
+				filesize = "~" + util::int_to_filesize(fmt["filesize_approx"].get<std::uint64_t>(), conf.cb_formats_fsize_bytes);
 			unsigned catidx {0};
 			if(acodec == "none")
 				catidx = 2; // video only
@@ -565,6 +566,8 @@ void GUI::fm_formats()
 	}
 
 	list.refresh_theme();
+	list.fit_column_content();
+	list.auto_draw(true);
 
 	fm.events().unload([&]
 	{
@@ -587,7 +590,7 @@ void GUI::fm_formats()
 	else fm.dark_theme(conf.cbtheme == 0);
 
 	fm.center(1000, std::max(429.0 + list.item_count() * (cnlang ? 22.5 : 20.5), double(600)));
-	api::track_window_size(fm, dpi_transform_size(900, 600), false);
+	api::track_window_size(fm, dpi_scale_size(900, 600), false);
 
 	fm.collocate();
 	fm.modality();

@@ -31,7 +31,7 @@ void GUI::Outbox::create(GUI *parent, bool visible)
 		if(arg.button == mouse::right_button)
 		{
 			::widgets::Menu m;
-			m.item_pixels(pgui->dpi_transform(24));
+			m.item_pixels(pgui->dpi_scale(24));
 
 			m.append("Copy to clipboard", [&, this](menu::item_proxy)
 			{

@@ -45,7 +45,7 @@ void GUI::make_queue_listbox()
 			lbq_can_drag = false;
 			if(last_selected)
 			{
-				if(arg.pos.y > dpi_transform(21)) // if below header
+				if(arg.pos.y > dpi_scale(21)) // if below header
 					last_selected = nullptr;
 			}
 		}
@@ -343,7 +343,7 @@ std::wstring GUI::pop_queue_menu(int x, int y)
 
 	std::wstring url_of_item_to_delete;
 	::widgets::Menu m;
-	m.item_pixels(dpi_transform(24));
+	m.item_pixels(dpi_scale(24));
 	auto sel {lbq.selected()};
 	if(!sel.empty() && !thr_menu.joinable())
 	{
@@ -784,6 +784,8 @@ void GUI::make_columns_menu(nana::menu *m)
 
 bool GUI::queue_save()
 {
+	static std::mutex mtx;
+	std::lock_guard<std::mutex> lock {mtx};
 	if(fn_write_conf && lbq.at(0).size())
 	{
 		conf.unfinished_queue_items.clear();
