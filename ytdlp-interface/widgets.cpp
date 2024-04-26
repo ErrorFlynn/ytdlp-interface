@@ -445,11 +445,20 @@ void widgets::Listbox::fit_column_content()
 {
 	const auto number_of_columns {column_size()};
 	//size_t total_column_width {0};
+	nana::form fm;
+	nana::label l {fm};
+	l.typeface(typeface());
 	for(size_t n {0}; n < number_of_columns; n++)
 	{
-		if(column_at(n).visible())
+		auto &col {column_at(n)};
+		if(col.visible())
 		{
-			column_at(n).fit_content();
+			col.fit_content();
+			l.caption(col.text());
+			const auto minw {l.measure(0).width};
+			const auto padding {util::scale(20)};
+			if(col.width() < minw + padding)
+				col.width(minw + padding);
 			//total_column_width += column_at(n).width();
 		}
 	}

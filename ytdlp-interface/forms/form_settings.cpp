@@ -1400,8 +1400,9 @@ void GUI::updater_update_self(themed_form &parent)
 							params += L" self_only";
 						ShellExecuteW(NULL, L"runas", tempself.wstring().data(), params.data(), NULL, SW_SHOW);
 						updater_working = false;
-						parent.close();
+						thr.detach();
 						close();
+						return;
 					}
 					catch(fs::filesystem_error const &e) {
 						::widgets::msgbox mbox {parent, "File copy error"};

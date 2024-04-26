@@ -319,6 +319,11 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 						lbq.at(sel[n]).select(false);
 				lbq.auto_draw(true);
 				queue_save();
+				if(!queue_panel.visible())
+				{
+					show_output();
+					api::refresh_window(*this);
+				}
 			}
 		}
 	});
@@ -1387,7 +1392,10 @@ void GUI::add_url(std::wstring url, bool refresh)
 			}
 			else // not YouTube
 			{
-				std::wstring cmd {L" --no-warnings --compat-options manifest-filesize-approx -j " + (conf.output_template.empty() ? L"" : L"-o \"" + conf.output_template + L'\"') + 
+				std::wstring fsize_approx;
+				if(ver_ytdlp > version_t {2023, 11, 13})
+					fsize_approx = L" --compat-options manifest-filesize-approx";
+				std::wstring cmd {L" --no-warnings" + fsize_approx + L" -j " + (conf.output_template.empty() ? L"" : L"-o \"" + conf.output_template + L'\"') +
 					fmt_sort + L'\"' + url + L'\"'};
 				if(conf.cb_proxy && !conf.proxy.empty())
 					cmd = L" --proxy " + conf.proxy + cmd;

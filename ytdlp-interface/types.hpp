@@ -6,6 +6,8 @@
 struct version_t
 {
 	int year {0}, month {0}, day {0};
+	version_t() = default;
+	version_t(int y, int m, int d) : year {y}, month {m}, day {d} {}
 	bool empty() { return year == 0; }
 	std::string string();
 	bool operator > (const version_t &o);

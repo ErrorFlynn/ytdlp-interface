@@ -554,7 +554,7 @@ void GUI::fm_formats()
 		}
 	}
 
-	for(int n {1}; n < 9; n++)
+	for(int n {1}; n < 10; n++)
 		list.column_at(n).visible(colmask[n]);
 
 	if(list.size_categ() == 3)
