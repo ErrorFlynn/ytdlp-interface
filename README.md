@@ -19,12 +19,12 @@ The program also uses [JSON for modern C++](https://github.com/nlohmann/json) to
 
 ---
 
-![ytdlp-interface_settings](https://github.com/ErrorFlynn/ytdlp-interface/assets/20293505/2113ce06-375f-498d-bc3d-555d907db15c)
+![ytdlp-interface settings](https://github.com/ErrorFlynn/ytdlp-interface/assets/20293505/adb02d8a-5857-46dc-ad51-fd71c3a6bd96)
 
 ---
 
-![ytdlp-interface_queue](https://github.com/ErrorFlynn/ytdlp-interface/assets/20293505/bcd25267-e29a-4115-9271-7b3519c49917)
+![ytdlp-interface queue](https://github.com/ErrorFlynn/ytdlp-interface/assets/20293505/86fd2013-4247-4f1e-8038-334ed31a3d4e)
 
 ---
 
-![ytdlp-interface_output](https://github.com/ErrorFlynn/ytdlp-interface/assets/20293505/3b9b5b37-2e78-4d25-b20a-76b0a7246167)
+![ytdlp-interface output](https://github.com/ErrorFlynn/ytdlp-interface/assets/20293505/a99f8e21-95e0-4641-b589-7211a37ee454)
