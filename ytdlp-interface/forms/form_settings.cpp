@@ -134,11 +134,11 @@ void GUI::fm_settings()
 			<l_acodec weight=198> <weight=10> <com_acodec weight=66>
 		>
 		<spacer_premium weight=20> <row_premium weight=26 <prem_pad weight=36><cb_premium>>
-		<weight=20> <sep1 weight=3px> <weight=20>
+		<weight=20> <sep1 weight=3> <weight=20>
 		<weight=25 <l_template weight=132> <weight=10> <tb_template> <weight=15> <btn_default weight=140>> <weight=20>
 		<weight=25 <l_playlist weight=132> <weight=10> <tb_playlist> <weight=15> <btn_playlist_default weight=140>> <weight=20>
 		<weight=25 <cb_zeropadding weight=323> <weight=20> <cb_playlist_folder>>
-		<weight=20> <sep2 weight=3px> <weight=20>
+		<weight=20> <sep2 weight=3> <weight=20>
 		<weight=25 <l_ytdlp weight=132> <weight=10> <l_ytdlp_path> > <weight=20>
 		<weight=25 <l_ffmpeg weight=132> <weight=10> <l_ffmpeg_path> > <weight=20>
 		<weight=25 <proxy_padding weight=11> <cb_proxy weight=121> <weight=10> <tb_proxy>>
@@ -199,13 +199,6 @@ void GUI::fm_settings()
 	};
 
 	cb_premium.check(conf.cb_premium);
-
-	if(cnlang)
-	{
-		ytdlp.get_place().field_display("proxy_padding", false);
-		change_field_attr(ytdlp.get_place(), "cb_proxy", "weight", 132);
-		change_field_attr(ytdlp.get_place(), "prem_pad", "weight", 20);
-	}
 
 	ytdlp["l_res"] << l_res;
 	ytdlp["com_res"] << com_res;
@@ -340,7 +333,7 @@ void GUI::fm_settings()
 	});
 
 	queuing.div(R"(vert		
-		<weight=25 <l_maxdl weight=216> <weight=10> <sb_maxdl weight=40> <> <cb_lengthyproc weight=318>> <weight=20>
+		<weight=25 <l_maxdl weight=196> <weight=10> <sb_maxdl weight=40> <> <cb_lengthyproc weight=290>> <weight=20>
 		<weight=25 <cb_autostart weight=508>> <weight=20>
 		<weight=25 <cb_common weight=408>> <weight=20>
 		<weight=25 <cb_queue_autostart>> <weight=20>
@@ -350,11 +343,6 @@ void GUI::fm_settings()
 	)");
 
 	l_maxdl.text_align(nana::align::left, nana::align_v::center);
-	if(!cnlang)
-	{
-		change_field_attr(queuing.get_place(), "l_maxdl", "weight", 196);
-		change_field_attr(queuing.get_place(), "cb_lengthyproc", "weight", 290);
-	}
 
 	queuing["l_maxdl"] << l_maxdl;
 	queuing["sb_maxdl"] << sb_maxdl;
@@ -370,18 +358,12 @@ void GUI::fm_settings()
 		<weight=25 <l_theme weight=100> <weight=20> <cbtheme_dark weight=65> <weight=20> 
 			<cbtheme_light weight=66> <weight=20> <cbtheme_system weight=178> > <weight=20>
 		<weight=25 <l_contrast weight=70> <weight=20> <slider> >
-		<weight=20> <sep3 weight=3px> <weight=20>
+		<weight=20> <sep3 weight=3> <weight=20>
 		<weight=25 <cbsnap> <>> <weight=20> <weight=25 <cbminw weight=75%> <>> <weight=20>
 		<weight=25 <cb_formats_fsize_bytes>> <weight=20>
-		<weight=25 <l_opendlg_origin weight=380> <cb_origin_curdir>> <weight=10>
-		<weight=25 <opendlg_spacer weight=380> <cb_origin_progdir>> <weight=20>
+		<weight=25 <l_opendlg_origin weight=345> <cb_origin_curdir>> <weight=10>
+		<weight=25 <opendlg_spacer weight=345> <cb_origin_progdir>> <weight=20>
 	)");
-
-	if(!cnlang)
-	{
-		change_field_attr(gui.get_place(), "l_opendlg_origin", "weight", 345);
-		change_field_attr(gui.get_place(), "opendlg_spacer", "weight", 345);
-	}
 
 	gui["l_theme"] << l_theme;
 	gui["cbtheme_dark"] << cbtheme_dark;
@@ -427,9 +409,15 @@ void GUI::fm_settings()
 	});
 
 	l_opendlg_origin.text_align(nana::align::left, nana::align_v::center);
-	if(nana::API::screen_dpi(true) > 96)
+
+	const auto dpi {nana::api::screen_dpi(true)};
+	if(dpi >= 240)
+		btn_info.image(arr_info48a_png, sizeof arr_info48a_png);
+	else if(dpi >= 192)
+		btn_info.image(arr_info32_png, sizeof arr_info32_png);
+	else if(dpi > 96)
 		btn_info.image(arr_info22_ico, sizeof arr_info22_ico);
-	else btn_info.image(arr_info16_ico, sizeof arr_info22_ico);
+	else btn_info.image(arr_info16_ico, sizeof arr_info16_ico);
 	btn_info.events().click([&, this] {fm_settings_info(fm); });
 	btn_close.events().click([&] {fm.close(); });
 
@@ -1017,13 +1005,13 @@ do that. That feature can be useful in certain cases, but yt-dlp does a good job
 void GUI::make_updater_page(themed_form &parent)
 {
 	updater.div(R"(vert
-		<weight=5> <sep1 weight=3px> <weight=20>
-		<weight=30 <l_ver weight=110> <weight=10> <l_vertext> <weight=20> <btn_changes weight=150> >
+		<weight=5> <sep1 weight=3> <weight=20>
+		<weight=30 <l_ver weight=101> <weight=10> <l_vertext> <weight=20> <btn_changes weight=150> >
 		<weight=15> <cb_startup weight=25>
 		<weight=15> <cb_selfonly weight=25>
 		<weight=20>
 		<weight=30 <btn_update weight=100> <weight=20> <prog> > <weight=25>
-		<sep2 weight=3px> <weight=20>
+		<sep2 weight=3> <weight=20>
 		<weight=30 <l_ver_ytdlp weight=170> <weight=10> <l_ytdlp_text> > <weight=10>
 		<weight=30 <l_ver_ffmpeg weight=170> <weight=10> <l_ffmpeg_text> > <weight=12>
 		<weight=25 <l_channel weight=170> <weight=20> <cb_chan_stable weight=75> <weight=10> <cb_chan_nightly weight=85> <> > <weight=17>
@@ -1031,11 +1019,6 @@ void GUI::make_updater_page(themed_form &parent)
 		<weight=30 <prog_misc> > <weight=25>
 		<weight=30 <> <btn_update_ytdlp weight=150> <weight=20> <btn_update_ffmpeg weight=160> <> >
 	)");
-
-	if(!cnlang)
-	{
-		change_field_attr(updater.get_place(), "l_ver", "weight", 101);
-	}
 
 	l_ver.create(updater, "Latest version:");
 	l_ver_ytdlp.create(updater, "Latest yt-dlp version:");
@@ -1099,14 +1082,14 @@ void GUI::make_updater_page(themed_form &parent)
 		rgp_chan.add(cb_chan_nightly);
 	}
 
-	btn_changes.typeface(nana::paint::font_info {"", 12, {800}});
+	btn_changes.typeface(nana::paint::font_info {"Segoe UI", 12, {800}});
 	btn_changes.enabled(false);
 	btn_changes.events().click([&] { fm_changes(updater.parent()); });
-	btn_update.typeface(nana::paint::font_info {"", 12, {800}});
+	btn_update.typeface(nana::paint::font_info {"Segoe UI", 12, {800}});
 	btn_update.enabled(false);
-	btn_update_ytdlp.typeface(nana::paint::font_info {"", 12, {800}});
+	btn_update_ytdlp.typeface(nana::paint::font_info {"Segoe UI", 12, {800}});
 	btn_update_ytdlp.enabled(false);
-	btn_update_ffmpeg.typeface(nana::paint::font_info {"", 12, {800}});
+	btn_update_ffmpeg.typeface(nana::paint::font_info {"Segoe UI", 12, {800}});
 	btn_update_ffmpeg.enabled(false);
 	l_ver_ytdlp.text_align(nana::align::right, nana::align_v::center);
 	l_ytdlp_text.format(true);

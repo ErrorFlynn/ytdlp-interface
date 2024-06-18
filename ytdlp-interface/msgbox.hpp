@@ -21,7 +21,7 @@ namespace widgets
 				fgcolor(theme::msg_label_fg);
 				nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
 				format(true);
-				typeface(nana::paint::font_info {"", 12});
+				typeface(nana::paint::font_info {"Segoe UI", 12});
 				text_align(nana::align::left, nana::align_v::top);
 				events().expose([this] { fgcolor(theme::msg_label_fg); });
 			}
@@ -107,6 +107,8 @@ namespace widgets
 			{
 				bgcolor(theme::fmbg);
 				bot_panel.bgcolor(theme::fmbg.blend(colors::grey, .1));
+				//nana::API::effects_bground(l_msg, nana::effects::bground_transparent(100), 0);
+				//l_msg.bgcolor(nana::colors::light_salmon);
 				return true;
 			});
 		}
@@ -120,8 +122,12 @@ namespace widgets
 					system_theme(true);
 				else dark_theme(p_owner->dark_theme());
 			}
+
+			if(buttons == MB_OK)
+				btn3.focus();
+
 			l_msg.caption(msg.str());
-			auto h_top {std::max(l_msg.measure(dpi_scale(580 - 35 - 58)).height, (unsigned)dpi_scale(40))};
+			auto h_top {std::max(l_msg.measure(dpi_scale(477)).height, (unsigned)dpi_scale(40))};
 			center(dpi_scale(580), dpi_scale(40) + dpi_scale(74) + h_top, false);
 			bring_top(true);
 			modality();

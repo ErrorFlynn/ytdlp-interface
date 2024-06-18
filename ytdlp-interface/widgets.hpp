@@ -219,6 +219,7 @@ namespace widgets
 		Listbox(nana::window parent, bool hicontrast = false) : listbox {parent}, hicontrast {hicontrast}
 		{
 			refresh_theme();
+			typeface(nana::paint::font_info {"Segoe UI", 9});
 			events().expose([this] { refresh_theme(); });
 			dw.draw([](nana::paint::graphics &g) { g.rectangle(false, theme::border); });
 		}
@@ -331,7 +332,7 @@ namespace widgets
 		Title(nana::window parent, std::string text = "") : label {parent, text}
 		{
 			fgcolor(theme::title_fg);
-			typeface(nana::paint::font_info {"Arial", 15 - (double)(nana::API::screen_dpi(true) > 96) * 3, {800}});
+			typeface(nana::paint::font_info {"Arial", 15/* - (double)(nana::API::screen_dpi(true) > 96) * 3*/, {800}});
 			text_align(nana::align::center, nana::align_v::top);
 			nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
 			events().expose([this] { fgcolor(theme::title_fg); });

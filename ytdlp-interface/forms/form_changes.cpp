@@ -20,10 +20,7 @@ void GUI::fm_changes(nana::window parent)
 
 	fm.caption("ytdlp-interface - release notes");
 	fm.bgcolor(theme::fmbg);
-	if(cnlang) fm.div(R"(vert margin=20 <tb> <weight=20>
-					<weight=25 <> <l_history weight=180> <weight=10> <com_history weight=70> <weight=20> <cblogview weight=158> <> >)");
-
-	else fm.div(R"(vert margin=20 <tb> <weight=20>
+	fm.div(R"(vert margin=20 <tb> <weight=20>
 				<weight=25 <> <l_history weight=164> <weight=10> <com_history weight=65> <weight=20> <cblogview weight=140> <> >)");
 
 	widgets::Textbox tb {fm};

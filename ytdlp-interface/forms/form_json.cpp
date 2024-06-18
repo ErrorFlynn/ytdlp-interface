@@ -63,7 +63,7 @@ void GUI::fm_json()
 			};
 
 			::widgets::Menu m;
-			m.item_pixels(dpi_scale(24));
+			m.item_pixels(24);
 
 			auto selitem {t.selected()};
 			if(!selitem.empty())

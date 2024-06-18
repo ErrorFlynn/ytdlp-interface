@@ -70,11 +70,13 @@ private:
 	long minw {0}, minh {0}; // min frame size
 	unsigned size_latest_ffmpeg {0}, size_latest_ytdlp {0}, number_of_processors {4};
 	bool menu_working {false}, lbq_no_action {false}, thumbthr_working {false}, use_ffmpeg_location {false},
-		autostart_next_item {true}, lbq_can_drag {false}, cnlang {false}, no_draw_freeze {true};
+		autostart_next_item {true}, lbq_can_drag {false}, no_draw_freeze {true}, save_queue {false},
+		pwr_can_shutdown {false}, pwr_shutdown {false}, pwr_hibernate {false}, pwr_sleep {false}, start_suspend_fm {false}, 
+		close_when_finished {false};
 	std::thread thr, thr_releases, thr_versions, thr_ver_ffmpeg, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp, thr_update;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.11.1"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 5)*/},
+	const std::string ver_tag {"v2.12.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 5)},
 		ytdlp_fname {X64 ? "yt-dlp.exe" : "yt-dlp_x86.exe"};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
@@ -87,7 +89,7 @@ private:
 	const std::vector<std::wstring>
 		com_res_options {L"none", L"4320", L"2160", L"1440", L"1080", L"720", L"480", L"360"},
 		com_audio_options {L"none", L"m4a", L"mp3", L"ogg", L"webm", L"flac", L"opus"},
-		com_video_options {L"none", L"mp4", L"webm"},
+		com_video_options {L"none", L"mp4", L"webm", L"mkv"},
 		com_vcodec_options {L"none", L"av01", L"vp9.2", L"vp9", L"h265", L"h264", L"vp8", L"h263", L"theora"},
 		com_acodec_options {L"none", L"flac", L"alac", L"wav", L"aiff", L"opus", L"vorbis", L"aac", L"mp4a", 
 			L"mp3", L"ac4", L"eac3", L"ac3", L"dts"},
@@ -107,7 +109,7 @@ private:
 
 		bool is_ytlink {false}, use_strfmt {false}, working {false}, graceful_exit {false}, working_info {true}, received_procmsg {false},
 			is_ytplaylist {false}, is_ytchan {false}, is_bcplaylist {false}, is_bclink {false}, is_bcchan {false}, is_yttab {false};
-		fs::path outpath, merger_path, download_path, printed_path;
+		fs::path outpath, outfile, merger_path, download_path, printed_path;
 		nlohmann::json vidinfo, playlist_info;
 		std::vector<bool> playlist_selection;
 		std::vector<std::pair<std::wstring, std::wstring>> sections;
@@ -259,11 +261,12 @@ private:
 	void fm_sections();
 	void fm_playlist();
 	void fm_formats();
+	void fm_suspend();
 
 	void queue_remove_all();
 	void queue_remove_selected();
 	void make_queue_listbox();
-	std::wstring pop_queue_menu(int x, int y);
+	std::wstring queue_pop_menu(int x, int y);
 
 	void make_columns_menu(nana::menu *m = nullptr);
 	bool process_queue_item(std::wstring url);

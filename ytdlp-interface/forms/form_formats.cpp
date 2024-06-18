@@ -15,16 +15,16 @@ void GUI::fm_formats()
 	fm.snap(conf.cbsnap);
 	fm.div(R"(
 			vert margin=20
-				<weight=180px 
-					<switchable weight=320px <thumb> <thumb_label>> <weight=20px>
+				<info weight=180 
+					<switchable weight=320 <thumb> <thumb_label>> <weight=20>
 					<vert
-						<l_title weight=27px> <weight=10px>
-						<sep1 weight=3px> <weight=10px>
-						<weight=28px <l_dur weight=45%> <weight=10> <l_durtext> >
-						<weight=28px <l_chap weight=45%> <weight=10> <l_chaptext> >
-						<weight=28px <l_upl weight=45%> <weight=10> <l_upltext> >
-						<weight=28px <l_date weight=45%> <weight=10> <l_datetext> > <weight=15px>
-						<sep2 weight=3px>
+						<l_title weight=27> <weight=10>
+						<sep1 weight=3> <weight=10>
+						<weight=28 <l_dur weight=45%> <weight=10> <l_durtext> >
+						<weight=28 <l_chap weight=45%> <weight=10> <l_chaptext> >
+						<weight=28 <l_upl weight=45%> <weight=10> <l_upltext> >
+						<weight=28 <l_date weight=45%> <weight=10> <l_datetext> > <weight=15>
+						<sep2 weight=3>
 					>
 				>
 				<weight=20> <cb_streams weight=25>
@@ -33,9 +33,9 @@ void GUI::fm_formats()
 		)");
 
 	::widgets::Title l_title {fm};
-	::widgets::Label l_dur {fm, "Duration:", true}, l_chap {fm, "Chapters:", true},
-		l_upl {fm, "Uploader:", true}, l_date {fm, "Upload date:", true};
-	::widgets::Text l_durtext {fm, "", true}, l_chaptext {fm, "", true}, l_upltext {fm, "", true}, l_datetext {fm, "", true};
+	::widgets::Label l_dur {fm, "Duration:"}, l_chap {fm, "Chapters:"},
+		l_upl {fm, "Uploader:"}, l_date {fm, "Upload date:"};
+	::widgets::Text l_durtext {fm, ""}, l_chaptext {fm, ""}, l_upltext {fm, ""}, l_datetext {fm, ""};
 	nana::picture thumb {fm};
 	::widgets::thumb_label thumb_label {fm};
 	::widgets::Separator sep1 {fm}, sep2 {fm};
@@ -62,6 +62,7 @@ void GUI::fm_formats()
 	fm["btncancel"] << btncancel;
 	fm["btnok"] << btnok;
 
+	thumb.stretchable(true);
 	cb_streams.check(conf.audio_multistreams);
 
 	list.sortable(false);
@@ -78,7 +79,7 @@ void GUI::fm_formats()
 	list.append_header("abr", dpi_scale(40));
 	list.append_header("tbr", dpi_scale(40));
 	list.append_header("asr", dpi_scale(50));
-	list.append_header("filesize", dpi_scale(cnlang ? 170 : 160));
+	list.append_header("filesize", dpi_scale(160));
 
 	list.events().selected([&](const arg_listbox &arg)
 	{
@@ -589,7 +590,7 @@ void GUI::fm_formats()
 		fm.system_theme(true);
 	else fm.dark_theme(conf.cbtheme == 0);
 
-	fm.center(1000, std::max(429.0 + list.item_count() * (cnlang ? 22.5 : 20.5), double(600)));
+	fm.center(1000, std::max(429.0 + list.item_count() * 20.5, double(600)));
 	api::track_window_size(fm, dpi_scale_size(900, 600), false);
 
 	fm.collocate();

@@ -68,10 +68,10 @@ void GUI::fm_playlist()
 	l_title.text_align(align::left, align_v::center);
 	tbfirst.caption("1");
 	tbfirst.text_align(align::center);
-	tbfirst.typeface(nana::paint::font_info {"", 11});
+	tbfirst.typeface(nana::paint::font_info {"Segoe UI", 11});
 	tblast.caption(std::to_string(max));
 	tblast.text_align(align::center);
-	tblast.typeface(nana::paint::font_info {"", 11});
+	tblast.typeface(nana::paint::font_info {"Segoe UI", 11});
 
 
 	lbv.sortable(false);

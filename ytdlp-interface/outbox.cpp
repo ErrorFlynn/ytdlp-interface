@@ -8,6 +8,7 @@ void GUI::Outbox::create(GUI *parent, bool visible)
 	editable(false);
 	line_wrapped(true);
 	set_undo_queue_length(0);
+	enable_border_focused(false);
 	highlight(pgui->conf.kwhilite);
 	scheme().mouse_wheel.lines = 3;
 	typeface(nana::paint::font_info {"Arial", 10});
@@ -31,7 +32,7 @@ void GUI::Outbox::create(GUI *parent, bool visible)
 		if(arg.button == mouse::right_button)
 		{
 			::widgets::Menu m;
-			m.item_pixels(pgui->dpi_scale(24));
+			m.item_pixels(24);
 
 			m.append("Copy to clipboard", [&, this](menu::item_proxy)
 			{

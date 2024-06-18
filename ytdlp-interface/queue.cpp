@@ -318,7 +318,7 @@ void GUI::make_queue_listbox()
 			dragstop_fn();
 		else if(arg.button == mouse::right_button)
 		{
-			auto url {pop_queue_menu(arg.pos.x, arg.pos.y)};
+			auto url {queue_pop_menu(arg.pos.x, arg.pos.y)};
 			if(!url.empty())
 			{
 				lbq.auto_draw(false);
@@ -337,13 +337,13 @@ void GUI::make_queue_listbox()
 }
 
 
-std::wstring GUI::pop_queue_menu(int x, int y)
+std::wstring GUI::queue_pop_menu(int x, int y)
 {
 	using namespace nana;
 
 	std::wstring url_of_item_to_delete;
 	::widgets::Menu m;
-	m.item_pixels(dpi_scale(24));
+	m.item_pixels(24);
 	auto sel {lbq.selected()};
 	if(!sel.empty() && !thr_menu.joinable())
 	{
@@ -526,9 +526,9 @@ std::wstring GUI::pop_queue_menu(int x, int y)
 				}
 				if(!stoppable.empty())
 				{
-					m.append("Stop all", [&, this](menu::item_proxy)
+					m.append("Stop all", [&](menu::item_proxy)
 					{
-						thr_menu = std::thread([&, this]
+						thr_menu = std::thread([&]
 						{
 							menu_working = true;
 							autostart_next_item = false;
@@ -619,17 +619,64 @@ std::wstring GUI::pop_queue_menu(int x, int y)
 	make_columns_menu(m.create_sub_menu(m.append("Extra columns").index()));
 	auto m2 {m.create_sub_menu(m.append("Website column").index())};
 
-	m2->append("Favicon", [&, this](menu::item_proxy)
+	m2->append("Favicon", [&](menu::item_proxy)
 	{
 		conf.col_site_icon = !conf.col_site_icon;
 		update_inline_widgets();
 	}).checked(conf.col_site_icon);
 
-	m2->append("Text", [&, this](menu::item_proxy)
+	m2->append("Text", [&](menu::item_proxy)
 	{
 		conf.col_site_text = !conf.col_site_text;
 		update_inline_widgets();
 	}).checked(conf.col_site_text);
+
+	m.append_splitter();
+	auto m3 {m.create_sub_menu(m.append("When finished...").index())};
+
+	auto warning_msg = [this](std::string action)
+	{
+		::widgets::msgbox mbox {*this, title};
+		mbox << "The process does not seem to have shutdown privilege, possibly because it's running in a non-administrator "
+			"user session. The program will attempt to " << action << ", but it might fail.";
+		mbox.icon(MB_ICONEXCLAMATION)();
+	};
+
+	m3->append("Shutdown", [&](menu::item_proxy)
+	{
+		pwr_shutdown = !pwr_shutdown;
+		pwr_hibernate = false;
+		pwr_sleep = false;
+		close_when_finished = false;
+		if(pwr_shutdown && !pwr_can_shutdown) warning_msg("shut down the system");
+	}).checked(pwr_shutdown);
+
+	m3->append("Hibernate", [&](menu::item_proxy)
+	{
+		pwr_hibernate = !pwr_hibernate;
+		pwr_sleep = false;
+		pwr_shutdown = false;
+		close_when_finished = false;
+		if(pwr_hibernate && !pwr_can_shutdown) warning_msg("initiate hibernation");
+	}).checked(pwr_hibernate).enabled(util::pwr_can_hibernate());
+
+	m3->append("Sleep", [&](menu::item_proxy)
+	{
+		pwr_sleep = !pwr_sleep;
+		pwr_hibernate = false;
+		pwr_shutdown = false;
+		close_when_finished = false;
+		if(pwr_sleep && !pwr_can_shutdown) warning_msg("put the system to sleep");
+	}).checked(pwr_sleep);
+
+	m3->append("Exit", [&](menu::item_proxy)
+	{
+		close_when_finished = !close_when_finished;
+		pwr_hibernate = false;
+		pwr_shutdown = false;
+		pwr_sleep = false;
+	}).checked(close_when_finished);
+
 
 	m.popup_await(lbq, x, y);
 	vidsel_item.m = nullptr;

@@ -12,18 +12,8 @@ void GUI::fm_sections()
 	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize>{}};
 	fm.caption(title + " - media sections");
 	fm.snap(conf.cbsnap);
-	if(cnlang) fm.center(800, 678);
-	else fm.center(788, 678);
-	if(cnlang) fm.div(R"(vert margin=[15,20,20,20] 
-		<weight=115 <l_help>> <weight=20> 
-		<weight=25
-			<l_start weight=154> <weight=10> <tbfirst weight=80> <weight=10> <l_end weight=16> <weight=10> <tbsecond weight=80>
-			<weight=20> <btnadd weight=100> <weight=20> <btnremove weight=150> <weight=20> <btnclear weight=90>
-		>
-		<weight=20> <lbs> <weight=20> 
-		<weight=35 <> <btnclose weight=100> <>>
-	)");
-	else fm.div(R"(vert margin=[15,20,20,20] 
+	fm.center(788, 678);
+	fm.div(R"(vert margin=[15,20,20,20] 
 		<weight=115 <l_help>> <weight=20> 
 		<weight=25
 			<l_start weight=142> <weight=10> <tbfirst weight=80> <weight=10> <l_end weight=16> <weight=10> <tbsecond weight=80>
@@ -40,7 +30,7 @@ void GUI::fm_sections()
 		{
 			multi_lines(false);
 			text_align(align::center);
-			typeface(paint::font_info {"", 11});
+			typeface(paint::font_info {"Segoe UI", 11});
 			caption("0");
 			set_accept([this](char c)
 			{

@@ -122,7 +122,7 @@ void Label::create(nana::window parent, std::string_view text, bool dpi_adjust)
 	label::create(parent);
 	caption(text);
 	fgcolor(theme::Label_fg);
-	typeface(nana::paint::font_info {"", 12 - (double)(nana::API::screen_dpi(true) > 96) * 2 * dpi_adjust});
+	typeface(nana::paint::font_info {"Segoe UI", 12 - (double)(nana::API::screen_dpi(true) > 96) * 2 * dpi_adjust});
 	text_align(nana::align::right, nana::align_v::center);
 	nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
 	events().expose([this] { fgcolor(theme::Label_fg); });
@@ -133,7 +133,7 @@ void Text::create(nana::window parent, std::string_view text, bool dpi_adjust)
 {
 	nana::label::create(parent, true);
 	fgcolor(theme::Text_fg);
-	typeface(nana::paint::font_info {"", 12 - (double)(nana::API::screen_dpi(true) > 96) * 2 * dpi_adjust});
+	typeface(nana::paint::font_info {"Segoe UI", 12 - (double)(nana::API::screen_dpi(true) > 96) * 2 * dpi_adjust});
 	text_align(nana::align::left, nana::align_v::center);
 	nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
 	events().expose([this]
@@ -196,7 +196,7 @@ void path_label::create(nana::window parent, const variant var)
 	is_path = std::holds_alternative<fs::path*>(v);
 	refresh_theme();
 	if(is_path) typeface(nana::paint::font_info {"Tahoma", 10});
-	else typeface(nana::paint::font_info {"", 11, {700}});
+	else typeface(nana::paint::font_info {"Segoe UI", 11, {700}});
 	text_align(nana::align::center, nana::align_v::center);
 	nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
 	nana::API::effects_edge_nimbus(*this, nana::effects::edge_nimbus::over);
@@ -249,7 +249,7 @@ void cbox::create(nana::window parent, std::string_view text)
 	checkbox::create(parent);
 	caption(text);
 	refresh_theme();
-	typeface(nana::paint::font_info {"", 12});
+	typeface(nana::paint::font_info {"Segoe UI", 12});
 	nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
 	events().expose([this] { refresh_theme(); });
 }
@@ -281,7 +281,7 @@ void Button::create(nana::window parent, std::string_view text, bool small)
 	button::create(parent);
 	caption(text);
 	refresh_theme();
-	typeface(nana::paint::font_info {"", small ? 11e0 : 14, {800}});
+	typeface(nana::paint::font_info {"Segoe UI", small ? 11e0 : 14, {800}});
 	enable_focus_color(false);
 	events().expose([this] { refresh_theme(); });
 }
@@ -469,7 +469,7 @@ void Progress::create(nana::window parent)
 {
 	nana::progress_ex::create(parent, true);
 	refresh_theme();
-	typeface(nana::paint::font_info {"", 11, {800}});
+	typeface(nana::paint::font_info {"Segoe UI", 11, {800}});
 	nana::paint::image img;
 	img.open(arr_progbar_jpg, sizeof arr_progbar_jpg);
 	image(img);
@@ -482,7 +482,7 @@ void Progress::refresh_theme()
 	if(theme::is_dark())
 	{
 		dark_bg(true);
-		outline_color(nana::color {"#345"});
+		outline_color(nana::color {"#2a3b5c"});
 		text_contrast_colors(theme::Label_fg, theme::Label_fg);
 		scheme().background = theme::fmbg.blend(nana::colors::black, .1);
 		scheme().lower_background = theme::fmbg.blend(nana::colors::white, .1);
@@ -577,6 +577,7 @@ unsigned Combox::my_renderer::item_pixels(graph_reference g) const
 void Combox::create(nana::window parent)
 {
 	combox::create(parent);
+	typeface(nana::paint::font_info {"Segoe UI", 9});
 	refresh_theme();
 	events().expose([this] { refresh_theme(); });
 	nana::drawing {*this}.draw([this](nana::paint::graphics &g)
@@ -706,7 +707,7 @@ void Overlay::create(nana::window parent, nana::widget *outbox, std::string_view
 	label::create(parent, visible);
 	fgcolor(theme::overlay_fg);
 	text_align(nana::align::center, nana::align_v::center);
-	typeface(nana::paint::font_info {"", 15, {700}});
+	typeface(nana::paint::font_info {"Segoe UI", 15, {700}});
 	nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
 	events().expose([this] { fgcolor(theme::overlay_fg); });
 	nana::drawing {*this}.draw([](nana::paint::graphics &g) { g.rectangle(false, theme::border); });
@@ -724,7 +725,7 @@ void Menu::menu_renderer::background(graph_reference graph, nana::window wd)
 		clr_border {theme::is_dark() ? "#A3A2A1" : "#666"},
 		bg_icon_area {theme::is_dark() ? "#43474e" : "#f6f6f6"};
 	graph.rectangle(true, bg_normal); // entire area
-	graph.rectangle({1,1,28,graph.height() - 2}, true, bg_icon_area); // icon area
+	graph.rectangle({1,1,unsigned(util::scale(28)),graph.height() - 2}, true, bg_icon_area); // icon area
 	graph.rectangle(false, clr_border); // border
 }
 
@@ -754,11 +755,11 @@ void Menu::menu_renderer::item(graph_reference g, const nana::rectangle &r, cons
 		g.set_pixel(r.x, r.y, bg_icon_area);
 		g.set_pixel(r.x, r.y + r.height - 1, bg_icon_area);
 	}
-	else g.rectangle({1,r.y,28,r.height}, true, bg_icon_area); // icon area
+	else g.rectangle({1,r.y,unsigned(scale(28)),r.height}, true, bg_icon_area); // icon area
 
 	if(attr.checked)
 	{
-		int sx {(28 - scale(8)) / 2},
+		int sx {(scale(28) - scale(8)) / 2},
 			sy {r.y + (static_cast<int>(r.height) - scale(4)) / 2};
 
 		g.palette(false, fg_normal);
@@ -783,6 +784,7 @@ void Menu::menu_renderer::item(graph_reference g, const nana::rectangle &r, cons
 void Menu::menu_renderer::item_text(graph_reference g, const nana::point &pos, const std::string &text, unsigned pixels, const attr &attr)
 {
 	auto size {g.text_extent_size(text)};
+	g.typeface(nana::paint::font_info {"Segoe UI", 9});
 	if(theme::is_dark())
 		g.string(pos, text, attr.enabled ? nana::colors::white : nana::color {"#aaa"});
 	else g.string(pos, text, attr.enabled ? nana::colors::black : nana::colors::gray_border);
@@ -792,10 +794,14 @@ void Menu::menu_renderer::item_text(graph_reference g, const nana::point &pos, c
 void Menu::menu_renderer::sub_arrow(graph_reference graph, const nana::point &pos, unsigned pixels, const attr &atr)
 {
 	using namespace nana;
-	facade<element::arrow> arrow {"hollow_triangle"};
-	arrow.direction(direction::east);
-	arrow.draw(graph, {}, theme::is_dark() ? colors::light_grey : colors::black,
-		{pos.x, pos.y + static_cast<int>(pixels - 16) / 2, 16, 16}, element_state::normal);
+	using util::scale;
+	int w {scale(5)}, h {scale(9)};
+	if(h%2 == 0) h++;
+	int l {(h - 1) / 2}, x {pos.x}, y {pos.y + (static_cast<int>(pixels) / 2 - scale(9) / 2)};
+	graph.palette(false, theme::is_dark() ? colors::light_grey : colors::black);
+	graph.line({x, y}, {x, y + h-1});
+	graph.line({x+1, y+1}, {x+l, y+l});
+	graph.line({x+1, y+h-2}, {x+l, y+l});
 }
 
 
@@ -965,7 +971,7 @@ void JSON_Tree::create(nana::window parent, const json &data, bool hide_null)
 	scheme().text_offset = 5;
 	scheme().icon_size = icon_size;
 	scheme().indent_displacement = 33;
-	typeface(nana::paint::font_info {"", 12});
+	typeface(nana::paint::font_info {"Segoe UI", 12});
 	placer(jtree_placer {placer()});
 	renderer(jtree_renderer {renderer()});
 	icon("json_light").normal.open(arr_json_light_ico, sizeof arr_json_light_ico);
@@ -1208,7 +1214,7 @@ void conf_tree::create(nana::window parent, nana::place *place, page_callback ca
 	use_entire_line(true);
 	scheme().text_offset = 5;
 	scheme().indent_displacement = 33;
-	typeface(nana::paint::font_info {"", 12});
+	typeface(nana::paint::font_info {"Segoe UI", 12});
 	placer(ctree_placer {placer()});
 	renderer(ctree_renderer {renderer()});
 	events().expose([this] { refresh_theme(); });
@@ -1499,7 +1505,7 @@ void thumb_label::create(nana::window parent, std::string_view text, bool visibl
 {
 	label::create(parent, visible);
 	text_align(nana::align::center, nana::align_v::center);
-	typeface(nana::paint::font_info {"", 14, {700}});
+	typeface(nana::paint::font_info {"Segoe UI", 14, {700}});
 	events().expose([this] { refresh_theme(); });
 	nana::drawing {*this}.draw([](nana::paint::graphics &g) { g.rectangle(false, theme::border); });
 }

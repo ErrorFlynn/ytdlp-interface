@@ -5,6 +5,8 @@
 #include <Netlistmgr.h>
 #include <WinInet.h>
 #include <TlHelp32.h>
+#include <powrprof.h>
+
 #include <iostream>
 #include <codecvt>
 
@@ -42,7 +44,7 @@ std::string util::int_to_filesize(std::uint64_t i, bool with_bytes)
 	return s;
 }
 
-std::string util::GetLastErrorStr(bool inet)
+std::string util::get_last_error_str(bool inet)
 {
 	std::string str(4096, '\0');
 	if(inet) str.resize(FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_FROM_HMODULE, 
@@ -254,17 +256,10 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 												playlist_complete = std::stod(playlist_line.substr(28, pos - 28));
 												playlist_total = std::stod(playlist_line.substr(pos + 4, playlist_line.size() - pos - 1));
 											}
-											if(percent != 100 || line.find(" in ") != -1)
+											if(chrono.elapsed_ms() >= 300 || percent == 100/* && (percent != 100 || line.find(" in ") != -1)*/)
 											{
-												if(playlist_total)
-												{
-													if(chrono.elapsed_ms() >= 300 || line.find(" in ") != -1)
-													{
-														chrono.reset();
-														cbprog(static_cast<ULONGLONG>(percent * 10), 1000, line.substr(pos2), playlist_complete - 1, playlist_total);
-													}
-												}
-												else cbprog(static_cast<ULONGLONG>(percent * 10), 1000, line.substr(pos2), playlist_complete - 1, playlist_total);
+												chrono.reset();
+												cbprog(static_cast<ULONGLONG>(percent * 10), 1000, line.substr(pos2), playlist_complete - 1, playlist_total);
 											}
 										}
 									} catch(...) {}
@@ -408,16 +403,16 @@ std::string util::get_inet_res(std::string res, std::string *error)
 				}
 				else
 				{
-					if(error) *error = GetLastErrorStr(true);
+					if(error) *error = get_last_error_str(true);
 					break;
 				}
 			}
 			InternetCloseHandle(hfile);
 		}
-		else if(error) *error = GetLastErrorStr(true);
+		else if(error) *error = get_last_error_str(true);
 		InternetCloseHandle(hinet);
 	}
-	else if(error) *error = GetLastErrorStr(true);
+	else if(error) *error = get_last_error_str(true);
 	return ret;
 }
 
@@ -467,16 +462,16 @@ std::string util::dl_inet_res(std::string res, fs::path fname, bool *working, st
 				}
 				else
 				{
-					ret = GetLastErrorStr(true);
+					ret = get_last_error_str(true);
 					break;
 				}
 			}
 			InternetCloseHandle(hfile);
 		}
-		else ret = GetLastErrorStr(true);
+		else ret = get_last_error_str(true);
 		InternetCloseHandle(hinet);
 	}
-	else ret = GetLastErrorStr(true);
+	else ret = get_last_error_str(true);
 
 	return ret;
 }
@@ -632,4 +627,46 @@ util::INTERNET_STATUS util::check_inet_connection()
 	}
 
 	return connectedStatus;
+}
+
+
+BOOL util::pwr_shutdown()
+{	
+	return ExitWindowsEx(EWX_POWEROFF | EWX_FORCE, SHTDN_REASON_MAJOR_APPLICATION | SHTDN_REASON_MINOR_OTHER | SHTDN_REASON_FLAG_PLANNED);
+}
+
+BOOL util::pwr_enable_shutdown_privilege()
+{
+	HANDLE hToken;
+	TOKEN_PRIVILEGES tkp;
+	if(OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken))
+	{
+		LookupPrivilegeValue(NULL, SE_SHUTDOWN_NAME, &tkp.Privileges[0].Luid);
+		tkp.PrivilegeCount = 1;
+		tkp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+		auto res {AdjustTokenPrivileges(hToken, FALSE, &tkp, 0, NULL, 0)};
+		if(res) res = GetLastError() == ERROR_SUCCESS;
+		CloseHandle(hToken);
+		return res;
+	}
+	return FALSE;
+}
+
+BOOL util::pwr_sleep()
+{
+	return SetSuspendState(0, 0, 0);
+}
+
+BOOL util::pwr_hibernate()
+{
+	return SetSuspendState(1, 0, 0);
+}
+
+bool util::pwr_can_hibernate()
+{
+	regkey regpwr {HKEY_LOCAL_MACHINE, "SYSTEM\\CurrentControlSet\\Control\\Power"};
+	auto hib_enabled {regpwr.get_dword("HibernateEnabled")};
+	if(hib_enabled != -1)
+		return hib_enabled == 1;
+	return false;
 }

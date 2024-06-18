@@ -55,7 +55,7 @@ fs::path GUI::gui_bottom::file_path()
 
 	fs::path file;
 	if(vidinfo_contains("filename"))
-		file = fs::u8path(std::string {vidinfo["filename"]});
+		file = fs::u8path(vidinfo["filename"].get<std::string>());
 
 	if(!file.empty())
 	{
@@ -208,7 +208,7 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 
 	plc.div(R"(vert
 			<prog weight=30> 
-			<separator weight=3px>
+			<separator weight=3>
 			<weight=20 <> <expcol weight=20>>
 			<gpopt weight=220> <gpopt_spacer weight=20>
 			<weight=35 <> <btn_ytfmtlist weight=190> <ytfmt_spacer weight=20> <btncopy weight=328> <btncopy_spacer weight=20> 
@@ -234,17 +234,7 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 
 	gpopt.size({10, 10}); // workaround for weird caption display bug
 
-	if(gui.cnlang) gpopt.div(R"(vert margin=20
-			<weight=25 <l_out weight=140> <l_outpath> > <weight=20>
-			<weight=25 
-				<l_rate weight=163> <tbrate weight=45> <weight=15> <com_rate weight=55> 
-				<> <cbchaps weight=153> <> <cbsplit weight=143> <> <cbkeyframes weight=213>
-			> <weight=20>
-			<weight=25 <cbtime weight=333> <> <cbthumb weight=168> <> <cbsubs weight=153> <> <cbmp3 weight=198>>
-			<weight=20> <weight=24 <cbargs weight=178> <weight=15> <com_args> <weight=10> <btnerase weight=24>>
-		)");
-
-	else gpopt.div(R"(vert margin=20
+	gpopt.div(R"(vert margin=20
 			<weight=25 <l_out weight=122> <weight=15> <l_outpath> > <weight=20>
 			<weight=25 
 				<l_rate weight=144> <weight=15> <tbrate weight=45> <weight=15> <com_rate weight=55> 
@@ -270,7 +260,18 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 	gpopt["com_args"] << com_args;
 	gpopt["btnerase"] << btnerase;
 
-	if(API::screen_dpi(true) > 96)
+	const auto dpi {API::screen_dpi(true)};
+	if(dpi >= 240)
+	{
+		btnerase.image(arr_erase48_png, sizeof arr_erase48_png);
+		btnerase.image_disabled(arr_erase48_disabled_png, sizeof arr_erase48_disabled_png);
+	}
+	else if(dpi >= 192)
+	{
+		btnerase.image(arr_erase32_png, sizeof arr_erase32_png);
+		btnerase.image_disabled(arr_erase32_disabled_png, sizeof arr_erase32_disabled_png);
+	}
+	else if(dpi > 96)
 	{
 		btnerase.image(arr_erase22_ico, sizeof arr_erase22_ico);
 		btnerase.image_disabled(arr_erase22_disabled_ico, sizeof arr_erase22_disabled_ico);
@@ -525,22 +526,63 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 			}
 		};
 
-		if(conf.outpaths.empty() || conf.outpaths.size() == 1 && *conf.outpaths.begin() == outpath)
+		auto pop_file_selection_box = [&gui, &conf, this]
+		{
+			nana::filebox fb {*this, false};
+			fb.allow_multi_select(false);
+			fb.title("Specify the name to give the downloaded file");
+			if(outfile.empty())
+			{
+				if(!vidinfo.empty() && vidinfo_contains("_filename"))
+				{
+					std::string fname {vidinfo["_filename"]};
+					if(vidinfo_contains("requested_formats") && vidinfo["requested_formats"].size() > 1)
+					{
+						auto pos {fname.rfind('.')};
+						if(pos != -1)
+							fname = fname.substr(0, pos);
+					}
+					fb.init_file(outpath / fname);
+				}
+				else fb.init_file(outpath / "type the file name here (this overrides the output template from settings)");
+			}
+			else fb.init_file(outpath / outfile.filename());
+			auto res {fb()};
+			if(res.size())
+			{
+				outfile = res.front();
+				outpath = conf.outpath = outfile.parent_path();
+				l_outpath.caption(outpath.u8string());
+				l_outpath.tooltip("Custom file name:\n<bold>" + outfile.filename().string() + 
+					"</>\n(this overrides the output template from the settings)");
+				if(conf.common_dl_options)
+					gui.bottoms.propagate_misc_options(*this);
+			}
+		};
+
+		::widgets::Menu m;
+		m.append("Choose folder...", [&](menu::item_proxy &)
 		{
 			pop_folder_selection_box();
+			if(conf.outpaths.size() >= 11 && conf.outpaths.find(outpath) == conf.outpaths.end())
+				conf.outpaths.erase(conf.outpaths.begin());
 			conf.outpaths.insert(outpath);
-		}
-		else
+		});
+
+		m.append("Choose folder and filename...", [&](menu::item_proxy &)
 		{
-			::widgets::Menu m;
-			m.append("Choose folder...", [&, this](menu::item_proxy &)
-			{
-				pop_folder_selection_box();
-				if(conf.outpaths.size() >= 11 && conf.outpaths.find(outpath) == conf.outpaths.end())
-					conf.outpaths.erase(conf.outpaths.begin());
-				conf.outpaths.insert(outpath);
-			});
-			m.append("Clear folder history", [&, this](menu::item_proxy &)
+			pop_file_selection_box();
+			if(conf.outpaths.size() >= 11 && conf.outpaths.find(outpath) == conf.outpaths.end())
+				conf.outpaths.erase(conf.outpaths.begin());
+			conf.outpaths.insert(outpath);
+		}).enabled(!url.empty() && !is_ytplaylist && !is_bcplaylist && !is_ytchan && !is_yttab && !is_bcchan);
+
+		if(!outfile.empty())
+			m.append("Clear custom filename", [&](menu::item_proxy &) { outfile.clear(); l_outpath.tooltip(""); });
+
+		if(conf.outpaths.size() > 1)
+		{
+			m.append("Clear folder history", [&](menu::item_proxy &)
 			{
 				conf.outpaths.clear();
 				conf.outpaths.insert(outpath);
@@ -550,7 +592,7 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 			{
 				if(path != outpath)
 				{
-					m.append(to_utf8(clip_text(path, gui.dpi_scale(250))), [&, this](menu::item_proxy &)
+					m.append(to_utf8(clip_text(path, gui.dpi_scale(250))), [&](menu::item_proxy &)
 					{
 						outpath = conf.outpath = path;
 						l_outpath.update_caption();
@@ -560,13 +602,12 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 					});
 				}
 			}
-			m.max_pixels(gui.dpi_scale(280));
-			m.item_pixels(gui.dpi_scale(24));
-			auto curpos {api::cursor_position()};
-			m.popup_await(nullptr, curpos.x - 142, curpos.y);
-			gui.queue_panel.focus();
 		}
-
+		m.max_pixels(gui.dpi_scale(280));
+		m.item_pixels(24);
+		auto curpos {api::cursor_position()};
+		m.popup_await(nullptr, curpos.x - 142, curpos.y);
+		gui.queue_panel.focus();
 	});
 
 	if(prevbot)
@@ -659,7 +700,7 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 		{
 			using namespace nana;
 			::widgets::Menu m;
-			m.item_pixels(util::scale(24));
+			m.item_pixels(24);
 
 			auto cliptext {util::get_clipboard_text()};
 
