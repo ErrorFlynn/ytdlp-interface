@@ -3,19 +3,19 @@ This is a Windows graphical interface for [yt-dlp](https://github.com/yt-dlp/yt-
 
 To use, unpack the archive in a new folder at a location of your choice, and run `ytdlp-interface.exe`.
 
-Download link for the latest version (64 bit): https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v2.11.1/ytdlp-interface.7z
+Download link for the latest version (64 bit): https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v2.12.0/ytdlp-interface.7z
 
-32 bit build: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v2.11.1/ytdlp-interface_x86.7z
+32 bit build: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v2.12.0/ytdlp-interface_x86.7z
 
 
 ---
 
 ## Building the source
-The project depends on three static libraries: [Nana C++ GUI library](https://github.com/cnjinhao/nana) v1.8 or later (at the time I'm writing this v1.8 is in development, so you must build branch `develop-1.8`), [libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo), and [bit7z](https://github.com/rikyoz/bit7z). To build Nana with JPEG support see [this thread](http://nanapro.org/en-us/forum/index.php?u=/topic/1368/ggjpg).
+The project depends on three static libraries: [Nana C++ GUI library](https://github.com/cnjinhao/nana) v1.8 or later (at the time I'm writing this v1.8 is in development, so you must build branch `develop-1.8`), [libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo), and [bit7z](https://github.com/rikyoz/bit7z).
+
+The project uses a modified version of the Nana library (the file `nana-develop-1.8 (2024-05-06) ytdlp-interface mod.7z`). You can still link against the original library, but the modified version has features and behaviors not present in the original (as of June 2024). Most importantly, the modified library ensures that all interface elements follow the chosen color scheme, and that most interface elements scale properly with the system scale factor.
 
 The program also uses [JSON for modern C++](https://github.com/nlohmann/json) to get video info from `yt-dlp.exe` and to read/write the settings file, but that's just a header file that's included in the project (you can replace it with its latest version if you really want to).
-
-The easiest way to build the project is to open the solution file with Visual Studio 2019 or later. If that's not an option, you're a resourceful individual, I'm sure you'll come up with something (that's as far as my support goes, sorry).
 
 ---
 
