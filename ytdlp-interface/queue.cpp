@@ -2,13 +2,16 @@
 #include <codecvt>
 
 
-void GUI::make_queue_listbox()
+void GUI::queue_make_listbox()
 {
 	using namespace nana;
 	using namespace util;
+	using ::widgets::theme;
 
 	lbq.sortable(false);
-	lbq.typeface(nana::paint::font_info {"Calibri", 12});
+	lbq.hilight_checked(true);
+	lbq.column_movable(false);
+	lbq.typeface(paint::font_info {"Calibri", 12});
 	lbq.scheme().item_height_ex = 8;
 	lbq.append_header("#", scale(30));
 	lbq.append_header("Website", scale(20 + !conf.col_site_text * 10) * conf.col_site_icon + scale(110) * conf.col_site_text);
@@ -43,7 +46,7 @@ void GUI::make_queue_listbox()
 		if(hovered.empty())
 		{
 			lbq_can_drag = false;
-			if(last_selected)
+			if(arg.is_left_button() && last_selected)
 			{
 				if(arg.pos.y > dpi_scale(21)) // if below header
 					last_selected = nullptr;
@@ -67,10 +70,7 @@ void GUI::make_queue_listbox()
 				if(last_selected && last_selected->value<lbqval_t>() == url)
 				{
 					if(!hovitem.selected())
-					{
-						lbq_no_action = true;
 						hovitem.select(true);
-					}
 				}
 			}
 			else lbq_can_drag = false;
@@ -87,28 +87,18 @@ void GUI::make_queue_listbox()
 			{
 				item = arg.item;
 				last_selected = &item;
-				if(!lbq_no_action)
+				const auto &url {arg.item.value<lbqval_t>().url};
+				if(url != bottoms.visible())
 				{
-					const auto &url {arg.item.value<lbqval_t>().url};
-					if(url != bottoms.visible())
-					{
-						bottoms.show(url);
-						outbox.current(url);
-						qurl = url;
-						l_url.update_caption();
-					}
+					bottoms.show(url);
+					outbox.current(url);
+					qurl = url;
+					l_url.update_caption();
 				}
-				else lbq_no_action = false;
 			}
 		}
-		else
-		{
-			if(last_selected == nullptr)
-			{
-				lbq_no_action = true;
-				arg.item.select(true);
-			}
-		}
+		else if(last_selected == nullptr)
+			arg.item.select(true);
 	});
 
 	lbq.set_deselect([&](mouse btn) { return !(btn == mouse::right_button); });
@@ -155,6 +145,7 @@ void GUI::make_queue_listbox()
 
 				lbqval_t selval {lb.at(selected.item).value<lbqval_t>()};
 				std::string sel_favicon_url {lbq.favicon_url_from_value(selval)};
+				bool selcheck {lb.at(selected.item).checked()};
 
 				auto hovitem {lb.at(hovered.item)};
 
@@ -163,19 +154,21 @@ void GUI::make_queue_listbox()
 				{
 					for(auto n {selected.item}; n > hovered.item; n--)
 					{
-						const auto &val {lb.at(n - 1).value<lbqval_t>()};
-						lb.at(n).value(val);
-						lb.at(n).text(1, lb.at(n - 1).text(1));
-						lb.at(n).text(2, lb.at(n - 1).text(2));
-						lb.at(n).text(3, lb.at(n - 1).text(3));
-						lb.at(n).text(4, lb.at(n - 1).text(4));
-						lb.at(n).text(5, lb.at(n - 1).text(5));
-						lb.at(n).text(6, lb.at(n - 1).text(6));
-						lb.at(n).text(7, lb.at(n - 1).text(7));
+						auto item {lb.at(n)}, prev_item {lb.at(n - 1)};
+						const auto &val {prev_item.value<lbqval_t>()};
+						item.value(val);
+						item.text(1, prev_item.text(1));
+						item.text(2, prev_item.text(2));
+						item.text(3, prev_item.text(3));
+						item.text(4, prev_item.text(4));
+						item.text(5, prev_item.text(5));
+						item.text(6, prev_item.text(6));
+						item.text(7, prev_item.text(7));
+						item.check(prev_item.checked());
 						if(!conf.common_dl_options)
-							bottoms.at(val).gpopt.caption("Download options for queue item #" + lb.at(n).text(0));
-						lb.at(n).fgcolor(lbq.fgcolor());
-						lb.at(n).select(false);
+							bottoms.at(val).gpopt.caption("Download options for queue item #" + item.text(0));
+						item.fgcolor(item.checked() ? theme::list_check_highlight_fg : lbq.fgcolor());
+						item.select(false);
 					}
 					if(autoscroll)
 					{
@@ -204,19 +197,21 @@ void GUI::make_queue_listbox()
 				{
 					for(auto n(selected.item); n < hovered.item; n++)
 					{
-						const auto &val {lb.at(n + 1).value<lbqval_t>()};
-						lb.at(n).value(val);
-						lb.at(n).text(1, lb.at(n + 1).text(1));
-						lb.at(n).text(2, lb.at(n + 1).text(2));
-						lb.at(n).text(3, lb.at(n + 1).text(3));
-						lb.at(n).text(4, lb.at(n + 1).text(4));
-						lb.at(n).text(5, lb.at(n + 1).text(5));
-						lb.at(n).text(6, lb.at(n + 1).text(6));
-						lb.at(n).text(7, lb.at(n + 1).text(7));
+						auto item {lb.at(n)}, next_item {lb.at(n + 1)};
+						const auto &val {next_item.value<lbqval_t>()};
+						item.value(val);
+						item.text(1, next_item.text(1));
+						item.text(2, next_item.text(2));
+						item.text(3, next_item.text(3));
+						item.text(4, next_item.text(4));
+						item.text(5, next_item.text(5));
+						item.text(6, next_item.text(6));
+						item.text(7, next_item.text(7));
+						item.check(next_item.checked());
 						if(!conf.common_dl_options)
-							bottoms.at(val).gpopt.caption("Download options for queue item #" + lb.at(n).text(0));
-						lb.at(n).fgcolor(lbq.fgcolor());
-						lb.at(n).select(false);
+							bottoms.at(val).gpopt.caption("Download options for queue item #" + item.text(0));
+						item.fgcolor(item.checked() ? theme::list_check_highlight_fg : lbq.fgcolor());
+						item.select(false);
 					}
 					if(autoscroll)
 					{
@@ -243,6 +238,7 @@ void GUI::make_queue_listbox()
 					}
 				}
 				hovitem.value(selval);
+				hovitem.check(selcheck);
 				hovitem.text(1, seltext1);
 				hovitem.text(2, seltext2);
 				hovitem.text(3, seltext3);
@@ -265,7 +261,7 @@ void GUI::make_queue_listbox()
 		auto sel {lbq.selected()};
 		if(sel.empty()) return;
 		auto selitem {lbq.at(sel[0])};
-		selitem.fgcolor(lbq.fgcolor());
+		selitem.fgcolor(selitem.checked() ? theme::list_check_highlight_fg : lbq.fgcolor());
 		lbq.auto_draw(true);
 		if(scroll_up_timer.started()) scroll_up_timer.stop();
 		if(scroll_down_timer.started()) scroll_down_timer.stop();
@@ -365,10 +361,13 @@ std::wstring GUI::queue_pop_menu(int x, int y)
 				const auto text {item.text(3)};
 				if(text == "done")
 					completed.push_back(item.value<lbqval_t>().url);
-				else if(text.find("stopped") == -1 && text.find("queued") == -1 && text.find("error") == -1)
+				else if(text.find("stopped") == -1 && text.find("queued") == -1 && text.find("error") == -1 && text.find("skip") == -1)
 					stoppable.push_back(item);
 				else startable.push_back(item);
 			}
+
+			if(vidsel_item.m)
+				vidsel_item.m = &m;
 
 			auto verb {bottom.btndl.caption().substr(0, 5)};
 			if(verb.back() == ' ')
@@ -427,7 +426,7 @@ std::wstring GUI::queue_pop_menu(int x, int y)
 			if(item.text(3) != "error" || !bottom.vidinfo.empty())
 			{
 				m.append_splitter();
-				if(bottom.is_ytplaylist || bottom.is_bcplaylist)
+				if(bottom.is_ytplaylist || bottom.is_bcplaylist || bottom.is_scplaylist)
 				{
 					auto count {bottom.playlist_selection.size()};
 					std::string item_text {(bottom.is_ytplaylist ? "Select videos (" : "Select songs (") + (count && !bottom.playlist_info.empty() ?
@@ -435,7 +434,7 @@ std::wstring GUI::queue_pop_menu(int x, int y)
 					auto item = m.append(item_text, [this](menu::item_proxy)
 					{
 						fm_playlist();
-					});
+					}).enabled(count && !bottom.playlist_info.empty());
 					auto playlist_size {bottom.playlist_info["entries"].size()};
 					if(!count || bottom.playlist_info.empty())
 					{
@@ -445,7 +444,7 @@ std::wstring GUI::queue_pop_menu(int x, int y)
 				}
 				else if(bottom.is_yttab)
 				{
-					m.append("Treat as playlist", [&, url, this](menu::item_proxy)
+					m.append("Treat as playlist", [&, url](menu::item_proxy)
 					{
 						bottom.is_ytplaylist = true;
 						add_url(url, true);
@@ -473,10 +472,31 @@ std::wstring GUI::queue_pop_menu(int x, int y)
 				{
 					fm_json();
 				});
-				jitem.enabled(!bottom.vidinfo.empty() || !bottom.playlist_info.empty());
+				//jitem.enabled(!bottom.vidinfo.empty() || !bottom.playlist_info.empty());
+				jitem.enabled(item.text(2) != "...");
 				if(!jitem.enabled())
-					vidsel_item = {&m, vidsel_item.pos};
+					vidsel_item = {&m, vidsel_item.pos};				
 			}
+
+			if(item.text(2) != "...")
+			{
+				m.append("Refresh (reacquire data)", [&, url](menu::item_proxy ip)
+				{
+					vidsel_item = {&m, vidsel_item.pos};
+					bottom.show_btnfmt(false);
+					add_url(url, true);
+				});
+			}
+
+			if(std::find(startable.begin(), startable.end(), item) != startable.end())
+				m.append("Do not download", [&](menu::item_proxy)
+				{
+					item.check(!item.checked());
+					if(item.checked())
+						item.text(3, "skip");
+					else item.text(3, "queued");
+					lbq.refresh_theme();
+				}).checked(item.checked());
 
 			if(lbq.at(0).size() > 1)
 			{
@@ -559,13 +579,22 @@ std::wstring GUI::queue_pop_menu(int x, int y)
 		{
 			auto sel {lbq.selected()};
 			std::vector<std::wstring> startables, stoppables;
+			std::vector<drawerbase::listbox::item_proxy> startables_not_done, skippers;
 
 			for(auto &ip : sel)
 			{
-				auto url {lbq.at(ip).value<lbqval_t>().url};
+				auto item {lbq.at(ip)};
+				auto url {item.value<lbqval_t>().url};
 				if(bottoms.at(url).started())
 					stoppables.push_back(url);
-				else startables.push_back(url);
+				else if(item.checked())
+					skippers.push_back(item);
+				else 
+				{
+					startables.push_back(url);
+					if(item.text(3) != "done")
+						startables_not_done.push_back(item);
+				}
 			}
 
 			std::string cmdtext {"Start/stop selected"};
@@ -602,6 +631,68 @@ std::wstring GUI::queue_pop_menu(int x, int y)
 			{
 				queue_remove_selected();
 			});
+
+			m.append("Refresh selected", [&, sel](menu::item_proxy)
+			{
+				vidsel_item = {&m, sel.front().item};
+				for(auto &el : sel)
+				{
+					auto item {lbq.at(el)};
+					auto url {item.value<lbqval_t>().url};
+					bottoms.at(url).show_btnfmt(false);
+					add_url(url, true);
+				}
+			});
+
+			if(!skippers.empty() || !startables_not_done.empty())
+				m.append_splitter();
+
+			if(!startables_not_done.empty())
+			{
+				m.append("Do not download", [startables_not_done, this](menu::item_proxy)
+				{
+					lbq.auto_draw(false);
+					for(auto item : startables_not_done)
+					{
+						item.text(3, "skip");
+						item.check(true);
+					}
+					lbq.refresh_theme();
+				});
+			}
+
+			if(!skippers.empty())
+			{
+				m.append("Make downloadable", [skippers, this](menu::item_proxy)
+				{
+					lbq.auto_draw(false);
+					for(auto item : skippers)
+					{
+						item.text(3, "queued");
+						item.check(false);
+					}
+					lbq.refresh_theme();
+				});
+			}
+
+			if(!skippers.empty() && !startables_not_done.empty())
+			{
+				m.append("Toggle download ability", [startables_not_done, skippers, this](menu::item_proxy)
+				{
+					lbq.auto_draw(false);
+					for(auto item : startables_not_done)
+					{
+						item.text(3, "skip");
+						item.check(true);
+					}
+					for(auto item : skippers)
+					{
+						item.text(3, "queued");
+						item.check(false);
+					}
+					lbq.refresh_theme();
+				});
+			}
 		}
 
 		m.append_splitter();

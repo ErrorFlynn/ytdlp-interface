@@ -7,113 +7,136 @@ bool theme::dark {false};
 double theme::shade {0};
 std::string theme::gpfg;
 
-nana::color theme::nimbus, theme::fmbg, theme::Label_fg, theme::Text_fg, theme::Text_fg_error, theme::cbox_fg, theme::btn_bg, theme::btn_fg, 
-	theme::path_bg, theme::path_fg, theme::path_link_fg, theme::sep_bg, theme::tbfg, theme::tbbg, theme::tbkw, theme::tbkw_id, 
+nana::color theme::nimbus, theme::fmbg, theme::Label_fg, theme::Text_fg, theme::Text_fg_error, theme::cbox_fg, theme::btn_bg,  
+	theme::btn_fg, theme::path_fg, theme::path_link_fg, theme::sep_bg, theme::tbfg, theme::tbkw, theme::tbkw_id, 
 	theme::tbkw_special, theme::tbkw_warning, theme::tbkw_error, theme::gpbg, theme::lb_headerbg, theme::title_fg, theme::overlay_fg, 
 	theme::border, theme::tb_selbg, theme::tb_selbg_unfocused, theme::expcol_fg, theme::tree_selbg, theme::tree_selfg, theme::tree_hilitebg, 
 	theme::tree_hilitefg, theme::tree_selhilitebg, theme::tree_selhilitefg, theme::tree_parent_node, theme::tree_expander, 
 	theme::tree_expander_hovered, theme::tree_bg, theme::tree_key_fg, theme::tree_val_fg, theme::list_check_highlight_fg, 
-	theme::list_check_highlight_bg, theme::msg_label_fg;
+	theme::list_check_highlight_bg, theme::msg_label_fg, theme::lbbg, theme::lbselfg, theme::lbselbg, theme::lbhilite, theme::lbfg;
 
-void theme::make_light()
+
+void widgets::theme::import(const theme_t &src)
+{
+	nimbus = src.nimbus;
+	fmbg = src.fmbg;
+	lbbg = src.lbbg;
+	btn_bg = src.btn_bg;
+	gpbg = src.gpbg;
+	tbfg = src.tbfg;
+	Label_fg = src.Label_fg;
+	Text_fg = src.Text_fg;
+	Text_fg_error = src.Text_fg_error;
+	cbox_fg = src.cbox_fg;
+	btn_fg = src.btn_fg;
+	path_fg = src.path_fg;
+	path_link_fg = src.path_link_fg;
+	sep_bg = src.sep_bg;
+	expcol_fg = src.expcol_fg;
+	gpfg = src.gpfg;
+	title_fg = src.title_fg;
+	tbkw = src.tbkw;
+	tbkw_id = src.tbkw_id;
+	tbkw_special = src.tbkw_special;
+	tbkw_warning = src.tbkw_warning;
+	tbkw_error = src.tbkw_error;
+	overlay_fg = src.overlay_fg;
+	border = src.border;
+	tb_selbg = src.tb_selbg;
+	tb_selbg_unfocused = src.tb_selbg_unfocused;
+	tree_selbg = src.tree_selbg;
+	tree_selfg = src.tree_selfg;
+	tree_hilitebg = src.tree_hilitebg;
+	tree_hilitefg = src.tree_hilitefg;
+	tree_selhilitebg = src.tree_selhilitebg;
+	tree_selhilitefg = src.tree_selfg;
+	tree_parent_node = src.tree_parent_node;
+	tree_expander = src.tree_expander;
+	tree_expander_hovered = src.tree_expander_hovered;
+	tree_bg = src.tree_bg;
+	tree_key_fg = src.tree_key_fg;
+	tree_val_fg = src.tree_val_fg;
+	list_check_highlight_fg = src.list_check_highlight_fg;
+	list_check_highlight_bg = src.list_check_highlight_bg;
+	msg_label_fg = src.msg_label_fg;
+	lb_headerbg = src.lb_headerbg;
+	lbselbg = src.lbselbg;
+	lbselfg = src.lbselfg;
+	lbhilite = src.lbhilite;
+	lbfg = src.lbfg;
+}
+
+void theme::copy(theme_t &dest)
+{
+	dest.nimbus = nimbus;
+	dest.fmbg = fmbg;
+	dest.lbbg = lbbg;
+	dest.btn_bg = btn_bg;
+	dest.gpbg = gpbg;
+	dest.tbfg = tbfg;
+	dest.Label_fg = Label_fg;
+	dest.Text_fg = Text_fg;
+	dest.Text_fg_error = Text_fg_error;
+	dest.cbox_fg = cbox_fg;
+	dest.btn_fg = btn_fg;
+	//dest.path_bg = path_bg;
+	dest.path_fg = path_fg;
+	dest.path_link_fg = path_link_fg;
+	dest.sep_bg = sep_bg;
+	dest.expcol_fg = expcol_fg;
+	dest.gpfg = gpfg;
+	dest.title_fg = title_fg;
+	dest.tbkw = tbkw;
+	dest.tbkw_id = tbkw_id;
+	dest.tbkw_special = tbkw_special;
+	dest.tbkw_warning = tbkw_warning;
+	dest.tbkw_error = tbkw_error;
+	dest.overlay_fg = overlay_fg;
+	dest.border = border;
+	dest.tb_selbg = tb_selbg;
+	dest.tb_selbg_unfocused = tb_selbg_unfocused;
+	dest.tree_selbg = tree_selbg;
+	dest.tree_selfg = tree_selfg;
+	dest.tree_hilitebg = tree_hilitebg;
+	dest.tree_hilitefg = tree_hilitefg;
+	dest.tree_selhilitebg = tree_selhilitebg;
+	dest.tree_selfg = tree_selhilitefg;
+	dest.tree_parent_node = tree_parent_node;
+	dest.tree_expander = tree_expander;
+	dest.tree_expander_hovered = tree_expander_hovered;
+	dest.fmbg = tree_bg;
+	dest.tree_key_fg = tree_key_fg;
+	dest.tree_val_fg = tree_val_fg;
+	dest.list_check_highlight_fg = list_check_highlight_fg;
+	dest.list_check_highlight_bg = list_check_highlight_bg;
+	dest.msg_label_fg = msg_label_fg;
+	dest.lb_headerbg = lb_headerbg;
+	dest.lbselbg = lbselbg;
+	dest.lbselfg = lbselfg;
+	dest.lbhilite = lbhilite;
+	dest.lbfg = lbfg;
+}
+
+
+void theme::make_light(const theme_t &src)
 {
 	dark = false;
-	using namespace nana;
-	nimbus = color {"#60c8fd"};
-	fmbg = btn_bg = tbbg = color {colors::white}.blend(colors::light_grey, .3 - shade);
-	gpbg = fmbg.blend(colors::black, .025);
-	tbfg = colors::black;
-	Label_fg = color {"#569"};
-	Text_fg = color {"#575"};
-	Text_fg_error = color {"#a55"};
-	cbox_fg = color {"#458"};
-	btn_fg = color {"#67a"};
-	path_bg = color {"#eef6ee"}.blend(colors::light_grey, .3 - shade);
-	path_fg = color {"#354"};
-	path_link_fg = color {"#789"};
-	sep_bg = color {"#cdcdcd"};
-	expcol_fg = color {"#aaa"};
-	gpfg = "0x81544F";
-	title_fg = color {"#789"};
-	tbkw = color {"#272"};
-	tbkw_id = color {"#777"};
-	tbkw_special = color {"#722"};
-	tbkw_warning = color {"#B96C00"};
-	tbkw_error = color {"#aa2222"};
-	overlay_fg = color {"#bcc0c3"};
-	border = color {"#9CB6C5"};
-	tb_selbg = color {"#5695D3"};
-	tb_selbg_unfocused = tb_selbg.blend(nana::colors::white, .3);
-	tree_selbg = color {"#eaf0f6"};
-	tree_selfg = color {"#97aeb4"};
-	tree_hilitebg = color {"#e7eef4"};
-	tree_hilitefg = color {"#d7dee4"};
-	tree_selhilitebg = tree_selbg.blend(colors::gray, .1);
-	tree_selhilitefg = color {"#B6E6FB"};
-	tree_parent_node = color {"#909090"};
-	tree_expander = colors::black;
-	tree_expander_hovered = colors::deep_sky_blue;
-	tree_bg = fmbg;
-	tree_key_fg = color {"#459"};
-	tree_val_fg = color {"#474"};
-	list_check_highlight_fg = color {"#036"};
-	list_check_highlight_bg = color {"#D5D8e0"};
-	msg_label_fg = color {"#457"};
+	import(src);
 }
 
 
-void theme::make_dark()
+void theme::make_dark(const theme_t &src)
 {
 	dark = true;
-	using namespace nana;
-	nimbus = color {"#cde"};
-	fmbg = color {"#2c2b2b"}.blend(colors::black, shade);
-	tbbg = fmbg.blend(colors::black, .035);
-	gpbg = fmbg.blend(colors::white, .035);
-	tbfg = color {"#f7f7f4"};
-	btn_bg = color {"#2e2d2d"}.blend(colors::black, shade);
-	Label_fg = btn_fg = cbox_fg = color {"#e6e6e3"};
-	Text_fg = color {"#def"};
-	Text_fg_error = color {"#f99"};
-	path_bg = color {"#383737"}.blend(colors::black, shade);
-	path_fg = colors::white;
-	sep_bg = color {"#777"};
-	expcol_fg = color {"#999"};
-	gpfg = "0xE4D6BA";
-	lb_headerbg = color {"#525658"}.blend(colors::black, shade);
-	title_fg = nana::color {"#cde"};
-	path_link_fg = color {"#E4D6BA"};
-	tbkw = color {"#b5c5d5"};
-	tbkw_id = color {"#ccc"};
-	tbkw_special = color {"#F0B0A0"};
-	tbkw_warning = color {"#EEBF00"};
-	tbkw_error = color {"#CA86E3"};
-	overlay_fg = border = color {"#666"};
-	tb_selbg = color {"#95443B"};
-	tb_selbg_unfocused = tb_selbg.blend(nana::colors::black, .3);
-	tree_selbg = color {"#354F5C"};
-	tree_selfg = color {"#569EBD"};
-	tree_hilitebg = color {"#28353D"};
-	tree_hilitefg = color {"#48606A"};
-	tree_selhilitebg = color {"#253F4C"};
-	tree_selhilitefg = color {"#468EAD"};
-	tree_parent_node = color {"#ddd"};
-	tree_expander = colors::white;
-	tree_expander_hovered = color {"#ade"};
-	tree_bg = gpbg;
-	tree_key_fg = color {"#ebebe3"};
-	tree_val_fg = color {"#d8e8ff"};
-	list_check_highlight_fg = colors::white;
-	list_check_highlight_bg = color {"#6D4941"};
-	msg_label_fg = Label_fg;
+	import(src);
 }
 
 
-void theme::contrast(double factor)
+void theme::contrast(double factor, theme_t &src)
 {
 	shade = std::clamp(factor, .0, .3);
-	if(dark) make_dark();
-	else make_light();
+	src.contrast(shade, dark);
+	import(src);
 }
 
 
@@ -206,7 +229,7 @@ void path_label::create(nana::window parent, const variant var)
 	nana::drawing {*this}.draw([this](nana::paint::graphics &g)
 	{
 		if(theme::is_dark())
-			g.rectangle(false, theme::path_bg.blend(nana::colors::white, .3));
+			g.rectangle(false, theme::fmbg.blend(nana::colors::white, .3));
 		else g.rectangle(false, nana::color {"#9aa"});
 	});
 }
@@ -298,29 +321,6 @@ void Button::refresh_theme()
 }
 
 
-void Button::cancel_mode(bool enable)
-{
-	if(enable)
-	{
-		if(theme::is_dark())
-		{
-			fgcolor(nana::color {"#E4D6BA"});
-			scheme().activated = nana::color {"#E4D6BA"};
-		}
-		else
-		{
-			fgcolor(nana::color {"#966"});
-			scheme().activated = nana::color {"#a77"};
-		}
-	}
-	else
-	{
-		fgcolor(theme::btn_fg);
-		scheme().activated = theme::nimbus;
-	}
-}
-
-
 void Button::image(const void *data, unsigned size)
 {
 	img.open(data, size);
@@ -402,8 +402,8 @@ nana::drawerbase::listbox::item_proxy Listbox::item_from_value(std::wstring val,
 void Listbox::refresh_theme()
 {
 	using namespace nana;
-	bgcolor(theme::tbbg);
-	fgcolor(theme::tbfg);
+	bgcolor(theme::lbbg);
+	fgcolor(theme::lbfg);
 	dw.draw([](paint::graphics &g) { g.rectangle(false, theme::border); });
 
 	if(theme::is_dark())
@@ -412,32 +412,32 @@ void Listbox::refresh_theme()
 		scheme().header_bgcolor = theme::lb_headerbg;
 		scheme().header_fgcolor = colors::white;
 		scheme().cat_fgcolor = theme::nimbus;
-		scheme().item_selected = color {"#AC4F44"};
-		scheme().item_selected_border = color {"#B05348"}.blend(colors::black, .15);
+		scheme().item_selected = theme::lbselbg;
+		scheme().item_selected_border = theme::lbselfg.blend(colors::black, .15);
 		if(hicontrast)
-			scheme().item_highlighted = color {"#544"}.blend(colors::light_grey, .15 - theme::contrast() / 2);
-		else scheme().item_highlighted = color {"#544"};
+			scheme().item_highlighted = theme::lbhilite.blend(colors::light_grey, .15 - theme::contrast() / 2);
+		else scheme().item_highlighted = theme::lbhilite;
 	}
 	else
 	{
 		borderless(false);
-		scheme().header_bgcolor = color {"#f1f2f4"};
+		scheme().header_bgcolor = theme::lb_headerbg;
 		scheme().header_fgcolor = colors::black;
 		scheme().cat_fgcolor = color {"#039"};
 		auto c {theme::contrast()};
-		scheme().item_selected = color {"#c7dEe4"}.blend(colors::grey, .1 - c);
-		scheme().item_selected_border = color {"#a7cEd4"}.blend(colors::grey, .1 - c);
-		scheme().item_highlighted = color {"#eee"}.blend(colors::dark_grey, .25 - c / 2);
+		scheme().item_selected = theme::lbselbg.blend(colors::grey, .1 - c);
+		scheme().item_selected_border = theme::lbselfg.blend(colors::grey, .1 - c);
+		scheme().item_highlighted = theme::lbhilite.blend(colors::dark_grey, .25 - c / 2);
 		dw.clear();
 	}
 	if(hilite_checked)
 	{
-		auto chk {checked()};
-		for(const auto &el : chk)
+		auto_draw(false);
+		for(auto el : at(0))
 		{
-			at(el).fgcolor(theme::list_check_highlight_fg);
-			at(el).bgcolor(theme::list_check_highlight_bg);
+			el.fgcolor(el.checked() ? theme::list_check_highlight_fg : fgcolor());
 		}
+		auto_draw(true);
 	}
 }
 
@@ -533,23 +533,25 @@ void Group::refresh_theme()
 }
 
 
-void Combox::my_renderer::item(widget_reference, graph_reference g, const nana::rectangle &r, const item_interface *ii, state_t state)
+void Combox::my_renderer::item(widget_reference wdg, graph_reference g, const nana::rectangle &r, const item_interface *ii, state_t state)
 {
+	using namespace nana;
 	const unsigned margin {8};
 	const auto &img {ii->image()};
-	const nana::color fg_normal {"#e6e6e3"};
-	const nana::color fg_hilighted {nana::colors::white};
-	const nana::color bg_normal {"#33373e"};
-	const nana::color bg_hilighted {"#A94c41"};
+	const color fg_normal {theme::lbfg},
+	            bg_normal {theme::is_dark() ? theme::fmbg.blend(colors::white, .08) : theme::fmbg},
+	            bg_hilighted {theme::lbselbg},
+	            bg_icon_area {theme::is_dark() ? theme::fmbg.blend(colors::white, .18) : theme::fmbg.blend(colors::black, .03)};
 
 	g.rectangle(r, true, bg_normal);
 	if(state == StateHighlighted)
 	{
-		g.rectangle(r, false, bg_hilighted.blend(nana::colors::white, .1));
-		g.rectangle(nana::rectangle {r}.pare_off(1), false, bg_hilighted.blend(nana::colors::black, .4));
+		const auto clr_blend {theme::is_dark() ? colors::black : colors::white};
+		g.rectangle(r, false, theme::lbselfg);
+		g.rectangle(rectangle {r}.pare_off(1), false, bg_hilighted.blend(clr_blend, .4));
 		g.palette(false, bg_normal);
-		nana::paint::draw {g}.corner(r, 1);
-		g.gradual_rectangle(nana::rectangle {r}.pare_off(2), bg_hilighted, bg_hilighted.blend(nana::colors::black, .25), true);
+		paint::draw {g}.corner(r, 1);
+		g.gradual_rectangle(rectangle {r}.pare_off(2), bg_hilighted, bg_hilighted.blend(clr_blend, .25), true);
 	}
 	auto size {g.text_extent_size(ii->text())};
 	auto pos {r.position()};
@@ -557,11 +559,11 @@ void Combox::my_renderer::item(widget_reference, graph_reference g, const nana::
 	if(!img.empty())
 	{
 		int yoff {static_cast<int>(r.height / 2) - 8};
-		img.stretch(nana::rectangle {img.size()}, g, {pos.x, pos.y + yoff, 16, 16});
+		img.stretch(rectangle {img.size()}, g, {pos.x, pos.y + yoff, 16, 16});
 		pos.x += 16 + margin;
 	}
 	pos.y += static_cast<int>(r.height / 2 - size.height / 2);
-	g.string(pos, ii->text(), (state == StateNone ? fg_normal : fg_hilighted));
+	g.string(pos, ii->text(), fg_normal);
 }
 
 
@@ -578,6 +580,7 @@ void Combox::create(nana::window parent)
 {
 	combox::create(parent);
 	typeface(nana::paint::font_info {"Segoe UI", 9});
+	renderer(&renderer_);
 	refresh_theme();
 	events().expose([this] { refresh_theme(); });
 	nana::drawing {*this}.draw([this](nana::paint::graphics &g)
@@ -590,21 +593,11 @@ void Combox::create(nana::window parent)
 
 void Combox::refresh_theme()
 {
-	bgcolor(nana::API::get_widget(parent())->bgcolor());
+	bgcolor(theme::is_dark() ? theme::fmbg.blend(nana::colors::white, .08) : theme::fmbg);
+	fgcolor(theme::lbfg);
 	scheme().activated = theme::nimbus;
 	scheme().selection = theme::tb_selbg;
 	scheme().selection_unfocused = theme::tb_selbg_unfocused;
-
-	if(theme::is_dark())
-	{
-		fgcolor(theme::Label_fg);
-		renderer(&renderer_);
-	}
-	else
-	{
-		fgcolor(nana::colors::black);
-		renderer(nullptr);
-	}
 }
 
 int Combox::caption_index()
@@ -635,7 +628,7 @@ void Textbox::refresh_theme()
 {
 	scheme().activated = theme::nimbus;
 	auto bgparent {nana::API::get_widget(parent())->bgcolor()};
-	bgcolor(theme::is_dark() ? bgparent.blend(nana::colors::black, .045) : bgparent);
+	bgcolor(theme::is_dark() ? bgparent.blend(nana::colors::black, .050) : bgparent);
 	fgcolor(theme::tbfg);
 	scheme().selection = theme::tb_selbg;
 	scheme().selection_unfocused = theme::tb_selbg_unfocused;
@@ -651,11 +644,11 @@ void Textbox::highlight(bool enable)
 	highlighted = enable;
 	if(enable)
 	{
-		set_highlight("id", theme::tbkw_id, theme::tbbg);
-		set_highlight("general", theme::tbkw, theme::tbbg);
-		set_highlight("special", theme::tbkw_special, theme::tbbg);
-		set_highlight("warning", theme::tbkw_warning, theme::tbbg);
-		set_highlight("error", theme::tbkw_error, theme::tbbg);
+		set_highlight("id", theme::tbkw_id, theme::lbbg);
+		set_highlight("general", theme::tbkw, theme::lbbg);
+		set_highlight("special", theme::tbkw_special, theme::lbbg);
+		set_highlight("warning", theme::tbkw_warning, theme::lbbg);
+		set_highlight("error", theme::tbkw_error, theme::lbbg);
 	}
 	else
 	{
@@ -720,10 +713,11 @@ void Overlay::create(nana::window parent, nana::widget *outbox, std::string_view
 
 void Menu::menu_renderer::background(graph_reference graph, nana::window wd)
 {
+	using namespace nana;
 	const nana::color
-		bg_normal {theme::is_dark() ? "#33373e" : "#fff"},
+		bg_normal {theme::is_dark() ? theme::fmbg.blend(colors::white, .08) : theme::fmbg},
 		clr_border {theme::is_dark() ? "#A3A2A1" : "#666"},
-		bg_icon_area {theme::is_dark() ? "#43474e" : "#f6f6f6"};
+		bg_icon_area {theme::is_dark() ? theme::fmbg.blend(colors::white, .18) : theme::fmbg.blend(colors::black, .03)};
 	graph.rectangle(true, bg_normal); // entire area
 	graph.rectangle({1,1,unsigned(util::scale(28)),graph.height() - 2}, true, bg_icon_area); // icon area
 	graph.rectangle(false, clr_border); // border
@@ -737,15 +731,15 @@ void Menu::menu_renderer::item(graph_reference g, const nana::rectangle &r, cons
 	using util::scale;
 	const unsigned margin {8};
 	const color
-		fg_normal    {theme::is_dark() ? "#e6e6e3" : "#678"},
-		bg_normal    {theme::is_dark() ? "#33373e" : "#fff"},
-		bg_hilighted {theme::is_dark() ? "#AC4F44" : "#d8eaf0"},
-		bg_icon_area {theme::is_dark() ? "#43474e" : "#f6f6f6"};
+		fg_normal    {theme::lbfg},
+		bg_normal    {theme::is_dark() ? theme::fmbg.blend(colors::white, .08) : theme::fmbg},
+		bg_hilighted {theme::lbselbg},
+		bg_icon_area {theme::is_dark() ? theme::fmbg.blend(colors::white, .18) : theme::fmbg.blend(colors::black, .03)};
 
 	g.rectangle(r, true, bg_normal);
 	if(attr.item_state == state::active)
 	{
-		g.rectangle(r, false, bg_hilighted.blend(theme::is_dark() ? colors::white : colors::black, .1));
+		g.rectangle(r, false, theme::lbselfg);
 		g.rectangle(rectangle {r}.pare_off(1), false, bg_hilighted.blend(theme::is_dark() ? colors::black : colors::white, .4));
 		g.palette(false, bg_normal);
 		paint::draw {g}.corner(r, 1);
@@ -815,7 +809,7 @@ void Spinbox::create(nana::window parent)
 
 void Spinbox::refresh_theme()
 {
-	bgcolor(theme::tbbg);
+	bgcolor(theme::lbbg);
 	fgcolor(theme::tbfg);
 	scheme().activated = theme::nimbus;
 }
@@ -1189,7 +1183,7 @@ void conf_tree::ctree_renderer::text(graph_reference graph, const compset_interf
 		graph.string(tpos, iattr.text, theme::tree_parent_node);
 		graph.typeface(tf);
 	}
-	else graph.string(tpos, iattr.text, theme::tree_key_fg);
+	else graph.string(tpos, iattr.text, theme::Label_fg);
 }
 
 
@@ -1234,7 +1228,6 @@ void conf_tree::create(nana::window parent, nana::place *place, page_callback ca
 void conf_tree::refresh_theme()
 {
 	bgcolor(theme::fmbg.blend(theme::is_dark() ? nana::colors::white : nana::colors::black, .06));
-	fgcolor(theme::tbfg);
 	if(theme::is_dark())
 	{
 		scheme().item_bg_selected = theme::tree_selbg;
@@ -1282,6 +1275,17 @@ void conf_page::create(nana::window parent)
 	refresh_theme();
 	events().expose([this] { refresh_theme(); });
 	events().resized([this] { plc->collocate(); });
+}
+
+
+void widgets::conf_page::refresh_theme()
+{
+	bgcolor(theme::fmbg);
+	nana::API::enum_widgets(*this, true, [](widget &wdg)
+	{
+		wdg.events().expose.emit({}, wdg);
+		nana::API::refresh_window(wdg);
+	});
 }
 
 
@@ -1363,7 +1367,7 @@ void sblock_listbox::refresh_theme()
 		auto c {theme::contrast()};
 		scheme().item_selected = color {"#c7dEe4"}.blend(colors::grey, .1 - c);
 		scheme().item_selected_border = color {"#a7cEd4"}.blend(colors::grey, .1 - c);
-		scheme().item_highlighted = color {"#eee"}.blend(colors::dark_grey, .25 - c / 2);
+		scheme().item_highlighted = theme::lbhilite;
 	}
 	if(borderless())
 		nana::drawing {*this}.draw([](paint::graphics &g) { g.rectangle(false, theme::border); });

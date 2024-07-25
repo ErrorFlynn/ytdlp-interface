@@ -256,7 +256,7 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 												playlist_complete = std::stod(playlist_line.substr(28, pos - 28));
 												playlist_total = std::stod(playlist_line.substr(pos + 4, playlist_line.size() - pos - 1));
 											}
-											if(chrono.elapsed_ms() >= 300 || percent == 100/* && (percent != 100 || line.find(" in ") != -1)*/)
+											if(chrono.elapsed_ms() >= 300 || percent == 100)
 											{
 												chrono.reset();
 												cbprog(static_cast<ULONGLONG>(percent * 10), 1000, line.substr(pos2), playlist_complete - 1, playlist_total);
@@ -268,17 +268,18 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 						}
 						else if(pos != -1 && line.starts_with("[#") && line[line.size()-2] == ']')
 						{
-							auto pos2 {line.rfind('(', pos) + 1};
-							auto strpct {line.substr(pos2, pos - pos2)};
+							auto paren {line.rfind('(', pos) + 1};
+							auto strpct {line.substr(paren, pos - paren)};
 							auto pos3 {line.find("ETA:")};
 							std::string eta;
 							if(pos3 != -1)
 								eta = line.substr(pos3, line.size() - 2 - pos3);
-							std::string text {strpct + '%'};
-							if(!eta.empty()) text += " " + eta;
+							auto slash {line.find('/')}, first {line.find(' ')};
+							std::string text {line.substr(first, slash-first) + " of "};
+							text += line.substr(slash + 1, paren - slash - 2) + " ";
+							text += line.substr(paren-1, line.rfind(']') - paren);
 							if(*working)
 								cbprog(static_cast<ULONGLONG>(std::stod(strpct) * 10), 1000, text, 0, 0);
-							s += line;
 						}
 						else s += line;
 					}
@@ -286,7 +287,17 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 			}
 			else ret += buf;
 			if(cbappend && *working)
-				cbappend(s, false);
+			{
+				if(s.size() > 2)
+				{
+					auto pos {s.find_first_not_of(" \r\n")};
+					if(pos == -1)
+						s.clear();
+					else s = s.substr(pos);
+				}
+				if(s.find("frag ") == -1 || s.starts_with("[download] Destination:") || s.starts_with("[fixup"))
+					cbappend(s, false);
+			}
 		}
 		if(working && !*working)
 		{

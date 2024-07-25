@@ -27,36 +27,7 @@ public:
 
 	GUI();
 
-	static struct settings_t
-	{
-		fs::path ytdlp_path, ffmpeg_path, outpath;
-		const std::wstring output_template_default {L"%(title)s.%(ext)s"}, playlist_indexing_default {L"%(playlist_index)d - "},
-			output_template_default_bandcamp {L"%(artist)s - %(album)s - %(track_number)02d - %(track)s.%(ext)s"};
-		std::wstring fmt1, fmt2, output_template {output_template_default}, playlist_indexing {playlist_indexing_default},
-			output_template_bandcamp {output_template_default_bandcamp}, proxy;
-		std::string argset;
-		std::vector<std::string> argsets, unfinished_queue_items;
-		std::unordered_set<std::wstring> outpaths;
-		std::map<std::wstring, std::string> playsel_strings;
-		double ratelim {0}, contrast {.1};
-		unsigned ratelim_unit {1}, pref_res {0}, pref_video {0}, pref_audio {0}, cbtheme {2}, max_argsets {10}, max_outpaths {10}, 
-			max_concurrent_downloads {1}, output_buffer_size {30000}, pref_vcodec {0}, pref_acodec {0};
-		std::chrono::milliseconds max_proc_dur {3000};
-		bool cbsplit {false}, cbchaps {false}, cbsubs {false}, cbthumb {false}, cbtime {true}, cbkeyframes {false}, cbmp3 {false},
-			cbargs {false}, kwhilite {true}, pref_fps {false}, cb_lengthyproc {true}, common_dl_options {true}, cb_autostart {true},
-			cb_queue_autostart {false}, gpopt_hidden {false}, open_dialog_origin {false}, cb_zeropadding {true}, cb_playlist_folder {true},
-			zoomed {false}, get_releases_at_startup {false}, col_format {false}, col_format_note {true}, col_ext {true}, col_fsize {false},
-			json_hide_null {false}, col_site_icon {true}, col_site_text {false}, ytdlp_nightly {false}, audio_multistreams {false},
-			cb_sblock_mark {false}, cb_sblock_remove {false}, cb_proxy {false}, cbsnap {true}, limit_output_buffer {true}, 
-			update_self_only {true}, cb_premium {true}, cbminw {false}, cb_save_errors {false}, cb_ffplay {false}, cb_clear_done {false},
-			cb_formats_fsize_bytes {false}, cb_add_on_focus {false};
-		nana::rectangle winrect;
-		int dpi {96};
-		std::vector<int> sblock_mark, sblock_remove;
-		std::wstring url_passed_as_arg;
-	}
-	conf;
-
+	static settings_t conf;
 	fs::path confpath;
 	std::function<bool()> fn_write_conf;
 
@@ -69,14 +40,14 @@ private:
 	std::wstringstream multiple_url_text;
 	long minw {0}, minh {0}; // min frame size
 	unsigned size_latest_ffmpeg {0}, size_latest_ytdlp {0}, number_of_processors {4};
-	bool menu_working {false}, lbq_no_action {false}, thumbthr_working {false}, use_ffmpeg_location {false},
+	bool menu_working {false}, thumbthr_working {false}, use_ffmpeg_location {false},
 		autostart_next_item {true}, lbq_can_drag {false}, no_draw_freeze {true}, save_queue {false},
 		pwr_can_shutdown {false}, pwr_shutdown {false}, pwr_hibernate {false}, pwr_sleep {false}, start_suspend_fm {false}, 
 		close_when_finished {false};
 	std::thread thr, thr_releases, thr_versions, thr_ver_ffmpeg, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp, thr_update;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.12.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 5)},
+	const std::string ver_tag {"v2.13.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 5)},
 		ytdlp_fname {X64 ? "yt-dlp.exe" : "yt-dlp_x86.exe"};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
@@ -108,7 +79,8 @@ private:
 		gui_bottom(GUI &gui, bool visible = false);
 
 		bool is_ytlink {false}, use_strfmt {false}, working {false}, graceful_exit {false}, working_info {true}, received_procmsg {false},
-			is_ytplaylist {false}, is_ytchan {false}, is_bcplaylist {false}, is_bclink {false}, is_bcchan {false}, is_yttab {false};
+			is_ytplaylist {false}, is_ytchan {false}, is_bcplaylist {false}, is_bclink {false}, is_bcchan {false}, is_yttab {false},
+			is_scplaylist {false};
 		fs::path outpath, outfile, merger_path, download_path, printed_path;
 		nlohmann::json vidinfo, playlist_info;
 		std::vector<bool> playlist_selection;
@@ -262,10 +234,11 @@ private:
 	void fm_playlist();
 	void fm_formats();
 	void fm_suspend();
+	void fm_colors(themed_form &parent);
 
 	void queue_remove_all();
 	void queue_remove_selected();
-	void make_queue_listbox();
+	void queue_make_listbox();
 	std::wstring queue_pop_menu(int x, int y);
 
 	void make_columns_menu(nana::menu *m = nullptr);

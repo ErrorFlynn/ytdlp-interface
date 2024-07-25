@@ -34,11 +34,24 @@ void GUI::fm_sections()
 			caption("0");
 			set_accept([this](char c)
 			{
-				/*if(c == 0x16)
+				if(c == keyboard::paste)
 				{
-					auto cliptext {util::get_clipboard_text()};
-				}*/
-				return c == keyboard::backspace || c == keyboard::del || (text().size() < 9 && (isdigit(c) || c == ':'));
+					std::string cliptext {to_utf8(util::get_clipboard_text())}, pasted;
+					for(auto c : cliptext)
+						if(isdigit(c) || c == ':')
+							pasted += c;
+					if(!pasted.empty())
+					{
+						util::set_clipboard_text(0, to_wstring(pasted.substr(0, 9)));
+						select(true);
+						paste();
+					}
+					return false;
+				}
+				const auto selpoints {selection()};
+				const auto selcount {selpoints.second.x - selpoints.first.x};
+				return c == keyboard::backspace || c == keyboard::del || c == keyboard::undo || c == keyboard::redo || c == keyboard::cut ||
+					(text().size() < 9 && (isdigit(c) || c == ':'));
 			});
 			events().focus([this](const arg_focus &arg)
 			{

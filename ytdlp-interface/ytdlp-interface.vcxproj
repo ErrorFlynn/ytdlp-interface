@@ -190,6 +190,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="forms\form_changes.cpp" />
+    <ClCompile Include="forms\form_colors.cpp" />
     <ClCompile Include="forms\form_formats.cpp" />
     <ClCompile Include="forms\form_json.cpp" />
     <ClCompile Include="forms\form_playlist.cpp" />
@@ -199,6 +200,7 @@
     <ClCompile Include="gui.cpp" />
     <ClCompile Include="gui_bottom.cpp" />
     <ClCompile Include="gui_bottoms.cpp" />
+    <ClCompile Include="hsl_picker.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="outbox.cpp" />
     <ClCompile Include="queue.cpp" />
@@ -208,7 +210,9 @@
     <ClCompile Include="widgets.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="forms\form_colors.hpp" />
     <ClInclude Include="gui.hpp" />
+    <ClInclude Include="hsl_picker.hpp" />
     <ClInclude Include="icons.hpp" />
     <ClInclude Include="json.hpp" />
     <ClInclude Include="msgbox.hpp" />

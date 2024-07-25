@@ -22,6 +22,8 @@ void GUI::fm_playlist()
 	auto &bottom {bottoms.current()};
 	::widgets::Title l_title {fm, bottom.is_bcplaylist ? "Select which songs to download from the album" :
 		"Select which videos to download from the playlist"};
+	if(bottom.is_scplaylist)
+		l_title.caption("Select which items to download from the playlist");
 	::widgets::Button btnall {fm, "Select all", true}, btnnone {fm, "Select none", true}, btnclose {fm, "Close"},
 		btnrange {fm, "Select range", true};
 	::widgets::Listbox lbv {fm, true};
@@ -81,7 +83,7 @@ void GUI::fm_playlist()
 	lbv.scheme().item_height_ex = 8;
 	lbv.append_header("", dpi_scale(25));
 	lbv.append_header("#", dpi_scale(45));
-	lbv.append_header(bottom.is_bcplaylist ? "Song title" : "Video title", dpi_scale(theme::is_dark() ? 743 : 739));
+	lbv.append_header(bottom.is_bcplaylist || bottom.is_scplaylist ? "Song title" : "Video title", dpi_scale(theme::is_dark() ? 743 : 739));
 	lbv.append_header("Duration", dpi_scale(75));
 	lbv.column_movable(false);
 	lbv.column_resizable(false);

@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <nana/gui/filebox.hpp>
 
-GUI::settings_t GUI::conf;
+settings_t GUI::conf;
 
 
 GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::_1)}
@@ -91,29 +91,6 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 		if(wparam && lparam & ENDSESSION_CLOSEAPP) close();
 		return true;
 	});
-
-	/*msg.make_after(WM_POWERBROADCAST, [&](UINT, WPARAM wparam, LPARAM, LRESULT*)
-	{
-		if(wparam == PBT_APMSUSPEND)
-		{
-			menu_working = true;
-			autostart_next_item = false;
-			for(auto item : lbq.at(0))
-			{
-				if(!menu_working) break;
-				const auto text {item.text(3)};
-				if(text.find("stopped") == -1 && text.find("queued") == -1 && text.find("error") == -1)
-				{
-					auto url {item.value<lbqval_t>().url};
-					on_btn_dl(url);
-				}
-			}
-			if(menu_working)
-				api::refresh_window(bottoms.current().btndl);
-			autostart_next_item = true;
-		}
-		return true;
-	});*/
 
 	msg.make_after(WM_KEYDOWN, [&](UINT, WPARAM wparam, LPARAM, LRESULT*)
 	{
@@ -257,12 +234,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 		return false;
 	});
 
-	//paint::font {nana::paint::font_info {"Segoe UI", 12}}.set_default();
 	pwr_can_shutdown = util::pwr_enable_shutdown_privilege();
-
-	//auto langid {GetUserDefaultUILanguage()};
-	//if(langid == 2052 || langid == 3076 || langid == 5124 || langid == 4100 || langid == 1028)
-	//	cnlang = true;
 
 	SYSTEM_INFO sysinfo;
 	GetSystemInfo(&sysinfo);
@@ -285,8 +257,6 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 				conf.ffmpeg_path = tmp.parent_path();
 		}
 	}
-
-	::widgets::theme::contrast(conf.contrast);
 
 	tmsg.interval(std::chrono::milliseconds {300});
 	tmsg.elapse([this]
@@ -489,6 +459,8 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 		i.fMask = MIIM_STRING;
 		SetMenuItemInfoA(m, SC_CLOSE, FALSE, &i);
 	}
+
+	//fm_colors(*this);
 }
 
 
@@ -514,8 +486,13 @@ bool GUI::process_queue_item(std::wstring url)
 	if(!bottom.started())
 	{
 		bottom.btndl.caption("Stop download");
-		bottom.btndl.cancel_mode(true);
 		bottom.idx_error = 0;
+		auto item {lbq.item_from_value(url)};
+		if(item.checked())
+		{
+			item.check(false);
+			item.fgcolor(lbq.fgcolor());
+		}
 		if(tbpipe.current() == url)
 		{
 			tbpipe.clear();
@@ -837,7 +814,7 @@ bool GUI::process_queue_item(std::wstring url)
 				else cmd2 += L" -o \"" + bottom.outfile.filename().wstring() + L'\"';
 			}
 		}
-		if((bottom.is_ytplaylist || bottom.is_bcplaylist) && !bottom.playsel_string.empty())
+		if((bottom.is_ytplaylist || bottom.is_bcplaylist || bottom.is_scplaylist) && !bottom.playsel_string.empty())
 			cmd2 += L" -I " + bottom.playsel_string + L" --compat-options no-youtube-unavailable-videos";
 		cmd2 += L" \"" + url + L'\"';
 		display_cmd += cmd2;
@@ -869,7 +846,6 @@ bool GUI::process_queue_item(std::wstring url)
 					p->fgcolor = theme::is_dark() ? nana::color {"#f99"} : nana::color {"#832"};
 				nana::API::refresh_window(tbpipe);
 				btndl.caption("Start download");
-				btndl.cancel_mode(false);
 				if(bottom.dl_thread.joinable())
 					bottom.dl_thread.detach();
 				return;
@@ -882,6 +858,9 @@ bool GUI::process_queue_item(std::wstring url)
 
 			auto cb_progress = [&, url](ULONGLONG completed, ULONGLONG total, std::string text, int playlist_completed, int playlist_total)
 			{
+				if(text.find("Unknown B/s") != -1)
+					return;
+
 				if(playlist_total && !playlist_progress)
 				{
 					playlist_progress = true;
@@ -1068,7 +1047,6 @@ bool GUI::process_queue_item(std::wstring url)
 					nana::API::refresh_window(tbpipe);
 				}
 				btndl.caption("Start download");
-				btndl.cancel_mode(false);
 				auto next_url {next_startable_url(url)};
 				if(!next_url.empty())
 					on_btn_dl(next_url);
@@ -1127,7 +1105,6 @@ bool GUI::process_queue_item(std::wstring url)
 		nana::API::refresh_window(tbpipe);
 		btndl.enabled(true);
 		btndl.caption("Start download");
-		btndl.cancel_mode(false);
 		if(conf.cb_autostart)
 		{
 			auto next_url {next_startable_url(url)};
@@ -1174,6 +1151,11 @@ void GUI::add_url(std::wstring url, bool refresh)
 				lbq.item_from_value(url).select(true);
 			else if(!conf.common_dl_options)
 				bottom.show_btncopy(true);
+		}
+		else
+		{
+			bottom.vidinfo.clear();
+			bottom.playlist_info.clear();
 		}
 
 		bottom.info_thread = std::thread([&, url, refresh]
@@ -1257,12 +1239,13 @@ void GUI::add_url(std::wstring url, bool refresh)
 				}
 			};
 
-			if(bottom.is_ytlink && !bottom.is_ytchan || bottom.is_bcplaylist)
+			if(bottom.is_ytlink && !bottom.is_ytchan || bottom.is_bcplaylist || bottom.is_scplaylist)
 			{
-				if(bottom.is_ytplaylist || bottom.is_bcplaylist)
+				if(bottom.is_ytplaylist || bottom.is_bcplaylist || bottom.is_scplaylist)
 				{
+					std::wstring flat {bottom.is_scplaylist ? L"" : L"--flat-playlist "};
 					std::wstring compat_options {bottom.is_ytplaylist ? L" --compat-options no-youtube-unavailable-videos" : L""},
-					             cmd {L" --no-warnings --flat-playlist -J" + compat_options + L" \"" + url + L'\"'};
+					             cmd {L" --no-warnings " + flat + L"-J" + compat_options + L" \"" + url + L'\"'};
 					if(conf.cb_proxy && !conf.proxy.empty())
 						cmd = L" --proxy " + conf.proxy + cmd;
 					bottom.cmdinfo = conf.ytdlp_path.filename().wstring() + cmd;
@@ -1363,10 +1346,10 @@ void GUI::add_url(std::wstring url, bool refresh)
 			else if(bottom.is_ytchan || bottom.is_bcchan)
 			{
 				std::wstring cmd {L" --no-warnings --flat-playlist -I :0 -J \"" + url + L'\"'};
-				if(refresh)
+				if(bottom.is_ytplaylist)
 					cmd = L" --no-warnings --flat-playlist -J \"" + url + L'\"';
 				if(conf.cb_proxy && !conf.proxy.empty())
-					cmd = L" --proxy " + conf.proxy + cmd;
+					cmd += L" --proxy " + conf.proxy + cmd;
 				bottom.cmdinfo = conf.ytdlp_path.filename().wstring() + cmd;
 				media_info = util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + cmd, &bottom.working_info);
 				try { bottom.playlist_info = nlohmann::json::parse(media_info); }
@@ -1401,7 +1384,7 @@ void GUI::add_url(std::wstring url, bool refresh)
 						media_title = u8conv.to_bytes(wstr);
 					}
 
-					if(refresh)
+					if(bottom.is_ytplaylist)
 					{
 						std::string URL {bottom.playlist_info["entries"][0]["url"]};
 						cmd = L" --no-warnings -j " + fmt_sort + to_wstring(URL);
@@ -1486,7 +1469,7 @@ void GUI::add_url(std::wstring url, bool refresh)
 				{
 					if(media_info[0] == '{')
 					{
-						if(bottom.is_ytplaylist || bottom.is_bcplaylist)
+						if(bottom.is_ytplaylist || bottom.is_bcplaylist || bottom.is_scplaylist)
 						{
 							if(!bottom.playlist_info.empty())
 							{
@@ -1510,6 +1493,8 @@ void GUI::add_url(std::wstring url, bool refresh)
 									else m.text(pos, (bottom.is_ytplaylist ? "Select videos (" : "Select songs (") + std::to_string(bottom.playlist_selected()) + '/' + str + ")");
 									m.enabled(pos, true);
 									m.enabled(pos + 1, true);
+									m.enabled(pos + 2, true);
+									m.enabled(pos + 3, true);
 									api::refresh_window(m.handle());
 									vidsel_item.m = nullptr;
 								}
@@ -1642,7 +1627,7 @@ void GUI::add_url(std::wstring url, bool refresh)
 					lbq.item_from_value(url).text(2, "yt-dlp did not provide any data for this URL!");
 				}
 			}
-			if(!refresh && vidsel_item.m && lbq.item_from_value(url).selected())
+			if(vidsel_item.m && lbq.item_from_value(url).selected())
 			{
 				auto &m {*vidsel_item.m};
 				for(int n {0}; n < m.size(); n++)
@@ -1667,7 +1652,7 @@ void GUI::make_form()
 {
 	using widgets::theme;
 	using namespace nana;
-	make_queue_listbox();
+	queue_make_listbox();
 
 	div("vert margin=20 <Top> <weight=20> <Bottom weight=325>");
 	auto &plc {get_place()};
@@ -1801,8 +1786,34 @@ bool GUI::apply_theme(bool dark)
 {
 	using widgets::theme;
 
-	if(dark) theme::make_dark();
-	else theme::make_light();
+	if(dark) 
+	{
+		if(conf.cb_custom_dark_theme)
+		{
+			conf.theme_dark.contrast(conf.contrast, true);
+			theme::make_dark(conf.theme_dark);
+		}
+		else
+		{
+			theme_t def {true};
+			def.contrast(conf.contrast, true);
+			theme::make_dark(def);
+		}
+	}
+	else 
+	{
+		if(conf.cb_custom_light_theme)
+		{
+			conf.theme_light.contrast(conf.contrast, false);
+			theme::make_light(conf.theme_light);
+		}
+		else
+		{
+			theme_t def;
+			def.contrast(conf.contrast, false);
+			theme::make_light(def);
+		}
+	}
 
 	const auto &text {outbox.current_buffer()};
 	if(!text.empty())

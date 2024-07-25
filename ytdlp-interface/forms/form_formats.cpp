@@ -7,7 +7,7 @@ void GUI::fm_formats()
 	using ::widgets::theme;
 	auto url {bottoms.visible()};
 	auto &bottom {bottoms.at(url)};
-	auto &vidinfo {bottom.vidinfo};
+	auto &vidinfo {bottom.is_scplaylist ? bottom.playlist_info["entries"][0] : bottom.vidinfo};
 
 	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize, appear::sizable>{}};
 	fm.caption(title + " - manual selection of formats");
@@ -69,7 +69,7 @@ void GUI::fm_formats()
 	list.checkable(true);
 	list.hilight_checked(true);
 	list.enable_single(true, false);
-	list.scheme().text_margin = util::scale(10) + (nana::api::screen_dpi(true) > 96) * 4;
+	list.scheme().text_margin = dpi_scale(10) + (api::screen_dpi(true) > 96) * 4;
 	list.append_header("format", dpi_scale(280));
 	list.append_header("acodec", dpi_scale(90));
 	list.append_header("vcodec", dpi_scale(90));
@@ -109,7 +109,7 @@ void GUI::fm_formats()
 
 		if(item.checked())
 		{
-			item.fgcolor(theme::list_check_highlight_fg);
+			//item.fgcolor(theme::list_check_highlight_fg);
 			item.bgcolor(theme::list_check_highlight_bg);
 			list.auto_draw(false);
 			if(pos.cat == 0)

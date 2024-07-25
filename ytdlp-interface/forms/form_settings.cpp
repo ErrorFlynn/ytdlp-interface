@@ -358,6 +358,11 @@ void GUI::fm_settings()
 		<weight=25 <l_theme weight=100> <weight=20> <cbtheme_dark weight=65> <weight=20> 
 			<cbtheme_light weight=66> <weight=20> <cbtheme_system weight=178> > <weight=20>
 		<weight=25 <l_contrast weight=70> <weight=20> <slider> >
+		<weight=20>
+		<
+			weight=25 <switchable weight=230 <cb_custom_dark_theme> <cb_custom_light_theme>>
+			<weight=20> <btn_edit_theme weight=155>
+		>
 		<weight=20> <sep3 weight=3> <weight=20>
 		<weight=25 <cbsnap> <>> <weight=20> <weight=25 <cbminw weight=75%> <>> <weight=20>
 		<weight=25 <cb_formats_fsize_bytes>> <weight=20>
@@ -365,6 +370,14 @@ void GUI::fm_settings()
 		<weight=25 <opendlg_spacer weight=345> <cb_origin_progdir>> <weight=20>
 	)");
 
+	widgets::cbox cb_custom_dark_theme {gui, "Use custom dark color theme"},
+		cb_custom_light_theme {gui, "Use custom light color theme"};
+	widgets::Button btn_edit_theme {gui, "Edit custom theme", true};
+	btn_edit_theme.events().click([&] { fm_colors(fm); });
+
+	gui["cb_custom_dark_theme"] << cb_custom_dark_theme;
+	gui["cb_custom_light_theme"] << cb_custom_light_theme;
+	gui["btn_edit_theme"] << btn_edit_theme;
 	gui["l_theme"] << l_theme;
 	gui["cbtheme_dark"] << cbtheme_dark;
 	gui["cbtheme_light"] << cbtheme_light;
@@ -385,8 +398,22 @@ void GUI::fm_settings()
 	cb_formats_fsize_bytes.check(conf.cb_formats_fsize_bytes);
 	cb_add_on_focus.check(conf.cb_add_on_focus);
 
+	cb_custom_light_theme.check(conf.cb_custom_light_theme);
+	cb_custom_light_theme.events().checked([&]
+	{
+		conf.cb_custom_light_theme = cb_custom_light_theme.checked();
+		slider.events().value_changed.emit({slider}, slider);
+	});
+
+	cb_custom_dark_theme.check(conf.cb_custom_dark_theme);
+	cb_custom_dark_theme.events().checked([&]
+	{
+		conf.cb_custom_dark_theme = cb_custom_dark_theme.checked();
+		slider.events().value_changed.emit({slider}, slider);
+	});
+
 	cbminw.check(conf.cbminw);
-	cbminw.events().checked([&, this]
+	cbminw.events().checked([&]
 	{
 		conf.cbminw = cbminw.checked();
 		if(!conf.cbminw)
@@ -401,7 +428,7 @@ void GUI::fm_settings()
 	});
 
 	cbsnap.check(conf.cbsnap);
-	cbsnap.events().checked([&, this]
+	cbsnap.events().checked([&]
 	{
 		conf.cbsnap = cbsnap.checked();
 		fm.snap(conf.cbsnap);
@@ -442,12 +469,12 @@ void GUI::fm_settings()
 		btn_playlist_default.enabled(false);
 		cb_zeropadding.enabled(false);
 	}
-	btn_default.events().click([&, this]
+	btn_default.events().click([&]
 	{
 		tb_template.caption(output_template_default);
 		output_template = output_template_default;
 	});
-	btn_playlist_default.events().click([&, this]
+	btn_playlist_default.events().click([&]
 	{
 		tb_playlist.caption(conf.playlist_indexing_default);
 		conf.playlist_indexing = conf.playlist_indexing_default;
@@ -461,28 +488,14 @@ void GUI::fm_settings()
 	slider.events().value_changed([&]
 	{
 		conf.contrast = static_cast<double>(slider.value()) / 100;
-		theme::contrast(conf.contrast);
-		fm.bgcolor(theme::fmbg);
 		apply_theme(theme::is_dark());
+		fm.bgcolor(theme::fmbg);
 		nana::api::refresh_window(bottoms.current().gpopt);
-		tb_template.refresh_theme();
-		tb_playlist.refresh_theme();
-		com_audio.refresh_theme();
-		com_video.refresh_theme();
-		com_res.refresh_theme();
-		cb_autostart.refresh_theme();
-		cb_common.refresh_theme();
-		sb_maxdl.refresh_theme();
-		cbfps.refresh_theme();
-		cb_queue_autostart.refresh_theme();
-		btn_close.refresh_theme();
-		btn_default.refresh_theme();
-		btn_playlist_default.refresh_theme();
-		cb_playlist_folder.refresh_theme();
-		cb_zeropadding.refresh_theme();
 		ytdlp.refresh_theme();
+		sblock.refresh_theme();
 		queuing.refresh_theme();
 		gui.refresh_theme();
+		updater.refresh_theme();
 		tree.refresh_theme();
 	});
 
@@ -491,7 +504,7 @@ void GUI::fm_settings()
 	rg.add(cbtheme_light);
 	if(system_supports_darkmode())
 		rg.add(cbtheme_system);
-	rg.on_checked([&, this](const nana::arg_checkbox &arg)
+	rg.on_checked([&](const nana::arg_checkbox &arg)
 	{
 		if(arg.widget->checked())
 		{
@@ -908,9 +921,16 @@ void GUI::fm_settings()
 			thr_versions.detach();
 		if(thr_ver_ffmpeg.joinable())
 			thr_ver_ffmpeg.detach();
+		if(!fn_write_conf() && errno)
+		{
+			std::string error {std::strerror(errno)};
+			widgets::msgbox mbox {fm, "ytdlp-interface - error writing settings file"};
+			mbox.icon(MB_ICONERROR);
+			(mbox << confpath.string() << "\n\nAn error occured when trying to save the settings file:\n\n" << error)();
+		}
 	});
 
-	fm.theme_callback([&, this](bool dark)
+	fm.theme_callback([&](bool dark)
 	{
 		apply_theme(dark);
 		fm.bgcolor(theme::fmbg);
@@ -921,6 +941,8 @@ void GUI::fm_settings()
 		l_sblock.caption(std::regex_replace(sblock_text, std::regex {"\\b(0x)"}, theme::is_dark() ? link_dark : link_light));
 		updater_display_version_ytdlp();
 		updater_display_version_ffmpeg();
+		gui.get_place().field_display(dark ? "cb_custom_dark_theme" : "cb_custom_light_theme", true);
+		gui.get_place().collocate();
 		return true;
 	});
 
@@ -1331,7 +1353,6 @@ void GUI::updater_update_self(themed_form &parent)
 	if(btn_update.caption() == "Update")
 	{
 		btn_update.caption("Cancel");
-		btn_update.cancel_mode(true);
 		btnffmpeg_state = btn_update_ffmpeg.enabled();
 		btnytdlp_state = btn_update_ytdlp.enabled();
 		btn_update_ffmpeg.enabled(false);
@@ -1345,7 +1366,6 @@ void GUI::updater_update_self(themed_form &parent)
 				mbox.icon(nana::msgbox::icon_error);
 				(mbox << "The latest release on GitHub doesn't seem to contain a 32-bit build!")();
 				btn_update.caption("Update");
-				btn_update.cancel_mode(false);
 				thr.detach();
 				return;
 			}
@@ -1395,7 +1415,6 @@ void GUI::updater_update_self(themed_form &parent)
 				}
 				else prog_updater.caption(dl_error);
 				btn_update.caption("Update");
-				btn_update.cancel_mode(false);
 				btn_update_ffmpeg.enabled(btnffmpeg_state);
 				btn_update_ytdlp.enabled(btnytdlp_state);
 				updater_working = false;
@@ -1406,7 +1425,6 @@ void GUI::updater_update_self(themed_form &parent)
 	else
 	{
 		btn_update.caption("Update");
-		btn_update.cancel_mode(false);
 		prog_updater.caption("");
 		prog_updater.value(0);
 		btn_update_ffmpeg.enabled(btnffmpeg_state);
@@ -1435,7 +1453,6 @@ void GUI::updater_update_misc(bool ytdlp, fs::path target)
 		btnytdlp_state = btn_update_ytdlp.enabled();
 		btnupdate_state = btn_update.enabled();
 		btn->caption("Cancel");
-		btn->cancel_mode(true);
 		thr = std::thread {[ytdlp, target, this]
 		{
 			updater_working = true;
@@ -1529,7 +1546,6 @@ void GUI::updater_update_misc(bool ytdlp, fs::path target)
 
 				btn_update_ytdlp.caption(btntext_ytdlp);
 				btn_update_ffmpeg.caption(btntext_ffmpeg);
-				btn->cancel_mode(false);
 				btn_update_ffmpeg.enabled(btnffmpeg_state);
 				btn_update_ytdlp.enabled(btnytdlp_state);
 				btn_update.enabled(btnupdate_state);
@@ -1543,7 +1559,6 @@ void GUI::updater_update_misc(bool ytdlp, fs::path target)
 		updater_working = false;
 		btn_update_ytdlp.caption(btntext_ytdlp);
 		btn_update_ffmpeg.caption(btntext_ffmpeg);
-		btn->cancel_mode(false);
 		btn_update_ffmpeg.enabled(btnffmpeg_state);
 		btn_update_ytdlp.enabled(btnytdlp_state);
 		btn_update.enabled(btnupdate_state);

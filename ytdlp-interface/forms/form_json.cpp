@@ -39,7 +39,7 @@ void GUI::fm_json()
 	{
 		if(arg.button == mouse::right_button && t.jdata())
 		{
-			auto file_selector = [&, this](std::string desc, std::string filter) -> fs::path
+			auto file_selector = [&](std::string desc, std::string filter) -> fs::path
 			{
 				filebox fb {fm, false};
 				fb.init_path(bottom.outpath);
@@ -87,13 +87,13 @@ void GUI::fm_json()
 				}
 			}
 
-			m.append("Save as .txt", [&, this](menu::item_proxy ip)
+			m.append("Save as .txt", [&](menu::item_proxy ip)
 			{
 				auto path {file_selector("Text file", "*.txt")};
 				if(!path.empty())
 				{
 					std::string text {"Text version of the JSON data for URL: " + to_utf8(bottom.url) + "\n\n"};
-					std::function<void(treebox::item_proxy)> recfn = [&, this](treebox::item_proxy parent)
+					std::function<void(treebox::item_proxy)> recfn = [&](treebox::item_proxy parent)
 					{
 						for(auto node : parent)
 						{
@@ -111,14 +111,14 @@ void GUI::fm_json()
 				}
 			});
 
-			m.append("Save as .json", [&, this](menu::item_proxy ip)
+			m.append("Save as .json", [&](menu::item_proxy ip)
 			{
 				auto path {file_selector("JSON data format", "*.json")};
 				if(!path.empty())
 					std::ofstream {path} << *t.jdata();
 			});
 
-			m.append("Save as .json (prettified)", [&, this](menu::item_proxy ip)
+			m.append("Save as .json (prettified)", [&](menu::item_proxy ip)
 			{
 				auto path {file_selector("JSON data format", "*.json")};
 				if(!path.empty())
@@ -127,12 +127,12 @@ void GUI::fm_json()
 
 			m.append_splitter();
 
-			m.append("Hide null values", [&, this](menu::item_proxy ip)
+			m.append("Hide null values", [&](menu::item_proxy ip)
 			{
 				conf.json_hide_null = !conf.json_hide_null;
 				ip.checked(conf.json_hide_null);
 
-				std::function<void(treebox::item_proxy)> recfn = [&, this](treebox::item_proxy parent)
+				std::function<void(treebox::item_proxy)> recfn = [&](treebox::item_proxy parent)
 				{
 					for(auto node : parent)
 					{

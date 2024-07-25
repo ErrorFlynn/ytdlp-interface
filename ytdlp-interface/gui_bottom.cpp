@@ -726,16 +726,19 @@ void GUI::gui_bottom::apply_playsel_string()
 {
 	auto &str {playsel_string};
 	playlist_selection.assign(playlist_info["entries"].size(), false);
-	auto pos0 {str.find('|')};
-	std::wstring id_first_then {str.substr(0, pos0)};
-	str.erase(0, pos0 + 1);
 
 	int idx_offset {0};
-	for(const auto &entry : playlist_info["entries"])
+	auto pos0 {str.find('|')};
+	if(pos0 != -1)
 	{
-		if(nana::to_wstring(std::string {entry["id"]}) == id_first_then)
-			break;
-		idx_offset++;
+		std::wstring id_first_then {str.substr(0, pos0)};
+		str.erase(0, pos0 + 1);
+		for(const auto &entry : playlist_info["entries"])
+		{
+			if(nana::to_wstring(entry["id"].get<std::string>()) == id_first_then)
+				break;
+			idx_offset++;
+		}
 	}
 
 	int a {0}, b {0};

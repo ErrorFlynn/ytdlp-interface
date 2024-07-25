@@ -23,6 +23,7 @@
 #include "progress_ex.hpp"
 #include "icons.hpp"
 #include "util.hpp"
+#include "types.hpp"
 
 #pragma warning(disable : 4267)
 #ifdef small
@@ -59,26 +60,27 @@ namespace widgets
 {
 	class theme
 	{
-	private:
 		static bool dark;
 		static double shade;
 
 	public:
 
-		theme() { make_light(); }
+		theme() { make_light({}); }
 
-		static nana::color nimbus, fmbg, Label_fg, Text_fg, Text_fg_error, cbox_fg, btn_bg, btn_fg, path_bg, path_fg, path_link_fg, 
-			sep_bg, tbfg, tbbg, tbkw, tbkw_id, tbkw_special, tbkw_warning, tbkw_error, gpbg, lb_headerbg, title_fg, overlay_fg, border,
+		static nana::color nimbus, fmbg, Label_fg, Text_fg, Text_fg_error, cbox_fg, btn_bg, btn_fg, /*path_bg, */path_fg, path_link_fg, 
+			sep_bg, tbfg, tbkw, tbkw_id, tbkw_special, tbkw_warning, tbkw_error, gpbg, lb_headerbg, title_fg, overlay_fg, border,
 			tb_selbg, tb_selbg_unfocused, expcol_fg, tree_selbg, tree_selfg, tree_hilitebg, tree_hilitefg, tree_selhilitebg, tree_selhilitefg,
 			tree_parent_node, tree_expander, tree_expander_hovered, tree_bg, tree_key_fg, tree_val_fg, list_check_highlight_fg,
-			list_check_highlight_bg, msg_label_fg;
+			list_check_highlight_bg, msg_label_fg, lbbg, lbselfg, lbselbg, lbhilite, lbfg;
 		static std::string gpfg;
 
-		static void make_light();
-		static void make_dark();
+		static void import(const theme_t &src);
+		static void make_light(const theme_t &src);
+		static void make_dark(const theme_t &src);
+		static void copy(theme_t &dest);
 
 		static bool is_dark() { return dark; }
-		static void contrast(double factor);
+		static void contrast(double factor, theme_t &src);
 		static double contrast() { return shade; }
 	};
 
@@ -202,7 +204,6 @@ namespace widgets
 
 		void create(nana::window parent, std::string_view text = "", bool small = false);
 		void refresh_theme();
-		void cancel_mode(bool enable);
 		void image(const void *data, unsigned size);
 		void image_disabled(const void *data, unsigned size);
 		void enable(bool state);
@@ -282,7 +283,11 @@ namespace widgets
 
 			void background(widget_reference, graph_reference g)
 			{
-				g.rectangle(false, nana::color {"#999A9E"});
+				using namespace nana;
+				//g.rectangle(true, theme::is_dark() ? theme::fmbg.blend(colors::white, .08) : theme::fmbg);
+				rectangle r {{0, 0}, g.size()};
+				g.rectangle(r, false, color {"#999A9E"});
+				g.rectangle(r.pare_off(1), false, theme::is_dark() ? theme::fmbg.blend(colors::white, .08) : theme::fmbg);
 			}
 		} renderer_;
 
@@ -634,7 +639,7 @@ namespace widgets
 		conf_page(nana::window parent) { create(parent); }
 
 		void create(nana::window parent);
-		void refresh_theme() { bgcolor(theme::fmbg); }
+		void refresh_theme();
 		auto &get_place() { return *plc; }
 		void div(std::string div_text) { plc->div(div_text); }
 		auto &operator[](const char *field_name) { return plc->field(field_name); }

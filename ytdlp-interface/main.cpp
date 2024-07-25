@@ -131,7 +131,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		{
 			msgbox mbox {"ytdlp-interface JSON error"};
 			mbox.icon(msgbox::icon_error);
-			(mbox << "an exception occured when trying to load the settings file: " << e.what())();
+			(mbox << confpath.string() << "\n\nAn exception occured when trying to load the settings file:\n\n" << e.what())();
 		}
 		if(!jconf.empty())
 		{
@@ -295,6 +295,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				GUI::conf.cb_formats_fsize_bytes = jconf["cb_formats_fsize_bytes"];
 				GUI::conf.cb_add_on_focus = jconf["cb_add_on_focus"];
 			}
+			if(jconf.contains("theme")) // v2.13
+			{
+				GUI::conf.cb_custom_dark_theme = jconf["cb_custom_dark_theme"];
+				GUI::conf.cb_custom_light_theme = jconf["cb_custom_light_theme"];
+				GUI::conf.theme_dark.from_json(jconf["theme"]["dark"]);
+				GUI::conf.theme_dark.contrast(GUI::conf.contrast, true);
+				GUI::conf.theme_light.from_json(jconf["theme"]["light"]);
+				GUI::conf.theme_light.contrast(GUI::conf.contrast, false);
+			}
 		}
 	}
 	else GUI::conf.outpath = util::get_sys_folder(FOLDERID_Downloads);
@@ -316,6 +325,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 
 	gui.fn_write_conf = [&]
 	{
+		static bool busy {false};
+		if(busy) return true;
+
+		busy = true;
+		jconf["cb_custom_dark_theme"] = GUI::conf.cb_custom_dark_theme;
+		jconf["cb_custom_light_theme"] = GUI::conf.cb_custom_light_theme;
+		GUI::conf.theme_dark.to_json(jconf["theme"]["dark"]);
+		GUI::conf.theme_light.to_json(jconf["theme"]["light"]);
+
 		jconf["ytdlp_path"] = GUI::conf.ytdlp_path;
 		jconf["outpath"] = GUI::conf.outpath;
 		jconf["fmt1"] = to_utf8(GUI::conf.fmt1);
@@ -416,10 +434,20 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				jconf["playsel_strings"][url] = bot.playlist_info["entries"][0]["id"].get<std::string>() + "|" + to_utf8(bot.playsel_string);
 		}
 
+		busy = false;
 		return (std::ofstream {confpath} << std::setw(4) << jconf).good();
 	};
 
-	gui.events().unload(gui.fn_write_conf);
+	gui.events().unload([&]
+	{
+		if(!gui.fn_write_conf() && errno)
+		{
+			std::string error {std::strerror(errno)};
+			msgbox mbox {"ytdlp-interface - error writing settings file"};
+			mbox.icon(msgbox::icon_error);
+			(mbox << confpath.string() << "\n\nAn error occured when trying to save the settings file:\n\n" << error)();
+		}
+	});
 	nana::exec();
 	CoUninitialize();
 }
