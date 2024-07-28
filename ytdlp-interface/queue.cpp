@@ -101,7 +101,7 @@ void GUI::queue_make_listbox()
 			arg.item.select(true);
 	});
 
-	lbq.set_deselect([&](mouse btn) { return !(btn == mouse::right_button); });
+	lbq.set_deselect([&](mouse btn) { return !(btn != mouse::left_button); });
 
 	static color dragging_color {colors::green};
 	static timer scroll_down_timer, scroll_up_timer;

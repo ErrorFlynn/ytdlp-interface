@@ -1260,6 +1260,12 @@ void GUI::add_url(std::wstring url, bool refresh)
 							incomplete_data_received = true;
 						}
 					}
+					else if(media_info.starts_with("ERROR: "))
+					{
+						auto pos {media_info.find('{')};
+						if(pos != -1)
+							media_info.erase(pos);
+					}
 					if(!media_info.empty() && media_info.front() == '{')
 					{
 						try { bottom.playlist_info = nlohmann::json::parse(media_info); }
