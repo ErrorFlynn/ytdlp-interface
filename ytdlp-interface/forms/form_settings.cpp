@@ -10,7 +10,7 @@ void GUI::fm_settings()
 	static std::string start_page {"ytdlp"};
 
 	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize>{}};
-	fm.center(820, 530);
+	fm.center(820, 575);
 	fm.caption(title + " - settings");
 	fm.bgcolor(theme::fmbg);
 	fm.snap(conf.cbsnap);
@@ -110,6 +110,7 @@ void GUI::fm_settings()
 		cb_mark {sblock, "Mark these categories:"}, cb_remove {sblock, "Remove these categories:"}, cb_proxy {ytdlp, "Use this proxy:"},
 		cbsnap {gui, "Snap windows to screen edges"}, cbminw {gui, "No minimum width for the main window"},
 		cb_premium {ytdlp, "[YouTube] For 1080p, prefer the \"premium\" format with enhanced bitrate"},
+		cb_android {ytdlp, "[YouTube] Use the Android player client for video extraction"},
 		cb_save_errors {queuing, "Save queue items with \"error\" status to the settings file"},
 		cb_clear_done {queuing, "Automatically remove completed items (with \"done\" status)"},
 		cb_formats_fsize_bytes {gui, "Formats window: display file sizes with exact byte value"},
@@ -134,6 +135,7 @@ void GUI::fm_settings()
 			<l_acodec weight=198> <weight=10> <com_acodec weight=66>
 		>
 		<spacer_premium weight=20> <row_premium weight=26 <prem_pad weight=36><cb_premium>>
+		<weight=20> <weight=25 <weight=36><cb_android>>
 		<weight=20> <sep1 weight=3> <weight=20>
 		<weight=25 <l_template weight=132> <weight=10> <tb_template> <weight=15> <btn_default weight=140>> <weight=20>
 		<weight=25 <l_playlist weight=132> <weight=10> <tb_playlist> <weight=15> <btn_playlist_default weight=140>> <weight=20>
@@ -199,6 +201,7 @@ void GUI::fm_settings()
 	};
 
 	cb_premium.check(conf.cb_premium);
+	cb_android.check(conf.cb_android);
 
 	ytdlp["l_res"] << l_res;
 	ytdlp["com_res"] << com_res;
@@ -217,6 +220,7 @@ void GUI::fm_settings()
 	ytdlp["l_audio"] << l_audio;
 	ytdlp["com_audio"] << com_audio;
 	ytdlp["cb_premium"] << cb_premium;
+	ytdlp["cb_android"] << cb_android;
 	ytdlp["sep1"] << sep1;
 	ytdlp["l_template"] << l_template;
 	ytdlp["tb_template"] << tb_template;
@@ -547,6 +551,11 @@ void GUI::fm_settings()
 		"you prefer the H264 codec, this option will override\nthat codec preference by requesting format 616 from yt-dlp "
 		"(with the argument\n\"-f 616+ba\").");
 
+	cb_android.tooltip("Forces yt-dlp to use the Android client for extracting the video by passing\n"
+		"\"<bold>--extractor-args youtube:player_client=android</>\". This can be useful\nbecause some formats are only available "
+		"to the Android client."
+		"\n\nHowever, be aware of the warning from yt-dlp:\n\"<bold>Android client formats are broken and may yield HTTP Error 403</>\"");
+
 	cbfps.tooltip("If several different formats have the same resolution,\ndownload the one with the highest framerate.");
 
 	cb_lengthyproc.tooltip("When yt-dlp finishes downloading all the files associated with a queue item,\n"
@@ -869,6 +878,7 @@ void GUI::fm_settings()
 		conf.proxy = tb_proxy.caption_wstring();
 		conf.update_self_only = cb_selfonly.checked();
 		conf.cb_premium = cb_premium.checked();
+		conf.cb_android = cb_android.checked();
 		conf.cb_save_errors = cb_save_errors.checked();
 		conf.cb_clear_done = cb_clear_done.checked();
 		conf.cb_formats_fsize_bytes = cb_formats_fsize_bytes.checked();
@@ -921,6 +931,15 @@ void GUI::fm_settings()
 			thr_versions.detach();
 		if(thr_ver_ffmpeg.joinable())
 			thr_ver_ffmpeg.detach();
+
+		conf.unfinished_queue_items.clear();
+		for(auto item : lbq.at(0))
+		{
+			auto text {item.text(3)};
+			if(text != "done" && (text != "error" || text == "error" && conf.cb_save_errors))
+				conf.unfinished_queue_items.push_back(nana::to_utf8(item.value<lbqval_t>().url));
+		}
+
 		if(!fn_write_conf() && errno)
 		{
 			std::string error {std::strerror(errno)};

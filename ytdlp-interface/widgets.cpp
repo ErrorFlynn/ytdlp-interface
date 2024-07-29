@@ -1296,7 +1296,7 @@ sblock_listbox::sblock_listbox(nana::window parent, bool high_contrast) : listbo
 	checkable(true);
 	enable_single(true, false);
 	typeface(nana::paint::font_info {"Calibri", 12});
-	scheme().item_height_ex = util::scale(10);
+	scheme().item_height_ex = util::scale(13);
 	scheme().text_margin = util::scale(10) + (nana::api::screen_dpi(true) > 96) * 4;
 	append_header("", util::scale(286));
 	show_header(false);
@@ -1355,8 +1355,8 @@ void sblock_listbox::refresh_theme()
 		scheme().item_selected = color {"#AC4F44"};
 		scheme().item_selected_border = color {"#B05348"}.blend(colors::black, .15);
 		if(hicontrast)
-			scheme().item_highlighted = color {"#544"}.blend(colors::light_grey, .15 - theme::contrast() / 2);
-		else scheme().item_highlighted = color {"#544"};
+			scheme().item_highlighted = theme::lbhilite.blend(colors::light_grey, .15 - theme::contrast() / 2);
+		else scheme().item_highlighted = theme::lbhilite;
 	}
 	else
 	{

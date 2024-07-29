@@ -93,7 +93,8 @@ struct settings_t
 		json_hide_null {false}, col_site_icon {true}, col_site_text {false}, ytdlp_nightly {false}, audio_multistreams {false},
 		cb_sblock_mark {false}, cb_sblock_remove {false}, cb_proxy {false}, cbsnap {true}, limit_output_buffer {true},
 		update_self_only {true}, cb_premium {true}, cbminw {false}, cb_save_errors {false}, cb_ffplay {false}, cb_clear_done {false},
-		cb_formats_fsize_bytes {false}, cb_add_on_focus {false}, cb_custom_dark_theme {false}, cb_custom_light_theme {false};
+		cb_formats_fsize_bytes {false}, cb_add_on_focus {false}, cb_custom_dark_theme {false}, cb_custom_light_theme {false},
+		cb_android {false};
 	nana::rectangle winrect;
 	int dpi {96};
 	std::vector<int> sblock_mark, sblock_remove;

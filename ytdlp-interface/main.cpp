@@ -304,6 +304,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				GUI::conf.theme_light.from_json(jconf["theme"]["light"]);
 				GUI::conf.theme_light.contrast(GUI::conf.contrast, false);
 			}
+			if(jconf.contains("cb_android")) // v2.14
+			{
+				GUI::conf.cb_android = jconf["cb_android"];
+			}
 		}
 	}
 	else GUI::conf.outpath = util::get_sys_folder(FOLDERID_Downloads);
@@ -334,6 +338,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		GUI::conf.theme_dark.to_json(jconf["theme"]["dark"]);
 		GUI::conf.theme_light.to_json(jconf["theme"]["light"]);
 
+		jconf["cb_android"] = GUI::conf.cb_android;
 		jconf["ytdlp_path"] = GUI::conf.ytdlp_path;
 		jconf["outpath"] = GUI::conf.outpath;
 		jconf["fmt1"] = to_utf8(GUI::conf.fmt1);

@@ -524,6 +524,8 @@ bool GUI::process_queue_item(std::wstring url)
 		}
 
 		std::wstring cmd {L'\"' + conf.ytdlp_path.wstring() + L'\"'};
+		if(bottom.is_ytlink && conf.cb_android)
+			cmd += L" --extractor-args youtube:player_client=android";
 
 		if(!bottom.using_custom_fmt())
 		{
@@ -1239,6 +1241,8 @@ void GUI::add_url(std::wstring url, bool refresh)
 				}
 			};
 
+			std::wstring force_android {conf.cb_android ? L"--extractor-args youtube:player_client=android " : L""};
+
 			if(bottom.is_ytlink && !bottom.is_ytchan || bottom.is_bcplaylist || bottom.is_scplaylist)
 			{
 				if(bottom.is_ytplaylist || bottom.is_bcplaylist || bottom.is_scplaylist)
@@ -1283,7 +1287,7 @@ void GUI::add_url(std::wstring url, bool refresh)
 								bottom.playlist_info["entries"].erase(--it);
 							}
 							std::string URL {bottom.playlist_info["entries"][0]["url"]};
-							cmd = L" --no-warnings -j " + fmt_sort + to_wstring(URL);
+							cmd = L" --no-warnings -j " + (bottom.is_ytplaylist ? force_android : L"") + fmt_sort + to_wstring(URL);
 							media_info = {util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + cmd, &bottom.working_info)};
 							if(!media_info.empty() && media_info.front() == '{')
 							{
@@ -1303,7 +1307,7 @@ void GUI::add_url(std::wstring url, bool refresh)
 				}
 				else // YouTube video
 				{
-					std::wstring cmd {L" --no-warnings -j " + (conf.output_template.empty() ? L"" : L"-o \"" + conf.output_template + L'\"') + 
+					std::wstring cmd {L" --no-warnings -j " + force_android + (conf.output_template.empty() ? L"" : L"-o \"" + conf.output_template + L'\"') +
 						fmt_sort + L'\"' + url + L'\"'};
 					if(conf.cb_proxy && !conf.proxy.empty())
 						cmd = L" --proxy " + conf.proxy + cmd;
