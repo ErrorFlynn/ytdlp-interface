@@ -178,13 +178,16 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 	l_out.text_align(nana::align::left, nana::align_v::center);
 	l_rate.create(gpopt, "Download rate limit:");
 	l_rate.text_align(nana::align::left, nana::align_v::center);
+	l_chap.create(gpopt, "Chapters:");
+	//l_chap.text_align(nana::align::left, nana::align_v::center);
 	l_outpath.create(gpopt, &outpath);
 	com_rate.create(gpopt);
+	com_chap.create(gpopt);
 	com_args.create(gpopt);
-	cbsplit.create(gpopt, "Split chapters");
+	//cbsplit.create(gpopt, "Split chapters");
 	cbkeyframes.create(gpopt, "Force keyframes at cuts");
 	cbmp3.create(gpopt, "Convert audio to MP3");
-	cbchaps.create(gpopt, "Embed chapters");
+	//cbchaps.create(gpopt, "Embed chapters");
 	cbsubs.create(gpopt, "Embed subtitles");
 	cbthumb.create(gpopt, "Embed thumbnail");
 	cbsubs.create(gpopt, "Embed subtitles");
@@ -238,9 +241,9 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 			<weight=25 <l_out weight=122> <weight=15> <l_outpath> > <weight=20>
 			<weight=25 
 				<l_rate weight=144> <weight=15> <tbrate weight=45> <weight=15> <com_rate weight=55> 
-				<> <cbchaps weight=141> <> <cbsplit weight=124> <> <cbkeyframes weight=194>
+				<> <cbtime weight=304> <> <cbsubs weight=140>
 			> <weight=20>
-			<weight=25 <cbtime weight=304> <> <cbthumb weight=152> <> <cbsubs weight=140> <> <cbmp3 weight=181>>
+			<weight=25 <l_chap weight=67> <weight=10> <com_chap weight=65> <> <cbkeyframes weight=194> <> <cbthumb weight=152> <> <cbmp3 weight=181>>
 			<weight=20> <weight=24 <cbargs weight=164> <weight=15> <com_args> <weight=10> <btnerase weight=24>>
 		)");
 
@@ -249,10 +252,10 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 	gpopt["l_rate"] << l_rate;
 	gpopt["tbrate"] << tbrate;
 	gpopt["com_rate"] << com_rate;
-	gpopt["cbsplit"] << cbsplit;
+	gpopt["l_chap"] << l_chap;
 	gpopt["cbkeyframes"] << cbkeyframes;
 	gpopt["cbmp3"] << cbmp3;
-	gpopt["cbchaps"] << cbchaps;
+	gpopt["com_chap"] << com_chap;
 	gpopt["cbsubs"] << cbsubs;
 	gpopt["cbthumb"] << cbthumb;
 	gpopt["cbtime"] << cbtime;
@@ -376,15 +379,36 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 			gui.bottoms.propagate_misc_options(*this);
 	});
 
+	com_chap.editable(false);
+	com_chap.push_back(" ignore");
+	com_chap.push_back(" embed");
+	com_chap.push_back(" split");
+
 	com_rate.editable(false);
 	com_rate.push_back(" KB/s");
 	com_rate.push_back(" MB/s");
+
 	if(prevbot)
+	{
 		com_rate.option(prevbot->com_rate.option());
-	else com_rate.option(conf.ratelim_unit);
+		com_chap.option(prevbot->com_chap.option());
+	}
+	else 
+	{
+		com_chap.option(conf.com_chap);
+		com_rate.option(conf.ratelim_unit);
+	}
+
 	com_rate.events().selected([&]
 	{
 		conf.ratelim_unit = com_rate.option();
+		if(conf.common_dl_options && com_rate == api::focus_window())
+			gui.bottoms.propagate_misc_options(*this);
+	});
+
+	com_chap.events().selected([&]
+	{
+		conf.com_chap = com_rate.option();
 		if(conf.common_dl_options && com_rate == api::focus_window())
 			gui.bottoms.propagate_misc_options(*this);
 	});
@@ -448,13 +472,13 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 		}
 	});
 
-	cbsplit.tooltip("Split into multiple files based on internal chapters. (<bold>--split-chapters)</>");
+	com_chap.tooltip("<bold>--embed-chapters</>\tAdd chapter markers to the video file.\n"
+		"<bold>--split-chapters</> \t\tSplit video into multiple files based on chapters.");
 	cbkeyframes.tooltip("Force keyframes around the chapters before\nremoving/splitting them. Requires a\n"
 		"reencode and thus is very slow, but the\nresulting video may have fewer artifacts\n"
 		"around the cuts. (<bold>--force-keyframes-at-cuts</>)");
 	cbtime.tooltip("Do not use the Last-modified header to set the file modification time (<bold>--no-mtime</>)");
 	cbsubs.tooltip("Embed subtitles in the video (only for mp4, webm and mkv videos) (<bold>--embed-subs</>)");
-	cbchaps.tooltip("Add chapter markers to the video file (<bold>--embed-chapters</>)");
 	cbthumb.tooltip("Embed thumbnail in the video as cover art (<bold>--embed-thumbnail</>)");
 	cbmp3.tooltip("Convert the source audio to MPEG Layer 3 format and save it to an .mp3 file.\n"
 		"The video is discarded if present, so it's preferable to download an audio-only\n"
@@ -612,8 +636,6 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 
 	if(prevbot)
 	{
-		cbsplit.check(prevbot->cbsplit.checked());
-		cbchaps.check(prevbot->cbchaps.checked());
 		cbsubs.check(prevbot->cbsubs.checked());
 		cbthumb.check(prevbot->cbthumb.checked());
 		cbtime.check(prevbot->cbtime.checked());
@@ -623,8 +645,6 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 	}
 	else
 	{
-		cbsplit.check(conf.cbsplit);
-		cbchaps.check(conf.cbchaps);
 		cbsubs.check(conf.cbsubs);
 		cbthumb.check(conf.cbthumb);
 		cbtime.check(conf.cbtime);
@@ -632,27 +652,6 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 		cbmp3.check(conf.cbmp3);
 		cbargs.check(conf.cbargs);
 	}
-
-	cbsplit.radio(true);
-	cbchaps.radio(true);
-
-	cbsplit.events().checked([&, this]
-	{
-		if(cbsplit.checked() && cbchaps.checked())
-			cbchaps.check(false);
-		conf.cbsplit = cbsplit.checked();
-		if(conf.common_dl_options && cbsplit == api::focus_window())
-			gui.bottoms.propagate_cb_options(*this);
-	});
-
-	cbchaps.events().checked([&, this]
-	{
-		if(cbchaps.checked() && cbsplit.checked())
-			cbsplit.check(false);
-		conf.cbchaps = cbchaps.checked();
-		if(conf.common_dl_options && cbchaps == api::focus_window())
-			gui.bottoms.propagate_cb_options(*this);
-	});
 
 	cbtime.events().checked([&, this]
 	{

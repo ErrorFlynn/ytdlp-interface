@@ -475,7 +475,7 @@ bool GUI::process_queue_item(std::wstring url)
 	auto &tbrate {bottom.tbrate};
 	auto &btn_ytfmtlist {bottom.btn_ytfmtlist};
 	auto &cbmp3 {bottom.cbmp3};
-	auto &cbsplit {bottom.cbsplit};
+	auto &com_chap {bottom.com_chap};
 	auto &cbkeyframes {bottom.cbkeyframes};
 	auto &btndl {bottom.btndl};
 	auto &prog {bottom.prog};
@@ -642,7 +642,7 @@ bool GUI::process_queue_item(std::wstring url)
 		if(cmd.back() != ' ')
 			cmd.push_back(' ');
 
-		if(conf.cbchaps && argset.find(L"--embed-chapters") == -1)
+		if(com_chap.option() == 1 && argset.find(L"--embed-chapters") == -1)
 			cmd += L"--embed-chapters ";
 		if(conf.cbsubs && argset.find(L"--embed-subs") == -1)
 			cmd += L"--embed-subs ";
@@ -663,7 +663,7 @@ bool GUI::process_queue_item(std::wstring url)
 			if(argset.find(L"--audio-quality") == -1) 
 				L"--audio-quality 0 ";
 		}
-		if(cbsplit.checked() && argset.find(L"--split-chapters") == -1)
+		if(com_chap.option() == 2 && argset.find(L"--split-chapters") == -1)
 			cmd += L"--split-chapters -o chapter:\"" + bottom.outpath.wstring() + L"\\%(title)s - %(section_number)s -%(section_title)s.%(ext)s\" ";
 		if(bottom.cbargs.checked() && !argset.empty())
 			cmd += argset + L" ";
@@ -2176,6 +2176,18 @@ bool GUI::is_ytchan(std::wstring url)
 	if(pos != -1 && url.size() > pos + 12 && url.find(L"watch?v=") == -1 && url.find(L"list=") == -1 && url.find(L"/live/") == -1
 		&& url.find(L"music.youtube.com") == -1)
 		return true;
+	return false;
+}
+
+
+bool GUI::is_scplaylist(std::wstring url)
+{
+	if(url.find(L"soundcloud.com/") != -1)
+	{
+		auto pos_in {url.find(L"?in=")}, pos_sets {url.find(L"/sets/")};
+		if(pos_sets != -1 && pos_in == -1)
+			return true;
+	}
 	return false;
 }
 

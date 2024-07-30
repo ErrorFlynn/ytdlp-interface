@@ -258,8 +258,10 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 											}
 											if(chrono.elapsed_ms() >= 300 || percent == 100)
 											{
+												auto pos {line.find("[download]", pos2)};
+												std::string text {pos == -1 ? line.substr(pos2) : line.substr(pos2, pos-pos2)};
 												chrono.reset();
-												cbprog(static_cast<ULONGLONG>(percent * 10), 1000, line.substr(pos2), playlist_complete - 1, playlist_total);
+												cbprog(static_cast<ULONGLONG>(percent * 10), 1000, text, playlist_complete - 1, playlist_total);
 											}
 										}
 									} catch(...) {}

@@ -148,10 +148,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			GUI::conf.fmt2 = to_wstring(jconf["fmt2"].get<std::string>());
 			GUI::conf.ratelim = jconf["ratelim"];
 			GUI::conf.ratelim_unit = jconf["ratelim_unit"];
-			if(jconf.contains("cbsplit")) // v1.1
+			if(jconf.contains("cbkeyframes")) // v1.1
 			{
-				GUI::conf.cbsplit = jconf["cbsplit"];
-				GUI::conf.cbchaps = jconf["cbchaps"];
 				GUI::conf.cbsubs = jconf["cbsubs"];
 				GUI::conf.cbthumb = jconf["cbthumb"];
 				GUI::conf.cbtime = jconf["cbtime"];
@@ -304,9 +302,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				GUI::conf.theme_light.from_json(jconf["theme"]["light"]);
 				GUI::conf.theme_light.contrast(GUI::conf.contrast, false);
 			}
-			if(jconf.contains("cb_android")) // v2.14
+			if(jconf.contains("cb_android")) // v2.13.2
 			{
 				GUI::conf.cb_android = jconf["cb_android"];
+			}
+			if(jconf.contains("com_chap")) // v2.13.3
+			{
+				GUI::conf.com_chap = jconf["com_chap"];
 			}
 		}
 	}
@@ -344,9 +346,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["fmt1"] = to_utf8(GUI::conf.fmt1);
 		jconf["fmt2"] = to_utf8(GUI::conf.fmt2);
 		jconf["ratelim"] = GUI::conf.ratelim;
+		jconf["com_chap"] = GUI::conf.com_chap;
 		jconf["ratelim_unit"] = GUI::conf.ratelim_unit;
-		jconf["cbsplit"] = GUI::conf.cbsplit;
-		jconf["cbchaps"] = GUI::conf.cbchaps;
 		jconf["cbsubs"] = GUI::conf.cbsubs;
 		jconf["cbthumb"] = GUI::conf.cbthumb;
 		jconf["cbtime"] = GUI::conf.cbtime;

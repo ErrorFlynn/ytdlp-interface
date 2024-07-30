@@ -47,7 +47,7 @@ private:
 	std::thread thr, thr_releases, thr_versions, thr_ver_ffmpeg, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp, thr_update;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.13.2"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 5)*/},
+	const std::string ver_tag {"v2.13.3"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 5)*/},
 		ytdlp_fname {X64 ? "yt-dlp.exe" : "yt-dlp_x86.exe"};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
@@ -97,10 +97,10 @@ private:
 		widgets::Textbox tbrate;
 		widgets::Progress prog;
 		widgets::Button btn_ytfmtlist, btndl, btnerase, btnq, btncopy;
-		widgets::Label l_out, l_rate;
+		widgets::Label l_out, l_rate, l_chap;
 		widgets::path_label l_outpath;
-		widgets::Combox com_rate, com_args;
-		widgets::cbox cbsplit, cbkeyframes, cbmp3, cbchaps, cbsubs, cbthumb, cbtime, cbargs;
+		widgets::Combox com_rate, com_args, com_chap;
+		widgets::cbox cbkeyframes, cbmp3, cbsubs, cbthumb, cbtime, cbargs;
 		widgets::Separator separator;
 		widgets::Expcol expcol;
 
@@ -253,6 +253,7 @@ private:
 	void get_version_ffmpeg(bool auto_detach = true);
 	bool is_ytlink(std::wstring url);
 	bool is_ytchan(std::wstring url);
+	bool is_scplaylist(std::wstring url);
 	void make_updater_page(themed_form &parent);
 	bool is_tag_a_new_version(std::string tag_name) { return semver_t {tag_name} > semver_t {ver_tag}; }
 	void show_queue(bool freeze_redraw = true);
