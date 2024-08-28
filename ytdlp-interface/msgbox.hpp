@@ -103,7 +103,7 @@ namespace widgets
 				break;
 			}
 
-			theme_callback([&, this](bool dark)
+			theme_callback([&](bool dark)
 			{
 				bgcolor(theme::fmbg);
 				bot_panel.bgcolor(theme::fmbg.blend(colors::grey, .1));

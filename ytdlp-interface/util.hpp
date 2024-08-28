@@ -46,7 +46,7 @@ namespace util
 								  progress_callback cbprog = nullptr, bool *graceful_exit = nullptr, std::string suppress = "");
 	DWORD other_instance(std::wstring path = L"");
 	std::wstring get_sys_folder(REFKNOWNFOLDERID rfid);
-	std::string get_inet_res(std::string res, std::string *error = nullptr);
+	std::string get_inet_res(std::string res, std::string *error = nullptr, bool truncate = false);
 	std::string dl_inet_res(std::string res, fs::path fname, bool *working = nullptr, std::function<void(unsigned)> cb = nullptr);
 	std::string extract_7z(fs::path arc_path, fs::path out_path, unsigned ffmpeg = 0, bool ytdlp_interface = false);
 	std::wstring get_clipboard_text();

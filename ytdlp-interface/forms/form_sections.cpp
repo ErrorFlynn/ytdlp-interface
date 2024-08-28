@@ -212,7 +212,7 @@ void GUI::fm_sections()
 			bottom.sections.push_back(item.value<std::pair<std::wstring, std::wstring>>());
 	});
 
-	fm.theme_callback([&, this](bool dark)
+	fm.theme_callback([&](bool dark)
 	{
 		apply_theme(dark);
 		fm.bgcolor(theme::fmbg);

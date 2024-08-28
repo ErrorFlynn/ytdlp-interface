@@ -179,30 +179,25 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 	l_rate.create(gpopt, "Download rate limit:");
 	l_rate.text_align(nana::align::left, nana::align_v::center);
 	l_chap.create(gpopt, "Chapters:");
-	//l_chap.text_align(nana::align::left, nana::align_v::center);
 	l_outpath.create(gpopt, &outpath);
 	com_rate.create(gpopt);
 	com_chap.create(gpopt);
 	com_args.create(gpopt);
-	//cbsplit.create(gpopt, "Split chapters");
 	cbkeyframes.create(gpopt, "Force keyframes at cuts");
 	cbmp3.create(gpopt, "Convert audio to MP3");
-	//cbchaps.create(gpopt, "Embed chapters");
-	cbsubs.create(gpopt, "Embed subtitles");
-	cbthumb.create(gpopt, "Embed thumbnail");
 	cbsubs.create(gpopt, "Embed subtitles");
 	cbthumb.create(gpopt, "Embed thumbnail");
 	cbtime.create(gpopt, "File modification time = time of writing");
 	cbargs.create(gpopt, "Custom arguments:");
 
-	btnq.events().click([&, this]
+	btnq.events().click([&]
 	{
 		if(btnq.caption().find("queue") != -1)
 			gui.show_queue();
 		else gui.show_output();
 	});
 
-	btncopy.events().click([&, this]
+	btncopy.events().click([&]
 	{
 		gui.bottoms.propagate_cb_options(*this);
 		gui.bottoms.propagate_args_options(*this);
@@ -293,7 +288,7 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 	com_args.caption(conf.argset);
 	com_args.editable(true);
 
-	com_args.events().focus([&, this] (const arg_focus &arg)
+	com_args.events().focus([&] (const arg_focus &arg)
 	{
 		if(!arg.getting)
 		{
@@ -310,19 +305,19 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 		}
 	});
 
-	com_args.events().selected([&, this]
+	com_args.events().selected([&]
 	{
 		conf.argset = com_args.caption();
 		if(conf.common_dl_options && api::focus_window() == com_args)
 			gui.bottoms.propagate_args_options(*this);
 	});
 
-	com_args.events().text_changed([&, this]
+	com_args.events().text_changed([&]
 	{
 		auto idx {com_args.caption_index()};
 		if(idx != -1) btnerase.enable(true);
 		else btnerase.enable(false);
-		if(api::focus_window() == com_args)
+		if(conf.common_dl_options && api::focus_window() == com_args)
 		{
 			for(auto &pbot : gui.bottoms)
 			{
@@ -333,7 +328,7 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 		}
 	});
 
-	btnerase.events().click([&, this]
+	btnerase.events().click([&]
 	{
 		auto idx {com_args.caption_index()};
 		if(idx != -1)
@@ -356,7 +351,9 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 
 	tbrate.set_accept([this](wchar_t wc)->bool
 	{
-		return wc == keyboard::backspace || wc == keyboard::del || ((isdigit(wc) || wc == '.') && tbrate.text().size() < 5);
+		const auto selpoints {tbrate.selection()};
+		const auto selcount {selpoints.second.x - selpoints.first.x};
+		return wc == keyboard::backspace || wc == keyboard::del || ((isdigit(wc) || wc == '.') && tbrate.text().size() < 5 || selcount);
 	});
 
 	tbrate.events().focus([this](const arg_focus &arg)
@@ -373,7 +370,7 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 		}
 	});
 
-	tbrate.events().text_changed([&, this]
+	tbrate.events().text_changed([&]
 	{
 		if(conf.common_dl_options && tbrate == api::focus_window())
 			gui.bottoms.propagate_misc_options(*this);
@@ -413,7 +410,7 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 			gui.bottoms.propagate_misc_options(*this);
 	});
 
-	expcol.events().click([&, this]
+	expcol.events().click([&]
 	{
 		auto wdsz {api::window_size(gui)};
 		const auto px {(nana::API::screen_dpi(true) >= 144) * gui.queue_panel.visible()};
@@ -550,63 +547,22 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 			}
 		};
 
-		auto pop_file_selection_box = [&gui, &conf, this]
-		{
-			nana::filebox fb {*this, false};
-			fb.allow_multi_select(false);
-			fb.title("Specify the name to give the downloaded file");
-			if(outfile.empty())
-			{
-				if(!vidinfo.empty() && vidinfo_contains("_filename"))
-				{
-					std::string fname {vidinfo["_filename"]};
-					if(vidinfo_contains("requested_formats") && vidinfo["requested_formats"].size() > 1)
-					{
-						auto pos {fname.rfind('.')};
-						if(pos != -1)
-							fname = fname.substr(0, pos);
-					}
-					fb.init_file(outpath / fname);
-				}
-				else fb.init_file(outpath / "type the file name here (this overrides the output template from settings)");
-			}
-			else fb.init_file(outpath / outfile.filename());
-			auto res {fb()};
-			if(res.size())
-			{
-				outfile = res.front();
-				outpath = conf.outpath = outfile.parent_path();
-				l_outpath.caption(outpath.u8string());
-				l_outpath.tooltip("Custom file name:\n<bold>" + outfile.filename().string() + 
-					"</>\n(this overrides the output template from the settings)");
-				if(conf.common_dl_options)
-					gui.bottoms.propagate_misc_options(*this);
-			}
-		};
-
-		::widgets::Menu m;
-		m.append("Choose folder...", [&](menu::item_proxy &)
+		if(conf.outpaths.empty() || conf.outpaths.size() == 1 && *conf.outpaths.begin() == outpath)
 		{
 			pop_folder_selection_box();
-			if(conf.outpaths.size() >= 11 && conf.outpaths.find(outpath) == conf.outpaths.end())
-				conf.outpaths.erase(conf.outpaths.begin());
 			conf.outpaths.insert(outpath);
-		});
-
-		m.append("Choose folder and filename...", [&](menu::item_proxy &)
+		}
+		else
 		{
-			pop_file_selection_box();
-			if(conf.outpaths.size() >= 11 && conf.outpaths.find(outpath) == conf.outpaths.end())
-				conf.outpaths.erase(conf.outpaths.begin());
-			conf.outpaths.insert(outpath);
-		}).enabled(!url.empty() && !is_ytplaylist && !is_bcplaylist && !is_ytchan && !is_yttab && !is_bcchan);
-
-		if(!outfile.empty())
-			m.append("Clear custom filename", [&](menu::item_proxy &) { outfile.clear(); l_outpath.tooltip(""); });
-
-		if(conf.outpaths.size() > 1)
-		{
-			m.append("Clear folder history", [&](menu::item_proxy &)
+			::widgets::Menu m;
+			m.append("Choose folder...", [&, this](menu::item_proxy &)
+			{
+				pop_folder_selection_box();
+				if(conf.outpaths.size() >= 11 && conf.outpaths.find(outpath) == conf.outpaths.end())
+					conf.outpaths.erase(conf.outpaths.begin());
+				conf.outpaths.insert(outpath);
+			});
+			m.append("Clear folder history", [&, this](menu::item_proxy &)
 			{
 				conf.outpaths.clear();
 				conf.outpaths.insert(outpath);
@@ -616,7 +572,7 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 			{
 				if(path != outpath)
 				{
-					m.append(to_utf8(clip_text(path, gui.dpi_scale(250))), [&](menu::item_proxy &)
+					m.append(to_utf8(clip_text(path, gui.dpi_scale(250))), [&, this](menu::item_proxy &)
 					{
 						outpath = conf.outpath = path;
 						l_outpath.update_caption();
@@ -626,12 +582,12 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 					});
 				}
 			}
+			m.max_pixels(gui.dpi_scale(280));
+			m.item_pixels(24);
+			auto curpos {api::cursor_position()};
+			m.popup_await(nullptr, curpos.x - 142, curpos.y);
+			gui.queue_panel.focus();
 		}
-		m.max_pixels(gui.dpi_scale(280));
-		m.item_pixels(24);
-		auto curpos {api::cursor_position()};
-		m.popup_await(nullptr, curpos.x - 142, curpos.y);
-		gui.queue_panel.focus();
 	});
 
 	if(prevbot)
@@ -653,37 +609,37 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 		cbargs.check(conf.cbargs);
 	}
 
-	cbtime.events().checked([&, this]
+	cbtime.events().checked([&]
 	{
 		conf.cbtime = cbtime.checked();
 		if(conf.common_dl_options && cbtime == api::focus_window())
 			gui.bottoms.propagate_cb_options(*this);
 	});
-	cbthumb.events().checked([&, this]
+	cbthumb.events().checked([&]
 	{
 		conf.cbthumb = cbthumb.checked();
 		if(conf.common_dl_options && cbthumb == api::focus_window())
 			gui.bottoms.propagate_cb_options(*this);
 	});
-	cbsubs.events().checked([&, this]
+	cbsubs.events().checked([&]
 	{
 		conf.cbsubs = cbsubs.checked();
 		if(conf.common_dl_options && cbsubs == api::focus_window())
 			gui.bottoms.propagate_cb_options(*this);
 	});
-	cbkeyframes.events().checked([&, this]
+	cbkeyframes.events().checked([&]
 	{
 		conf.cbkeyframes = cbkeyframes.checked();
 		if(conf.common_dl_options && cbkeyframes == api::focus_window())
 			gui.bottoms.propagate_cb_options(*this);
 	});
-	cbmp3.events().checked([&, this]
+	cbmp3.events().checked([&]
 	{
 		conf.cbmp3 = cbmp3.checked();
 		if(conf.common_dl_options && cbmp3 == api::focus_window())
 			gui.bottoms.propagate_cb_options(*this);
 	});
-	cbargs.events().checked([&, this]
+	cbargs.events().checked([&]
 	{
 		conf.cbargs = cbargs.checked();
 		if(conf.common_dl_options && cbargs == api::focus_window())
@@ -703,7 +659,7 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 
 			auto cliptext {util::get_clipboard_text()};
 
-			m.append("Paste", [&, this](menu::item_proxy)
+			m.append("Paste", [&](menu::item_proxy)
 			{
 				com_args.focus();
 				keybd_event(VK_LCONTROL, 0, 0, 0);
@@ -721,24 +677,54 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 }
 
 
+bool GUI::gui_bottom::browse_for_filename()
+{
+	nana::filebox fb {*pgui, false};
+	fb.allow_multi_select(false);
+	fb.title("Specify the name to give the downloaded file");
+	if(outfile.empty())
+	{
+		if(!vidinfo.empty() && vidinfo_contains("_filename"))
+		{
+			std::string fname {vidinfo["_filename"]};
+			if(vidinfo_contains("requested_formats") && vidinfo["requested_formats"].size() > 1)
+			{
+				auto pos {fname.rfind('.')};
+				if(pos != -1)
+					fname = fname.substr(0, pos);
+			}
+			fb.init_file(outpath / fname);
+		}
+		else fb.init_file(outpath / "type the file name here (this overrides the output template from settings)");
+	}
+	else fb.init_file(outpath / outfile.filename());
+	auto res {fb()};
+	if(res.size())
+	{
+		outfile = res.front();
+		outpath = conf.outpath = outfile.parent_path();
+		l_outpath.caption(outpath.u8string());
+		l_outpath.tooltip("Custom file name:\n<bold>" + outfile.filename().string() +
+			"</>\n(this overrides the output template from the settings)");
+		if(conf.common_dl_options)
+			pgui->bottoms.propagate_misc_options(*this);
+		if(conf.outpaths.size() >= 11 && conf.outpaths.find(outpath) == conf.outpaths.end())
+			conf.outpaths.erase(conf.outpaths.begin());
+		conf.outpaths.insert(outpath);
+		return true;
+	}
+	return false;
+}
+
+
 void GUI::gui_bottom::apply_playsel_string()
 {
 	auto &str {playsel_string};
 	playlist_selection.assign(playlist_info["entries"].size(), false);
 
-	int idx_offset {0};
-	auto pos0 {str.find('|')};
+	auto pos0 {str.rfind('|')};
 	if(pos0 != -1)
-	{
-		std::wstring id_first_then {str.substr(0, pos0)};
 		str.erase(0, pos0 + 1);
-		for(const auto &entry : playlist_info["entries"])
-		{
-			if(nana::to_wstring(entry["id"].get<std::string>()) == id_first_then)
-				break;
-			idx_offset++;
-		}
-	}
 
 	int a {0}, b {0};
 	size_t pos {0}, pos1 {0};
@@ -747,27 +733,27 @@ void GUI::gui_bottom::apply_playsel_string()
 		playlist_selection[stoi(str) - 1] = true;
 	while(pos1 != -1)
 	{
-		a = stoi(str.substr(pos, pos1 - pos)) - 1 + idx_offset;
+		a = stoi(str.substr(pos, pos1 - pos)) - 1;
 		pos = pos1 + 1;
 		if(str[pos1] == ',')
 		{
 			playlist_selection[a] = true;
 			pos1 = str.find_first_of(L",:", pos);
 			if(pos1 == -1)
-				playlist_selection[stoi(str.substr(pos)) - 1 + idx_offset] = true;
+				playlist_selection[stoi(str.substr(pos)) - 1] = true;
 		}
 		else // ':'
 		{
 			pos1 = str.find(',', pos);
 			if(pos1 != -1)
 			{
-				b = stoi(str.substr(pos, pos1 - pos)) - 1 + idx_offset;
+				b = stoi(str.substr(pos, pos1 - pos)) - 1;
 				pos = pos1 + 1;
 				pos1 = str.find_first_of(L",:", pos);
 				if(pos1 == -1)
-					playlist_selection[stoi(str.substr(pos)) - 1 + idx_offset] = true;
+					playlist_selection[stoi(str.substr(pos)) - 1] = true;
 			}
-			else b = stoi(str.substr(pos)) - 1 + idx_offset;
+			else b = stoi(str.substr(pos)) - 1;
 
 			for(auto n {a}; n <= b; n++)
 				playlist_selection[n] = true;
@@ -790,4 +776,127 @@ bool GUI::gui_bottom::vidinfo_contains(std::string key)
 	if(vidinfo.contains(key) && vidinfo[key] != nullptr)
 		return true;
 	return false;
+}
+
+
+void GUI::gui_bottom::from_json(const nlohmann::json &j)
+{
+	using nana::to_wstring;
+
+	if(j.contains("vidinfo"))
+	{
+		vidinfo = j["vidinfo"];
+		show_btnfmt(true);
+	}
+	if(j.contains("playlist_info"))
+	{
+		playlist_info = j["playlist_info"];
+		if(j.contains("playsel_string"))
+		{
+			playsel_string = to_wstring(j["playsel_string"].get<std::string>());
+			apply_playsel_string();
+		}
+		else playlist_selection.assign(playlist_info["entries"].size(), true);
+	}
+	if(j.contains("strfmt"))
+	{
+		strfmt = to_wstring(j["strfmt"].get<std::string>());
+		use_strfmt = j["use_strfmt"];
+	}
+	if(j.contains("fmt1"))
+		fmt1 = to_wstring(j["fmt1"].get<std::string>());
+	if(j.contains("fmt2"))
+		fmt2 = to_wstring(j["fmt2"].get<std::string>());
+	if(j.contains("cmdinfo"))
+		cmdinfo = to_wstring(j["cmdinfo"].get<std::string>());
+	if(j.contains("playlist_vid_cmdinfo"))
+		playlist_vid_cmdinfo = to_wstring(j["playlist_vid_cmdinfo"].get<std::string>());
+	if(j.contains("idx_error"))
+		idx_error = j["idx_error"].get<int>();
+	if(j.contains("is_yttab"))
+		is_yttab = j["is_yttab"];
+	if(j.contains("is_ytplaylist"))
+		is_ytplaylist = j["is_ytplaylist"];
+	if(j.contains("idx_error"))
+		idx_error = j["idx_error"];
+	if(j.contains("output_buffer"))
+		pgui->outbox.buffer(url, j["output_buffer"].get<std::string>());
+	if(j.contains("dlcmd"))
+		pgui->outbox.commands[url] = j["dlcmd"].get<std::string>();
+	if(j.contains("outfile"))
+	{
+		outfile = fs::u8path(j["outfile"].get<std::string>());
+		outpath = conf.outpath = outfile.parent_path();
+		l_outpath.caption(outpath.u8string());
+		l_outpath.tooltip("Custom file name:\n<bold>" + outfile.filename().string() +
+			"</>\n(this overrides the output template from the settings)");
+	}
+	if(j.contains("outpath"))
+	{
+		outpath = fs::u8path(j["outpath"].get<std::string>());
+		l_outpath.caption(outpath.u8string());
+		tbrate.caption(j["tbrate"].get<std::string>());
+		com_rate.option(j["com_rate"]);
+		cbtime.check(j["cbtime"]);
+		cbsubs.check(j["cbsubs"]);
+		com_chap.option(j["com_chap"]);
+		cbkeyframes.check(j["cbkeyframes"]);
+		cbthumb.check(j["cbthumb"]);
+		cbmp3.check(j["cbmp3"]);
+		cbargs.check(j["cbargs"]);
+		com_args.caption(j["com_args"].get<std::string>());
+	}
+}
+
+
+void GUI::gui_bottom::to_json(nlohmann::json &j)
+{
+	using namespace nana;
+	if(!vidinfo.empty())
+		j["vidinfo"] = vidinfo;
+	if(!playlist_info.empty())
+		j["playlist_info"] = playlist_info;
+	if(!strfmt.empty())
+	{
+		j["strfmt"] = to_utf8(strfmt);
+		j["use_strfmt"] = use_strfmt;
+	}
+	if(!fmt1.empty())
+		j["fmt1"] = to_utf8(fmt1);
+	if(!fmt2.empty())
+		j["fmt2"] = to_utf8(fmt2);
+	if(!cmdinfo.empty())
+		j["cmdinfo"] = to_utf8(cmdinfo);
+	if(!playlist_vid_cmdinfo.empty())
+		j["playlist_vid_cmdinfo"] = to_utf8(playlist_vid_cmdinfo);
+	if(!playsel_string.empty())
+		j["playsel_string"] = to_utf8(playsel_string);
+	if(idx_error)
+		j["idx_error"] = idx_error;
+	if(is_yttab)
+		j["is_yttab"] = true;
+	if(is_ytplaylist)
+		j["is_ytplaylist"] = true;
+	if(idx_error)
+		j["idx_error"] = idx_error;
+	if(!pgui->outbox.buffer(url).empty())
+		j["output_buffer"] = pgui->outbox.buffer(url);
+	if(pgui->outbox.commands.contains(url))
+		j["dlcmd"] = pgui->outbox.commands[url];
+	if(!outfile.empty())
+		j["outfile"] = outfile.string();
+	if(!conf.common_dl_options)
+	{
+		j["outpath"] = outpath.string();
+		j["tbrate"] = tbrate.caption();
+		j["com_rate"] = com_rate.option();
+		j["cbtime"] = cbtime.checked();
+		j["cbsubs"] = cbsubs.checked();
+		j["com_chap"] = com_chap.option();
+		j["cbkeyframes"] = cbkeyframes.checked();
+		j["cbthumb"] = cbthumb.checked();
+		j["cbmp3"] = cbmp3.checked();
+		j["cbargs"] = cbargs.checked();
+		j["com_args"] = com_args.caption();
+	}
 }

@@ -38,7 +38,7 @@ themed_form::themed_form(theme_cb theme_change_callback, nana::window owner, nan
 
 		msg.make_before(WM_KEYDOWN, [this](UINT, WPARAM wparam, LPARAM, LRESULT *)
 		{
-			if(wparam == VK_ESCAPE)
+			if(wparam == VK_ESCAPE && escape_)
 			{
 				close();
 				return false;

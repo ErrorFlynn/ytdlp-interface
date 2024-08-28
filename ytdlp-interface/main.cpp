@@ -310,24 +310,20 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			{
 				GUI::conf.com_chap = jconf["com_chap"];
 			}
+			if(jconf.contains("com_cookies")) // v2.14
+			{
+				GUI::conf.com_cookies = jconf["com_cookies"];
+			}
 		}
 	}
 	else GUI::conf.outpath = util::get_sys_folder(FOLDERID_Downloads);
 
 	GUI gui;
 	gui.confpath = confpath;
+	gui.infopath = fs::path{confpath}.replace_filename("unfinished_qitems_data.json");
 
 	if(jconf.contains("playsel_strings"))
-	{
-		for(auto &el : jconf["unfinished_queue_items"])
-		{
-			const std::string url {el};
-			const auto wurl {to_wstring(url)};
-			auto &bot {gui.botref().at(wurl)};
-			if(jconf["playsel_strings"].contains(url))
-				bot.playsel_string = to_wstring(jconf["playsel_strings"][url].get<std::string>());
-		}
-	}
+		jconf.erase("playsel_strings");
 
 	gui.fn_write_conf = [&]
 	{
@@ -340,6 +336,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		GUI::conf.theme_dark.to_json(jconf["theme"]["dark"]);
 		GUI::conf.theme_light.to_json(jconf["theme"]["light"]);
 
+		jconf["com_cookies"] = GUI::conf.com_cookies;
 		jconf["cb_android"] = GUI::conf.cb_android;
 		jconf["ytdlp_path"] = GUI::conf.ytdlp_path;
 		jconf["outpath"] = GUI::conf.outpath;
@@ -429,16 +426,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["sblock"]["cb_remove"] = GUI::conf.cb_sblock_remove;
 		jconf["proxy"]["enabled"] = GUI::conf.cb_proxy;
 		jconf["proxy"]["URL"] = to_utf8(GUI::conf.proxy);
-
-		if(jconf.contains("playsel_strings"))
-			jconf.erase("playsel_strings");
-		for(auto &el : jconf["unfinished_queue_items"])
-		{
-			const std::string url {el};
-			auto &bot {gui.botref().at(url)};
-			if(!bot.playsel_string.empty() && !bot.playlist_info["entries"].empty())
-				jconf["playsel_strings"][url] = bot.playlist_info["entries"][0]["id"].get<std::string>() + "|" + to_utf8(bot.playsel_string);
-		}
 
 		busy = false;
 		return (std::ofstream {confpath} << std::setw(4) << jconf).good();

@@ -189,7 +189,7 @@ void GUI::fm_playlist()
 		}
 	});
 
-	tbfirst.events().text_changed([&, this]
+	tbfirst.events().text_changed([&]
 	{
 		if(tbfirst == api::focus_window())
 		{
@@ -224,7 +224,7 @@ void GUI::fm_playlist()
 		}
 	});
 
-	tblast.events().text_changed([&, this]
+	tblast.events().text_changed([&]
 	{
 		if(tblast == api::focus_window())
 		{
@@ -243,7 +243,7 @@ void GUI::fm_playlist()
 		}
 	});
 
-	fm.events().unload([&, this]
+	fm.events().unload([&]
 	{
 		const auto sel {bottom.playlist_selected()};
 		if(0 < sel && sel < bottom.playlist_selection.size())
@@ -294,7 +294,7 @@ void GUI::fm_playlist()
 		}
 	});
 
-	fm.theme_callback([&, this](bool dark)
+	fm.theme_callback([&](bool dark)
 	{
 		apply_theme(dark);
 		fm.bgcolor(theme::fmbg);

@@ -146,9 +146,8 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 		if(graceful_exit)
 			*graceful_exit = false;
 	};
-	std::string playlist_line;
+	int playlist_complete {1}, playlist_total {0};
 	bool procexit {false}, subs {false};
-	chronometer chrono;
 	while(!procexit)
 	{
 		procexit = WaitForSingleObject(pi.hProcess, 50) == WAIT_OBJECT_0;
@@ -229,7 +228,14 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 						const bool line_starts_with_download {line.starts_with("[download]")},
 						           playlist_progress {line_starts_with_download && line.find(" Downloading item ") == 10};
 						if(playlist_progress)
-							playlist_line = line;
+						{
+							auto pos {line.find(" of ", 28)};
+							if(pos != -1)
+							{
+								playlist_complete = std::stod(line.substr(28, pos - 28));
+								playlist_total = std::stod(line.substr(pos + 4, line.size() - pos - 1));
+							}
+						}
 						auto pos {line.find('%')};
 						if(pos != -1 && line_starts_with_download)
 						{
@@ -248,21 +254,10 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 										auto percent {std::stod(line.substr(pos2, pos - pos2))};
 										line.pop_back();
 										if(*working)
-										{
-											int playlist_complete {1}, playlist_total {0};
-											pos = playlist_line.find(" of ", 28);
-											if(pos != -1)
-											{
-												playlist_complete = std::stod(playlist_line.substr(28, pos - 28));
-												playlist_total = std::stod(playlist_line.substr(pos + 4, playlist_line.size() - pos - 1));
-											}
-											if(chrono.elapsed_ms() >= 300 || percent == 100)
-											{
-												auto pos {line.find("[download]", pos2)};
-												std::string text {pos == -1 ? line.substr(pos2) : line.substr(pos2, pos-pos2)};
-												chrono.reset();
-												cbprog(static_cast<ULONGLONG>(percent * 10), 1000, text, playlist_complete - 1, playlist_total);
-											}
+										{											
+											auto pos {line.find("[download]", pos2)};
+											std::string text {pos == -1 ? line.substr(pos2) : line.substr(pos2, pos-pos2)};
+											cbprog(static_cast<ULONGLONG>(percent * 10), 1000, text, playlist_complete - 1, playlist_total);
 										}
 									} catch(...) {}
 								}
@@ -281,7 +276,7 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 							text += line.substr(slash + 1, paren - slash - 2) + " ";
 							text += line.substr(paren-1, line.rfind(']') - paren);
 							if(*working)
-								cbprog(static_cast<ULONGLONG>(std::stod(strpct) * 10), 1000, text, 0, 0);
+								cbprog(static_cast<ULONGLONG>(std::stod(strpct) * 10), 1000, text, playlist_complete - 1, playlist_total);
 						}
 						else s += line;
 					}
@@ -382,7 +377,7 @@ std::wstring util::get_sys_folder(REFKNOWNFOLDERID rfid)
 	return sres;
 }
 
-std::string util::get_inet_res(std::string res, std::string *error)
+std::string util::get_inet_res(std::string res, std::string *error, bool truncate)
 {
 	std::string ret;
 	if(error) error->clear();
@@ -413,6 +408,7 @@ std::string util::get_inet_res(std::string res, std::string *error)
 					if(read < buf.size())
 						buf.resize(read);
 					ret += buf;
+					if(truncate) break;
 				}
 				else
 				{

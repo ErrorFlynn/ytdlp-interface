@@ -46,7 +46,7 @@ class container : public nana::panel<true>
 	{
 		nana::widget *parent {nullptr}, **target {nullptr};
 		nana::place *plc {nullptr};
-		std::vector<nana::widget *> *widgets {nullptr};
+		std::vector<nana::widget*> *widgets {nullptr};
 		std::string field_name;
 
 		fake_field_interface(nana::widget *parent) : parent {parent} {}
@@ -66,7 +66,6 @@ public:
 	nana::widget *target {nullptr};
 	std::vector<nana::widget*> widgets;
 	static std::vector<container*> containers;
-	//nana::color *clrconf {nullptr};
 	static std::function<void()> btn_callback;
 
 	static void refresh_buttons(bool state);

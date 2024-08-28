@@ -28,8 +28,9 @@ public:
 	GUI();
 
 	static settings_t conf;
-	fs::path confpath;
+	fs::path confpath, infopath;
 	std::function<bool()> fn_write_conf;
+	nlohmann::json unfinished_qitems_data;
 
 private:
 
@@ -44,14 +45,15 @@ private:
 		autostart_next_item {true}, lbq_can_drag {false}, no_draw_freeze {true}, save_queue {false},
 		pwr_can_shutdown {false}, pwr_shutdown {false}, pwr_hibernate {false}, pwr_sleep {false}, start_suspend_fm {false}, 
 		close_when_finished {false};
-	std::thread thr, thr_releases, thr_versions, thr_ver_ffmpeg, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp, thr_update;
+	std::thread thr, thr_releases, thr_versions, thr_ver_ffmpeg, thr_thumb, thr_menu, thr_releases_ffmpeg, thr_releases_ytdlp, thr_update,
+		thr_qitem_data;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.13.3"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 5)*/},
+	const std::string ver_tag {"v2.14.0"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 5)*/},
 		ytdlp_fname {X64 ? "yt-dlp.exe" : "yt-dlp_x86.exe"};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
-	nana::timer tmsg, tqueue;
+	nana::timer tmsg, tqueue, t_load_qitem_data;
 	std::string tmsg_title, tmsg_text;
 	nana::window tmsg_parent;
 
@@ -66,7 +68,8 @@ private:
 			L"mp3", L"ac4", L"eac3", L"ac3", L"dts"},
 		sblock_cats_mark {L"all", L"sponsor", L"intro", L"outro", L"selfpromo", L"preview", L"filler", L"interaction", L"music_offtopic",
 			L"poi_highlight", L"chapter"},
-		sblock_cats_remove {L"all", L"sponsor", L"intro", L"outro", L"selfpromo", L"preview", L"filler", L"interaction", L"music_offtopic"};
+		sblock_cats_remove {L"all", L"sponsor", L"intro", L"outro", L"selfpromo", L"preview", L"filler", L"interaction", L"music_offtopic"},
+		com_cookies_options {L"none", L"brave", L"chrome", L"chromium", L"edge", L"firefox", L"opera", L"safari", L"vivaldi", L"whale"};
 
 	
 	version_t ver_ffmpeg, ver_ffmpeg_latest, ver_ytdlp, ver_ytdlp_latest;
@@ -113,6 +116,9 @@ private:
 		int playlist_selected();
 		bool vidinfo_contains(std::string key);
 		void apply_playsel_string();
+		bool browse_for_filename();
+		void from_json(const nlohmann::json &j);
+		void to_json(nlohmann::json &j);
 	};
 
 	class gui_bottoms
@@ -151,13 +157,14 @@ private:
 	class Outbox : public widgets::Textbox
 	{
 		std::map<std::wstring, std::string> buffers {{L"", ""}};
-		std::map<std::wstring, std::string> commands;
 		std::wstring current_;
 		std::thread thr;
 		bool working {false};
 		GUI *pgui {nullptr};
 
 	public:
+
+		std::map<std::wstring, std::string> commands;
 
 		Outbox() : Textbox() {};
 
@@ -182,6 +189,8 @@ private:
 		void caption(std::string text, std::wstring url = L"");
 		auto caption() const { return textbox::caption(); }
 		const auto &current_buffer() { return buffers[current_]; }
+		const auto &buffer(std::wstring url) { return buffers[url]; }
+		void buffer(std::wstring url, std::string buf) { buffers[url] = buf; }
 		void current(std::wstring url) { current_ = url; }
 		auto current() { return current_; }
 		void clear(std::wstring url = L"");
@@ -235,6 +244,7 @@ private:
 	void fm_formats();
 	void fm_suspend();
 	void fm_colors(themed_form &parent);
+	void fm_loading();
 
 	void queue_remove_all();
 	void queue_remove_selected();
@@ -258,7 +268,7 @@ private:
 	bool is_tag_a_new_version(std::string tag_name) { return semver_t {tag_name} > semver_t {ver_tag}; }
 	void show_queue(bool freeze_redraw = true);
 	void show_output();
-	void add_url(std::wstring url, bool refresh = false);
+	void add_url(std::wstring url, bool refresh = false, bool saveq = true);
 	void taskbar_overall_progress();
 	void on_btn_dl(std::wstring url);
 	void queue_remove_item(std::wstring url, bool save = true);
@@ -301,6 +311,17 @@ private:
 
 	gui_bottoms &botref() { return bottoms; }
 	unsigned res_options_size() { return com_res_options.size(); }
+
+	void init_qitems()
+	{
+		for(auto &url : GUI::conf.unfinished_queue_items)
+			add_url(nana::to_wstring(url), false, false);
+		if(!conf.url_passed_as_arg.empty())
+			add_url(conf.url_passed_as_arg, false, false);
+
+		if(conf.cb_queue_autostart && lbq.at(0).size())
+			on_btn_dl(lbq.at(0).at(0).value<lbqval_t>());
+	}
 
 
 	HRESULT STDMETHODCALLTYPE DragEnter(IDataObject*, DWORD, POINTL, DWORD*) override;

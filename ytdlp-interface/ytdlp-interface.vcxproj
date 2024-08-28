@@ -193,6 +193,7 @@
     <ClCompile Include="forms\form_colors.cpp" />
     <ClCompile Include="forms\form_formats.cpp" />
     <ClCompile Include="forms\form_json.cpp" />
+    <ClCompile Include="forms\form_loading.cpp" />
     <ClCompile Include="forms\form_playlist.cpp" />
     <ClCompile Include="forms\form_sections.cpp" />
     <ClCompile Include="forms\form_settings.cpp" />

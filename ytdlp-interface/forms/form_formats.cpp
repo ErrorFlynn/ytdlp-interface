@@ -182,7 +182,7 @@ void GUI::fm_formats()
 		}
 	});
 
-	btncancel.events().click([&, this]
+	btncancel.events().click([&]
 	{
 		auto &bottom {bottoms.current()};
 		std::string format_id {"---"}, format_note {"---"}, ext {"---"}, filesize {"---"};
@@ -235,7 +235,7 @@ void GUI::fm_formats()
 		return (j.contains(key) && j[key] != nullptr) ? j[key].get<std::string>() : "---";
 	};
 
-	btnok.events().click([&, this]
+	btnok.events().click([&]
 	{
 		auto &bottom {bottoms.current()};
 		auto &strfmt {bottom.strfmt}, &fmt1 {bottom.fmt1}, &fmt2 {bottom.fmt2};
@@ -581,7 +581,7 @@ void GUI::fm_formats()
 		}
 	});
 
-	fm.theme_callback([&, this](bool dark)
+	fm.theme_callback([&](bool dark)
 	{
 		apply_theme(dark);
 		fm.bgcolor(theme::fmbg);

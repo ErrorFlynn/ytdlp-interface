@@ -1,5 +1,6 @@
 ﻿#include "gui.hpp"
 #include <codecvt>
+#include <nana/gui/filebox.hpp>
 
 
 void GUI::queue_make_listbox()
@@ -396,7 +397,7 @@ std::wstring GUI::queue_pop_menu(int x, int y)
 				}
 			}
 
-			m.append("Open folder of " + item_name, [&, file, this](menu::item_proxy)
+			m.append("Open folder of " + item_name, [&, file](menu::item_proxy)
 			{
 				if(!file.empty())
 				{
@@ -418,10 +419,28 @@ std::wstring GUI::queue_pop_menu(int x, int y)
 				}
 			});
 
-			if(!file.empty()) m.append("Open file of " + item_name, [&, file, this](menu::item_proxy)
+			if(!file.empty()) m.append("Open file of " + item_name, [&, file](menu::item_proxy)
 			{
 				ShellExecuteW(NULL, L"open", file.wstring().data(), NULL, NULL, SW_NORMAL);
 			});
+
+			if(!bottom.started() && !bottom.is_ytplaylist && !bottom.is_bcplaylist && !bottom.is_ytchan && 
+				!bottom.is_yttab && !bottom.is_bcchan)
+			{
+				m.append("Set file name of " + item_name, [&](menu::item_proxy)
+				{
+					bottom.browse_for_filename();
+				});
+			}
+
+			if(!bottom.outfile.empty())
+			{
+				m.append("Clear custom filename", [&](menu::item_proxy)
+				{
+					bottom.outfile.clear();
+					bottom.l_outpath.tooltip("");
+				});
+			}
 
 			if(item.text(3) != "error" || !bottom.vidinfo.empty())
 			{
@@ -472,7 +491,6 @@ std::wstring GUI::queue_pop_menu(int x, int y)
 				{
 					fm_json();
 				});
-				//jitem.enabled(!bottom.vidinfo.empty() || !bottom.playlist_info.empty());
 				jitem.enabled(item.text(2) != "...");
 				if(!jitem.enabled())
 					vidsel_item = {&m, vidsel_item.pos};				
@@ -484,7 +502,7 @@ std::wstring GUI::queue_pop_menu(int x, int y)
 				{
 					vidsel_item = {&m, vidsel_item.pos};
 					bottom.show_btnfmt(false);
-					add_url(url, true);
+					add_url(url, true, false);
 				});
 			}
 
@@ -524,9 +542,9 @@ std::wstring GUI::queue_pop_menu(int x, int y)
 				}
 				if(!startable.empty())
 				{
-					m.append("Start all", [&, this](menu::item_proxy)
+					m.append("Start all", [&](menu::item_proxy)
 					{
-						thr_menu = std::thread([&, this]
+						thr_menu = std::thread([&]
 						{
 							menu_working = true;
 							autostart_next_item = false;
@@ -693,6 +711,17 @@ std::wstring GUI::queue_pop_menu(int x, int y)
 					lbq.refresh_theme();
 				});
 			}
+
+			m.append("Refresh (reacquire data)", [sel, this](menu::item_proxy)
+			{
+				for(auto ip : sel)
+				{
+					auto url {lbq.at(ip).value<lbqval_t>().url};
+					if(!bottoms.at(url).started())
+						add_url(url, true, false);
+				}
+				api::refresh_window(lbq);
+			});
 		}
 
 		m.append_splitter();

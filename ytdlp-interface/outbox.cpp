@@ -14,7 +14,7 @@ void GUI::Outbox::create(GUI *parent, bool visible)
 	typeface(nana::paint::font_info {"Arial", 10});
 	nana::API::effects_edge_nimbus(*this, nana::effects::edge_nimbus::none);
 
-	events().dbl_click([&, this](const nana::arg_mouse &arg)
+	events().dbl_click([&](const nana::arg_mouse &arg)
 	{
 		if(arg.is_left_button())
 		{
@@ -22,7 +22,7 @@ void GUI::Outbox::create(GUI *parent, bool visible)
 		}
 	});
 
-	events().mouse_up([&, this](const nana::arg_mouse &arg)
+	events().mouse_up([&](const nana::arg_mouse &arg)
 	{
 		using namespace nana;
 		using ::widgets::theme;
@@ -34,7 +34,7 @@ void GUI::Outbox::create(GUI *parent, bool visible)
 			::widgets::Menu m;
 			m.item_pixels(24);
 
-			m.append("Copy to clipboard", [&, this](menu::item_proxy)
+			m.append("Copy to clipboard", [&](menu::item_proxy)
 			{
 				util::set_clipboard_text(pgui->hwnd, to_wstring(text));
 
@@ -192,7 +192,7 @@ void GUI::Outbox::append(std::wstring url, std::string text)
 			auto cmd {text};
 			while(cmd.back() == '\r' || cmd.back() == '\n')
 				cmd.pop_back();
-			commands[url] = cmd;
+			commands[url] = cmd.substr(cmd.find('\"'));
 		}
 		size_t buflim {conf.output_buffer_size}, bufsize {buf.size()}, textsize {text.size()};
 		if(conf.limit_output_buffer && bufsize + textsize > buflim)
@@ -234,6 +234,22 @@ void GUI::Outbox::caption(std::string text, std::wstring url)
 {
 	if(!empty())
 	{
+		std::stringstream ss {text};
+		std::string line;
+		while(std::getline(ss, line))
+		{
+			if(line.size() > 3 && line.front() == '[')
+			{
+				const auto pos {line.find(']', 1)};
+				if(pos != -1)
+				{
+					const auto kw {line.substr(0, pos + 1)};
+					if(kw != "[GUI]" && kw != "[download]")
+						set_keyword(kw);
+				}
+			}
+		}
+
 		if(url.empty())
 			buffers[current_] = text;
 		else buffers[url] = text;

@@ -95,7 +95,6 @@ void GUI::fm_colors(themed_form &parent)
 
 	picture pic_info {fm};
 	pic_info.load(img_info);
-	//pic_info.stretchable(true);
 	pic_info.transparent(true);
 	pic_info.align(align::center, align_v::center);
 
@@ -581,7 +580,7 @@ void GUI::fm_colors(themed_form &parent)
 		}
 	});
 
-	fm.subclass_before(WM_KILLFOCUS, [&](UINT, WPARAM, LPARAM lparam, LRESULT*)
+	fm.subclass_before(WM_KILLFOCUS, [&](UINT, WPARAM, LPARAM, LRESULT*)
 	{
 		for(auto c : container::containers)
 			c->bgcolor(theme::fmbg);

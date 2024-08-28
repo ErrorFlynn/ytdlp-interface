@@ -8,7 +8,7 @@ void GUI::fm_changes(nana::window parent)
 	themed_form fm {nullptr, parent, {}, appear::decorate<appear::sizable>{}};
 	fm.center(1030, 543);
 	fm.snap(conf.cbsnap);
-	fm.theme_callback([&, this](bool dark)
+	fm.theme_callback([&](bool dark)
 	{
 		apply_theme(dark);
 		fm.bgcolor(theme::fmbg);

@@ -160,7 +160,7 @@ void GUI::fm_json()
 
 	fm.events().resized([&] { api::refresh_window(fm); });
 
-	fm.theme_callback([&, this](bool dark)
+	fm.theme_callback([&](bool dark)
 	{
 		apply_theme(dark);
 		fm.bgcolor(theme::fmbg);

@@ -565,7 +565,10 @@ namespace widgets
 				renderer_->bground(graph, compset);
 			}
 
-			void expander(graph_reference graph, const compset_interface *compset) const override;
+			void expander(graph_reference graph, const compset_interface *compset) const override
+			{
+				renderer_->expander(graph, compset);
+			}
 
 			void crook(graph_reference graph, const compset_interface *compset) const override
 			{

@@ -161,8 +161,6 @@ void theme_t::make_default(bool dark)
 		tree_selfg = color {"#569EBD"};
 		tree_hilitebg = color {"#28353D"};
 		tree_hilitefg = color {"#48606A"};
-		//tree_selhilitebg = color {"#253F4C"};
-		//tree_selhilitefg = color {"#468EAD"};
 		tree_parent_node = color {"#ddd"};
 		tree_expander = colors::white;
 		tree_expander_hovered = color {"#ade"};
@@ -188,7 +186,7 @@ void theme_t::make_default(bool dark)
 		btn_fg = color {"#67a"};
 		path_fg = color {"#354"};
 		path_link_fg = color {"#789"};
-		sep_bg = color {"#cdcdcd"};
+		sep_bg = color {"#c5c5c5"};
 		expcol_fg = color {"#aaa"};
 		gpfg = "0x81544F";
 		gpfg_clr = color {"#81544F"};
@@ -206,7 +204,6 @@ void theme_t::make_default(bool dark)
 		tree_selfg = color {"#97aeb4"};
 		tree_hilitebg = color {"#e7eef4"};
 		tree_hilitefg = color {"#d7dee4"};
-		//tree_selhilitefg = color {"#B6E6FB"};
 		tree_parent_node = color {"#909090"};
 		tree_expander = colors::black;
 		tree_expander_hovered = colors::deep_sky_blue;

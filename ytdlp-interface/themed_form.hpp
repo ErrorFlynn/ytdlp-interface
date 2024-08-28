@@ -22,6 +22,7 @@ public:
 	int dpi_scale(int val, double from_dpi = 96);
 	bool center(double w = 0, double h = 0, bool autoscale = true);
 	void snap(bool enable) { snap_ = enable; }
+	void escape_key(bool enable) { escape_ = enable; }
 	HWND native_handle() { return hwnd; }
 	void subclass_before(UINT msgid, std::function<bool(UINT, WPARAM, LPARAM, LRESULT*)> handler) { msg.make_before(msgid, handler); }
 	void subclass_after(UINT msgid, std::function<bool(UINT, WPARAM, LPARAM, LRESULT*)> handler) { msg.make_after(msgid, handler); }
@@ -32,7 +33,7 @@ public:
 protected:
 	HWND hwnd {nullptr};
 	subclass msg {*this};
-	bool snap_ {false};
+	bool snap_ {false}, escape_ {true};
 
 private:
 	theme_cb callback;

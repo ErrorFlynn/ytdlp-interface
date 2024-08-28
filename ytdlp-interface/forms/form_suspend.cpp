@@ -74,7 +74,7 @@ void GUI::fm_suspend()
 	btn.events().click([&] {fm.close();});
 	btn.focus();
 
-	fm.theme_callback([&, this](bool dark)
+	fm.theme_callback([&](bool dark)
 	{
 		apply_theme(dark);
 		fm.bgcolor(theme::fmbg);

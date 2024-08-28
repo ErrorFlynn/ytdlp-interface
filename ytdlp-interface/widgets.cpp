@@ -148,6 +148,7 @@ void Label::create(nana::window parent, std::string_view text, bool dpi_adjust)
 	typeface(nana::paint::font_info {"Segoe UI", 12 - (double)(nana::API::screen_dpi(true) > 96) * 2 * dpi_adjust});
 	text_align(nana::align::right, nana::align_v::center);
 	nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
+	//bgcolor(nana::colors::dark_red);
 	events().expose([this] { fgcolor(theme::Label_fg); });
 }
 
@@ -363,7 +364,7 @@ std::string Listbox::favicon_url_from_value(std::wstring val)
 	if(val.find(L"bandcamp.com") != -1)
 	{
 		std::string res, error;
-		res = util::get_inet_res(nana::to_utf8(val), &error);
+		res = util::get_inet_res(nana::to_utf8(val), &error, true);
 		if(!res.empty())
 		{
 			auto pos1 {res.find(R"(<link rel="shortcut icon" href=")")};
@@ -825,7 +826,7 @@ void Expcol::create(nana::window parent)
 	events().mouse_leave([this] { hovered = false; api::refresh_window(*this); });
 	events().click([this] { operate(!downward); });
 
-	drawing {*this}.draw([&, this](paint::graphics &g)
+	drawing {*this}.draw([&](paint::graphics &g)
 	{
 		auto draw_v = [&](const point pos, const int w)
 		{
@@ -1013,7 +1014,7 @@ void JSON_Tree::refresh_theme()
 			icon_null = "null_dark";
 		}
 
-		std::function<void(item_proxy)> recfn = [&, this](item_proxy parent)
+		std::function<void(item_proxy)> recfn = [&](item_proxy parent)
 		{
 			for(auto node : parent)
 			{
@@ -1141,28 +1142,6 @@ void conf_tree::ctree_renderer::begin_paint(nana::widget &wdg)
 }
 
 
-void conf_tree::ctree_renderer::expander(graph_reference graph, const compset_interface *compset) const
-{
-	using namespace nana;
-	comp_attribute_t attr;
-	if(compset->comp_attribute(component::expander, attr))
-	{
-		facade<element::arrow> arrow("solid_triangle");
-		arrow.direction(direction::southeast);
-		if(!compset->item_attribute().expended)
-		{
-			arrow.switch_to("hollow_triangle");
-			arrow.direction(direction::east);
-		}
-		auto r = attr.area;
-		r.y += (attr.area.height - 16) / 2;
-		r.width = r.height = 16;
-		auto clr {attr.mouse_pointed ? theme::tree_expander_hovered : theme::tree_expander};
-		arrow.draw(graph, api::bgcolor(htree_), clr, r, element_state::normal);
-	}
-}
-
-
 void conf_tree::ctree_renderer::text(graph_reference graph, const compset_interface *compset) const
 {
 	auto iattr {compset->item_attribute()};
@@ -1206,8 +1185,7 @@ void conf_tree::create(nana::window parent, nana::place *place, page_callback ca
 	plc = place;
 	treebox::create(parent);
 	use_entire_line(true);
-	scheme().text_offset = 5;
-	scheme().indent_displacement = 33;
+	scheme().text_offset = util::scale(5);
 	typeface(nana::paint::font_info {"Segoe UI", 12});
 	placer(ctree_placer {placer()});
 	renderer(ctree_renderer {renderer()});
@@ -1367,7 +1345,7 @@ void sblock_listbox::refresh_theme()
 		auto c {theme::contrast()};
 		scheme().item_selected = color {"#c7dEe4"}.blend(colors::grey, .1 - c);
 		scheme().item_selected_border = color {"#a7cEd4"}.blend(colors::grey, .1 - c);
-		scheme().item_highlighted = theme::lbhilite;
+		scheme().item_highlighted = bgcolor().blend(nana::colors::black, .07);
 	}
 	if(borderless())
 		nana::drawing {*this}.draw([](paint::graphics &g) { g.rectangle(false, theme::border); });
