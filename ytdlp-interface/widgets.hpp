@@ -227,7 +227,7 @@ namespace widgets
 
 		size_t item_count();
 		std::string favicon_url_from_value(std::wstring val);
-		nana::drawerbase::listbox::item_proxy item_from_value(std::wstring val, size_t cat = 0);
+		nana::drawerbase::listbox::item_proxy item_from_value(std::wstring val);
 		void hilight_checked(bool enable) { hilite_checked = enable; refresh_theme(); }
 		void refresh_theme();
 		void fit_column_content();

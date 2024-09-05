@@ -405,8 +405,8 @@ GUI::gui_bottom::gui_bottom(GUI &gui, bool visible)
 
 	com_chap.events().selected([&]
 	{
-		conf.com_chap = com_rate.option();
-		if(conf.common_dl_options && com_rate == api::focus_window())
+		conf.com_chap = com_chap.option();
+		if(conf.common_dl_options)
 			gui.bottoms.propagate_misc_options(*this);
 	});
 
@@ -823,6 +823,8 @@ void GUI::gui_bottom::from_json(const nlohmann::json &j)
 		pgui->outbox.buffer(url, j["output_buffer"].get<std::string>());
 	if(j.contains("dlcmd"))
 		pgui->outbox.commands[url] = j["dlcmd"].get<std::string>();
+	if(j.contains("media_title"))
+		media_title = j["media_title"].get<std::string>();
 	if(j.contains("outfile"))
 	{
 		outfile = fs::u8path(j["outfile"].get<std::string>());
@@ -885,6 +887,8 @@ void GUI::gui_bottom::to_json(nlohmann::json &j)
 		j["dlcmd"] = pgui->outbox.commands[url];
 	if(!outfile.empty())
 		j["outfile"] = outfile.string();
+	if(!media_title.empty())
+		j["media_title"] = media_title;
 	if(!conf.common_dl_options)
 	{
 		j["outpath"] = outpath.string();

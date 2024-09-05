@@ -140,28 +140,43 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 					}
 					else
 					{
-						if(sel.size() == lbq.at(0).size())
+						if(sel.size() == lbq.at(sel.front().cat).size())
 							queue_remove_all();
 						else queue_remove_selected();
 					}
 				}
 			}
 		}
-		else if(wparam == 'A')
+		else if(wparam == 'F')
 		{
 			if(GetAsyncKeyState(VK_CONTROL) & 0xff00 && queue_panel.visible())
 			{
-				auto hsel {lbq.events().selected.connect_front([](const nana::arg_listbox &arg) {arg.stop_propagation(); })};
-				lbq.auto_draw(false);
-				for(auto item : lbq.at(0))
-					item.select(true);
-				lbq.auto_draw(true);
-				lbq.events().selected.remove(hsel);
+				if(bottoms.current().btnfmt_visible())
+					fm_formats();
+			}
+		}
+		else if(wparam == 'A')
+		{
+			if(GetAsyncKeyState(VK_CONTROL) & 0xff00 && queue_panel.visible() && !lbq.first_visible().empty())
+			{
+				if(api::focus_window() != lbq)
+				{
+					size_t cat {0};
+					auto sel {lbq.selected()};
+					if(!sel.empty())
+						cat = sel.front().cat;
+					auto hsel {lbq.events().selected.connect_front([](const nana::arg_listbox &arg) {arg.stop_propagation(); })};
+					lbq.auto_draw(false);
+					for(auto item : lbq.at(cat))
+						item.select(true);
+					lbq.auto_draw(true);
+					lbq.events().selected.remove(hsel);
+				}
 			}
 		}
 		else if(wparam == VK_F2)
 		{
-			if(queue_panel.visible() && lbq.at(0).size())
+			if(queue_panel.visible() && lbq.selected().size())
 			{
 				auto &bottom {bottoms.current()};
 				if(!bottom.is_ytplaylist && !bottom.is_bcplaylist && !bottom.is_ytchan && !bottom.is_yttab && !bottom.is_bcchan)
@@ -190,78 +205,92 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 		{
 			if(wparam == VK_UP)
 			{
-				if(lbq.at(0).size() > 1)
+				const auto sel {lbq.selected()};
+				if(!sel.empty())
 				{
-					if(GetAsyncKeyState(VK_SHIFT) & 0xff00)
+					const auto cat {sel.front().cat};
+					if(lbq.at(cat).size() > 1)
 					{
-						const auto sel {lbq.selected()};
-						if(!sel.empty() && sel.front().item > 0)
-							lbq.at(listbox::index_pair {0, sel.front().item - 1}).select(true, true);
+						if(GetAsyncKeyState(VK_SHIFT) & 0xff00)
+						{
+							if(!sel.empty() && sel.front().item > 0)
+								lbq.at(listbox::index_pair {0, sel.front().item - 1}).select(true, true);
+						}
+						else if(lbq.at(cat).size() > 1)
+							lbq.move_select(true);
+						return false;
 					}
-					else if(lbq.at(0).size() > 1)
-						lbq.move_select(true);
-					return false;
 				}
 			}
 			else if(wparam == VK_DOWN)
 			{
-				if(lbq.at(0).size() > 1)
+				const auto sel {lbq.selected()};
+				if(!sel.empty())
 				{
-					if(GetAsyncKeyState(VK_SHIFT) & 0xff00)
+					const auto cat {sel.front().cat};
+					if(lbq.at(cat).size() > 1)
 					{
-						const auto sel {lbq.selected()};
-						if(!sel.empty() && sel.back().item < lbq.at(0).size() - 1)
-							lbq.at(listbox::index_pair {0, sel.back().item + 1}).select(true, true);
+						if(GetAsyncKeyState(VK_SHIFT) & 0xff00)
+						{
+							if(!sel.empty() && sel.back().item < lbq.at(cat).size() - 1)
+								lbq.at(listbox::index_pair {0, sel.back().item + 1}).select(true, true);
+						}
+						else lbq.move_select(false);
+						return false;
 					}
-					else lbq.move_select(false);
-					return false;
 				}
 			}
 			else if(wparam == VK_HOME)
 			{
-				auto cat {lbq.at(0)};
-				if(cat.size() > 1)
+				if(!lbq.first_visible().empty())
 				{
-					auto first_item {cat.at(0)};
-					if(GetAsyncKeyState(VK_SHIFT) & 0xff00)
+					const auto sel {lbq.selected()};
+					auto cat {lbq.at(sel.empty() ? 0 : sel.front().cat)};
+					if(cat.size() > 1)
 					{
-						const auto sel {lbq.selected()};
-						if(!sel.empty() && sel.front().item > 0)
+						auto first_item {cat.at(0)};
+						if(GetAsyncKeyState(VK_SHIFT) & 0xff00)
 						{
-							for(auto n {sel.front().item}; n != npos; n--)
-								cat.at(n).select(true);
-							lbq.scroll(false);
+							if(!sel.empty() && sel.front().item > 0)
+							{
+								for(auto n {sel.front().item}; n != npos; n--)
+									cat.at(n).select(true);
+								lbq.scroll(false);
+							}
 						}
+						else
+						{
+							cat.select(false);
+							cat.at(0).select(true, true);
+						}
+						return false;
 					}
-					else 
-					{
-						cat.select(false);
-						cat.at(0).select(true, true);
-					}
-					return false;
 				}
 			}
 			else if(wparam == VK_END)
 			{
-				auto cat {lbq.at(0)};
-				if(cat.size() > 1)
+				if(!lbq.first_visible().empty())
 				{
-					if(GetAsyncKeyState(VK_SHIFT) & 0xff00)
+					const auto sel {lbq.selected()};
+					auto cat {lbq.at(sel.empty() ? 0 : sel.front().cat)};
+					if(cat.size() > 1)
 					{
-						const auto sel {lbq.selected()};
-						if(!sel.empty() && sel.back().item < cat.size() - 1)
+						if(GetAsyncKeyState(VK_SHIFT) & 0xff00)
 						{
-							for(auto n {sel.back().item}; n < cat.size(); n++)
-								cat.at(n).select(true);
-							lbq.scroll(true);
+							if(!sel.empty() && sel.back().item < cat.size() - 1)
+							{
+								for(auto n {sel.back().item}; n < cat.size(); n++)
+									cat.at(n).select(true);
+								lbq.scroll(true);
+							}
 						}
+						else
+						{
+							cat.select(false);
+							cat.at(cat.size() - 1).select(true, true);
+						}
+						return false;
 					}
-					else 
-					{
-						cat.select(false);
-						cat.at(cat.size()-1).select(true, true);
-					}
-					return false;
 				}
 			}
 		}
@@ -269,6 +298,17 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 		{
 			close();
 			return false;
+		}
+		else if(wparam == VK_TAB)
+		{
+			if(GetAsyncKeyState(VK_CONTROL) & 0xff00)
+			{
+				if(queue_panel.visible())
+					show_output();
+				else show_queue();
+				api::refresh_window(*this);
+				return false;
+			}
 		}
 		return true;
 	});
@@ -484,9 +524,9 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 				const auto url {to_utf8(wurl)};
 				conf.unfinished_queue_items.push_back(url);
 				auto &j {unfinished_qitems_data[url]};
-				bottoms.at(url).to_json(j);
+				auto &bottom {bottoms.at(url)};
+				bottom.to_json(j);
 				j["columns"]["website"] = item.text(1);
-				j["columns"]["title"] = item.text(2);
 				j["columns"]["status"] = text;
 				j["columns"]["format"] = item.text(4);
 				j["columns"]["format_note"] = item.text(5);
@@ -1292,7 +1332,24 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq)
 				{
 					auto item {lbq.item_from_value(url)};
 					item.text(1, j["columns"]["website"].get<std::string>());
-					item.text(2, j["columns"]["title"].get<std::string>());
+					std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> u16conv;
+					auto media_title {bottom.media_title};
+					if(!is_utf8(media_title))
+					{
+						std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> u16conv;
+						auto u16str {u16conv.from_bytes(media_title)};
+						std::wstring wstr(u16str.size(), L'\0');
+						memcpy(&wstr.front(), &u16str.front(), wstr.size() * 2);
+						std::wstring_convert<std::codecvt_utf8<wchar_t>> u8conv;
+						media_title = u8conv.to_bytes(wstr);
+					}
+					if(media_title.empty())
+					{
+						if(j["columns"].contains("title"))
+							item.text(2, j["columns"]["title"].get<std::string>());
+						else item.text(2, "!!! failed to restore the media title !!!");
+					}
+					else item.text(2, media_title);
 					item.text(3, j["columns"]["status"].get<std::string>());
 					if(item.text(3) == "skip")
 					{
@@ -1503,6 +1560,7 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq)
 									break;
 								}
 						auto media_title {bottom.playlist_info["title"].get<std::string>()};
+						bottom.media_title = media_title;
 
 						if(!is_utf8(media_title))
 						{
@@ -1678,6 +1736,7 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq)
 								if(bottom.vidinfo_contains("formats"))
 									bottom.show_btnfmt(true);
 							}
+							bottom.media_title = media_title;
 							if(!is_utf8(media_title))
 							{
 								std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> u16conv;

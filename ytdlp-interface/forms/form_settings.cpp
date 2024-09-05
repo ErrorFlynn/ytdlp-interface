@@ -105,13 +105,21 @@ void GUI::fm_settings()
 	fm["about"] << about;
 
 	about.div(R"(vert
-		<pnl_header weight=35> <weight=10> <l_about_ver weight=50> <weight=15>
-		<about_sep1 weight=3> <weight=20> <libtitle weight=25> <weight=15>
-		<weight=25 <l_nana> <weight=20> <l_nana_ver>>
-		<weight=25 <l_json> <weight=20> <l_json_ver>>
-		<weight=25 <l_jpeg> <weight=20> <l_jpeg_ver>>
-		<weight=25 <l_png> <weight=20> <l_png_ver>>
-		<weight=25 <l_bit7z> <weight=20> <l_bit7z_ver>>
+		<pnl_header weight=35> <weight=10> <l_about_ver weight=50> <weight=14>
+		<about_sep1 weight=3> <weight=20> <libtitle weight=25> <weight=14>
+		<weight=24 <l_nana> <weight=20> <l_nana_ver>>
+		<weight=24 <l_json> <weight=20> <l_json_ver>>
+		<weight=24 <l_jpeg> <weight=20> <l_jpeg_ver>>
+		<weight=24 <l_png> <weight=20> <l_png_ver>>
+		<weight=24 <l_bit7z> <weight=20> <l_bit7z_ver>> <weight=17>
+		<about_sep2 weight=3> <weight=20> <kbtitle weight=25> <weight=14>
+		<weight=24 <l_ctrls> <weight=20> <l_settings>>
+		<weight=24 <l_ctrlf> <weight=20> <l_formats>>
+		<weight=24 <l_ctrltab> <weight=20> <l_view>>
+		<weight=24 <l_f2> <weight=20> <l_fname>>
+		<weight=24 <l_del> <weight=20> <l_delitem>>
+		<weight=24 <l_ctrlnum0> <weight=20> <l_winpos>>
+		<weight=24 <l_esc> <weight=20> <l_close>>
 	)");
 
 	std::string vertext {ver_tag + " (" + (X64 ? "64-bit)" : "32-bit)") +
@@ -120,12 +128,16 @@ void GUI::fm_settings()
 
 	about_label l_about_ver {about, ""};
 	nana::panel<true> pnl_header {about.handle()};
-	widgets::Separator about_sep1 {about};
-	widgets::Title libtitle {about, nana::to_string(u8"\u2606  Libraries used  \u2606")};
+	widgets::Separator about_sep1 {about}, about_sep2 {about};
+	widgets::Title libtitle {about, nana::to_string(u8"\u2606  Libraries used  \u2606")}, 
+		kbtitle {about, nana::to_string(u8"\u2606  Keyboard shortcuts  \u2606")};
 	widgets::Label l_nana {about, "Nana C++ GUI library"}, l_jpeg {about, "libjpeg-turbo"}, l_bit7z {about, "bit7z"},
-		l_png {about, "libpng"}, l_json {about, "JSON for Modern C++"};
+		l_png {about, "libpng"}, l_json {about, "JSON for Modern C++"}, l_ctrls {about, "Ctrl+S"}, l_ctrlf {about, "Ctrl+F"},
+		l_ctrltab {about, "Ctrl+Tab"}, l_f2 {about, "F2"}, l_del {about, "Delete"}, l_esc {about, "Esc"}, l_ctrlnum0 {about, "Ctrl+Num0"};
 	widgets::Text l_nana_ver {about, "v1.8 (custom)"}, l_jpeg_ver {about, "v2.1.5.1"}, l_bit7z_ver {about, "v3.1.3"},
-		l_png_ver {about, "v1.6.37"}, l_json_ver {about, "v3.11.3"};
+		l_png_ver {about, "v1.6.37"}, l_json_ver {about, "v3.11.3"}, l_settings {about, "Settings"}, l_formats {about, "Formats"},
+		l_view {about, "Switch view (queue/output)"}, l_fname {about, "Set file name of queue item"}, 
+		l_delitem {about, "Delete queue item(s)"}, l_close {about, "Close window"}, l_winpos {about, "Reset window size and position"};
 	about["title"] << title;
 	about["pnl_header"] << pnl_header;
 	about["l_about_ver"] << l_about_ver;
@@ -141,6 +153,22 @@ void GUI::fm_settings()
 	about["l_png_ver"] << l_png_ver;
 	about["l_bit7z"] << l_bit7z;
 	about["l_bit7z_ver"] << l_bit7z_ver;
+	about["about_sep2"] << about_sep2;
+	about["kbtitle"] << kbtitle;
+	about["l_ctrls"] << l_ctrls;
+	about["l_settings"] << l_settings;
+	about["l_ctrlf"] << l_ctrlf;
+	about["l_formats"] << l_formats;
+	about["l_ctrltab"] << l_ctrltab;
+	about["l_view"] << l_view;
+	about["l_f2"] << l_f2;
+	about["l_fname"] << l_fname;
+	about["l_del"] << l_del;
+	about["l_delitem"] << l_delitem;
+	about["l_esc"] << l_esc;
+	about["l_close"] << l_close;
+	about["l_ctrlnum0"] << l_ctrlnum0;
+	about["l_winpos"] << l_winpos;
 
 	libtitle.format(true);
 

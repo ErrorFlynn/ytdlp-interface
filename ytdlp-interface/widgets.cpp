@@ -391,12 +391,13 @@ std::string Listbox::favicon_url_from_value(std::wstring val)
 }
 
 
-nana::drawerbase::listbox::item_proxy Listbox::item_from_value(std::wstring val, size_t cat)
+nana::drawerbase::listbox::item_proxy Listbox::item_from_value(std::wstring val)
 {
-	for(auto item : at(cat))
-		if(item.value<lbqval_t>() == val)
-			return item;
-	return at(cat).end();
+	for(size_t cat {0}; cat < size_categ(); cat++)
+		for(auto item : at(cat))
+			if(item.value<lbqval_t>() == val)
+				return item;
+	return at(0).end();
 }
 
 

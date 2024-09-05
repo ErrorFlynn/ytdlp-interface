@@ -49,7 +49,7 @@ private:
 		thr_qitem_data;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.14.0"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 5)*/},
+	const std::string ver_tag {"v2.14.1"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 5)*/},
 		ytdlp_fname {X64 ? "yt-dlp.exe" : "yt-dlp_x86.exe"};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
@@ -89,6 +89,7 @@ private:
 		std::vector<bool> playlist_selection;
 		std::vector<std::pair<std::wstring, std::wstring>> sections;
 		std::wstring url, strfmt, fmt1, fmt2, playsel_string, cmdinfo, playlist_vid_cmdinfo;
+		std::string media_title;
 		std::thread dl_thread, info_thread;
 		int index {0};
 		unsigned idx_error {0};
