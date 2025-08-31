@@ -5,17 +5,18 @@
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 {
 #ifdef _DEBUG
-	AllocConsole();
-	freopen("conout$", "w", stdout);
-	SetConsoleOutputCP(CP_UTF8);
+	g_enable_log = true;
 #endif
+	/*AllocConsole();
+	freopen("conout$", "w", stdout);
+	SetConsoleOutputCP(CP_UTF8);*/
+
 
 	using namespace nana;
 	std::setlocale(LC_ALL, "en_US.UTF-8");
 	int argc;
 	LPWSTR *argv {CommandLineToArgvW(GetCommandLineW(), &argc)};
 	fs::path modpath {argv[0]}, appdir {modpath.parent_path()};
-	const std::string ytdlp_fname {INTPTR_MAX == INT64_MAX ? "yt-dlp.exe" : "yt-dlp_x86.exe"};
 	std::error_code ec;
 	if(fs::exists(appdir / "7zxa.dll"))
 		fs::remove(appdir / "7zxa.dll", ec);
@@ -23,7 +24,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 	if(argc > 1)
 	{
 		const std::wstring first_arg {argv[1]};
-		if(first_arg == L"update")
+		if(first_arg == L"debug_log")
+		{
+			g_enable_log = true;
+		}
+		else if(first_arg == L"update")
 		{
 			const fs::path arc_path {argv[2]}, target_dir {argv[3]};
 			const bool self_only {argc == 5 && std::wstring {argv[4]} == L"self_only"};
@@ -97,7 +102,19 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		return 0;
 	}
 
-	OleInitialize(0);
+	void(OleInitialize(0));
+	if(g_enable_log)
+	{
+		g_log.use_window = false;
+		g_logfile.open(appdir / "debug_log.txt", std::ofstream::trunc);
+		if(!g_logfile.good())
+		{
+			msgbox mbox {"failed to open debug_log.txt for writing"};
+			mbox.icon(msgbox::icon_error);
+			(mbox << std::strerror(errno))();
+		}
+		else g_logfile << "log file open\n";
+	}
 	
 
 	paint::image img {modpath};
@@ -191,8 +208,22 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				GUI::conf.max_concurrent_downloads = jconf["max_concurrent_downloads"];
 				GUI::conf.cb_lengthyproc = jconf["cb_lengthyproc"];
 				GUI::conf.max_proc_dur = std::chrono::milliseconds {jconf["max_proc_dur"].get<int>()};
-				for(auto &el : jconf["unfinished_queue_items"])
-					GUI::conf.unfinished_queue_items.push_back(el);
+				if(!jconf["unfinished_queue_items"].empty())
+				{
+					auto &cat0 {GUI::conf.unfinished_queue_items.emplace_back("", std::vector<std::string>{}).second};
+					for(auto &el : jconf["unfinished_queue_items"])
+					{
+						if(el.is_string())
+							cat0.push_back(el);
+						else if(el.is_object())
+						{
+							auto &cat {GUI::conf.unfinished_queue_items.emplace_back(el["name"], std::vector<std::string>{}).second};
+							for(auto &url : el["items"])
+								cat.push_back(url);
+						}
+					}
+				}
+
 				for(auto &el : jconf["outpaths"])
 					GUI::conf.outpaths.insert(to_wstring(el.get<std::string>()));
 				GUI::conf.common_dl_options = jconf["common_dl_options"];
@@ -314,6 +345,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			{
 				GUI::conf.com_cookies = jconf["com_cookies"];
 			}
+			if(jconf.contains("max_data_threads")) // v2.15
+			{
+				GUI::conf.max_data_threads = jconf["max_data_threads"];
+				GUI::conf.cookie_options = jconf["cookie_options"].get<std::string>();
+			}
 		}
 	}
 	else GUI::conf.outpath = util::get_sys_folder(FOLDERID_Downloads);
@@ -327,14 +363,28 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 
 	gui.fn_write_conf = [&]
 	{
-		static bool busy {false};
-		if(busy) return true;
-
-		busy = true;
 		jconf["cb_custom_dark_theme"] = GUI::conf.cb_custom_dark_theme;
 		jconf["cb_custom_light_theme"] = GUI::conf.cb_custom_light_theme;
 		GUI::conf.theme_dark.to_json(jconf["theme"]["dark"]);
 		GUI::conf.theme_light.to_json(jconf["theme"]["light"]);
+
+		auto &jitems {jconf["unfinished_queue_items"] = nlohmann::json::array()};
+
+		for(const auto &el : GUI::conf.unfinished_queue_items)
+		{
+			if(el.first.empty())
+				for(const auto &url : el.second)
+					jitems.push_back(url);
+			else if(!el.second.empty())
+			{
+				jitems.push_back(nlohmann::json::object());
+				auto &jobj {jitems.back()};
+				jobj["name"] = el.first;
+				auto &jcat {jobj["items"] = nlohmann::json::array()};
+				for(const auto &url : el.second)
+					jcat.push_back(url);
+			}
+		}
 
 		jconf["com_cookies"] = GUI::conf.com_cookies;
 		jconf["cb_android"] = GUI::conf.cb_android;
@@ -363,7 +413,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["max_concurrent_downloads"] = GUI::conf.max_concurrent_downloads;
 		jconf["cb_lengthyproc"] = GUI::conf.cb_lengthyproc;
 		jconf["max_proc_dur"] = GUI::conf.max_proc_dur.count();
-		jconf["unfinished_queue_items"] = GUI::conf.unfinished_queue_items;
 		jconf["common_dl_options"] = GUI::conf.common_dl_options;
 		jconf["cb_autostart"] = GUI::conf.cb_autostart;
 		jconf["cb_queue_autostart"] = GUI::conf.cb_queue_autostart;
@@ -408,6 +457,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["cb_clear_done"] = GUI::conf.cb_clear_done;
 		jconf["cb_formats_fsize_bytes"] = GUI::conf.cb_formats_fsize_bytes;
 		jconf["cb_add_on_focus"] = GUI::conf.cb_add_on_focus;
+		jconf["max_data_threads"] = GUI::conf.max_data_threads;
+		jconf["cookie_options"] = GUI::conf.cookie_options;
 
 		if(jconf.contains("sblock"))
 		{
@@ -427,7 +478,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["proxy"]["enabled"] = GUI::conf.cb_proxy;
 		jconf["proxy"]["URL"] = to_utf8(GUI::conf.proxy);
 
-		busy = false;
 		return (std::ofstream {confpath} << std::setw(4) << jconf).good();
 	};
 

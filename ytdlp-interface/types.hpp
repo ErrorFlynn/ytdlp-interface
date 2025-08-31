@@ -3,8 +3,26 @@
 #include <chrono>
 #include <unordered_set>
 #include <nana/gui.hpp>
-#include "util.hpp"
-#include "icons.hpp"
+#include "json.hpp"
+
+#define WM_SET_QLINE_TEXT (WM_APP + 0x0001)
+#define WM_LBQ_AUTODRAW (WM_APP + 0x0002)
+#define WM_LBQ_NEWITEM (WM_APP + 0x0003)
+#define WM_REFRESH (WM_APP + 0x0004)
+#define WM_LBQ_SELECT (WM_APP + 0x0005)
+#define WM_LBQ_ITEMBG (WM_APP + 0x0006)
+#define WM_LBQ_ERASE (WM_APP + 0x0007)
+#define WM_LBQ_SKIP (WM_APP + 0x0008)
+#define WM_SHOW_BTNFMT (WM_APP + 0x0009)
+#define WM_SET_KEYWORDS (WM_APP + 0x000A)
+#define WM_LBQ_URL2ITEM (WM_APP + 0x000B)
+#define WM_LBQ_IDX2ITEM (WM_APP + 0x000C)
+#define WM_LBQ_GETCAT (WM_APP + 0x000D)
+#define WM_LBQ_HEADERS (WM_APP + 0x000E)
+#define WM_LBQ_SELECT_EX (WM_APP + 0x000F)
+
+using qline_t = std::array<std::string, 7>;
+
 
 struct version_t
 {
@@ -78,13 +96,15 @@ struct settings_t
 		output_template_default_bandcamp {L"%(artist)s - %(album)s - %(track_number)02d - %(track)s.%(ext)s"};
 	std::wstring fmt1, fmt2, output_template {output_template_default}, playlist_indexing {playlist_indexing_default},
 		output_template_bandcamp {output_template_default_bandcamp}, proxy;
-	std::string argset;
-	std::vector<std::string> argsets, unfinished_queue_items;
+	std::string argset, cookie_options;
+	std::vector<std::string> argsets;
+	std::vector<std::pair<std::string, std::vector<std::string>>> unfinished_queue_items;
 	std::unordered_set<std::wstring> outpaths;
 	std::map<std::wstring, std::string> playsel_strings;
 	double ratelim {0}, contrast {.1};
 	unsigned ratelim_unit {1}, pref_res {0}, pref_video {0}, pref_audio {0}, cbtheme {2}, max_argsets {10}, max_outpaths {10},
-		max_concurrent_downloads {1}, output_buffer_size {30000}, pref_vcodec {0}, pref_acodec {0}, com_chap {0}, com_cookies {0};
+		max_concurrent_downloads {1}, output_buffer_size {30000}, pref_vcodec {0}, pref_acodec {0}, com_chap {0}, com_cookies {0},
+		max_data_threads {4};
 	std::chrono::milliseconds max_proc_dur {3000};
 	bool cbsubs {false}, cbthumb {false}, cbtime {true}, cbkeyframes {false}, cbmp3 {false},
 		cbargs {false}, kwhilite {true}, pref_fps {false}, cb_lengthyproc {true}, common_dl_options {true}, cb_autostart {true},

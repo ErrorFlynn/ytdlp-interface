@@ -19,6 +19,7 @@ void GUI::fm_settings()
 {
 	using widgets::theme;
 	static std::string start_page {"ytdlp"};
+	unsigned initial_maxdl {conf.max_concurrent_downloads};
 
 	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize>{}};
 	fm.center(820, 578);
@@ -193,9 +194,10 @@ void GUI::fm_settings()
 		l_theme {gui, "Color theme:"}, l_contrast {gui, "Contrast:"}, l_ytdlp {ytdlp, "Path to yt-dlp:"}, l_ffmpeg {ytdlp, "FFmpeg folder:"},
 		l_template {ytdlp, "Output template:"}, l_maxdl {queuing, "Max concurrent downloads:"}, l_playlist {ytdlp, "Playlist indexing:"},
 		l_opendlg_origin {gui, "When browsing for the output folder, start in:"}, l_sblock {sblock, ""},
-		l_cookies {ytdlp, "Load cookies from browser:"};
+		l_cookies {ytdlp, "Load cookies from browser:"}, l_cookie_options {ytdlp, "Additional options:"},
+		l_maxinfo {queuing, "Max number of concurrent yt-dlp instances used for getting data:"};
 	widgets::path_label l_ytdlp_path {ytdlp, &conf.ytdlp_path}, l_ffmpeg_path {ytdlp, &conf.ffmpeg_path};
-	widgets::Textbox tb_template {ytdlp}, tb_playlist {ytdlp}, tb_proxy {ytdlp};
+	widgets::Textbox tb_template {ytdlp}, tb_playlist {ytdlp}, tb_proxy {ytdlp}, tb_cookies {ytdlp};
 	widgets::Combox com_res {ytdlp}, com_video {ytdlp}, com_audio {ytdlp}, com_vcodec {ytdlp}, com_acodec {ytdlp}, com_cookies {ytdlp};
 	widgets::cbox cbfps {ytdlp, "Prefer a higher framerate"}, cbtheme_dark {gui, "Dark"}, cbtheme_light {gui, "Light"},
 		cbtheme_system {gui, "System preference"}, cb_lengthyproc {queuing, "Start next item on lengthy processing"},
@@ -215,7 +217,7 @@ void GUI::fm_settings()
 	widgets::Separator sep1 {ytdlp}, sep2 {ytdlp}, sep3 {gui}, sep4 {fm};
 	widgets::Button btn_close {fm, " Close"}, btn_default {ytdlp, "Reset to default", true},
 		btn_playlist_default {ytdlp, "Reset to default", true}, btn_info {ytdlp};
-	widgets::Spinbox sb_maxdl {queuing};
+	widgets::Spinbox sb_maxdl {queuing}, sb_maxinfo {queuing};
 	widgets::Slider slider {gui};
 	widgets::sblock_listbox lbmark {sblock}, lbremove {sblock};
 	widgets::Infobox l_info {sblock};
@@ -241,7 +243,7 @@ void GUI::fm_settings()
 		<weight=25 <l_ytdlp weight=132> <weight=10> <l_ytdlp_path> > <weight=18>
 		<weight=25 <l_ffmpeg weight=132> <weight=10> <l_ffmpeg_path> > <weight=18>
 		<weight=25 <weight=11> <cb_proxy weight=121> <weight=10> <tb_proxy>> <weight=18>
-		<weight=25 <l_cookies weight=200> <weight=10> <com_cookies weight=80>>
+		<weight=25 <l_cookies weight=200> <weight=10> <com_cookies weight=80> <weight=10> <l_cookie_options weight=140> <weight=10> <tb_cookies>>
 	)");
 
 	ytdlp_page_refresh = [&] (bool ffmpeg_only)
@@ -267,7 +269,7 @@ void GUI::fm_settings()
 			bool path_empty {conf.ytdlp_path.empty()}, path_gone {!fs::exists(conf.ytdlp_path)};
 			if(path_empty || path_gone)
 			{
-				if(fs::exists(appdir / "ytdl-patched-red.exe"))
+				if(!win7 && fs::exists(appdir / "ytdl-patched-red.exe"))
 				{
 					GUI::conf.ytdlp_path = appdir / "ytdl-patched-red.exe";
 					l_ytdlp_path.update_caption();
@@ -282,10 +284,10 @@ void GUI::fm_settings()
 				else
 				{
 					if(path_empty)
-						l_ytdlp_path.caption("!!!  YT-DLP.EXE NOT FOUND IN PROGRAM FOLDER  !!!");
+						l_ytdlp_path.caption("!!!  YT-DLP EXECUTABLE NOT FOUND IN PROGRAM FOLDER  !!!");
 					else
 					{
-						l_ytdlp_path.caption("!!!  YT-DLP.EXE NOT FOUND AT ITS SAVED LOCATION  !!!");
+						l_ytdlp_path.caption("!!!  YT-DLP EXECUTABLE NOT FOUND AT ITS SAVED LOCATION  !!!");
 						conf.ytdlp_path.clear();
 					}
 					ver_ytdlp = {0, 0, 0};
@@ -333,6 +335,8 @@ void GUI::fm_settings()
 	ytdlp["tb_proxy"] << tb_proxy;
 	ytdlp["l_cookies"] << l_cookies;
 	ytdlp["com_cookies"] << com_cookies;
+	ytdlp["l_cookie_options"] << l_cookie_options;
+	ytdlp["tb_cookies"] << tb_cookies;
 
 	sblock.div(R"(vert		
 		<l_sblock weight=25> <weight=18>
@@ -353,6 +357,10 @@ void GUI::fm_settings()
 	tb_proxy.multi_lines(false);
 	tb_proxy.padding(0, 5, 0, 5);
 	tb_proxy.typeface(nana::paint::font_info {"Tahoma", 10});
+
+	tb_cookies.caption(conf.cookie_options);
+	tb_cookies.padding(4, 5, 0, 5);
+	tb_cookies.typeface(nana::paint::font_info {"Tahoma", 10});
 
 	std::string sblock_text {"<color=0x url=\"https://sponsor.ajay.app\">SponsorBlock</> lets users mark or remove segments in YouTube videos"};
 	l_sblock.format(true);
@@ -438,6 +446,7 @@ void GUI::fm_settings()
 
 	queuing.div(R"(vert		
 		<weight=25 <l_maxdl weight=196> <weight=10> <sb_maxdl weight=40> <> <cb_lengthyproc weight=290>> <weight=20>
+		<weight=25 <l_maxinfo weight=453> <weight=10> <sb_maxinfo weight=40>> <weight=20>
 		<weight=25 <cb_autostart weight=508>> <weight=20>
 		<weight=25 <cb_common weight=408>> <weight=20>
 		<weight=25 <cb_queue_autostart>> <weight=20>
@@ -447,9 +456,12 @@ void GUI::fm_settings()
 	)");
 
 	l_maxdl.text_align(nana::align::left, nana::align_v::center);
+	l_maxinfo.text_align(nana::align::left, nana::align_v::center);
 
 	queuing["l_maxdl"] << l_maxdl;
 	queuing["sb_maxdl"] << sb_maxdl;
+	queuing["l_maxinfo"] << l_maxinfo;
+	queuing["sb_maxinfo"] << sb_maxinfo;
 	queuing["cb_lengthyproc"] << cb_lengthyproc;
 	queuing["cb_autostart"] << cb_autostart;
 	queuing["cb_common"] << cb_common;
@@ -586,6 +598,8 @@ void GUI::fm_settings()
 
 	sb_maxdl.range(1, 10, 1);
 	sb_maxdl.value(std::to_string(conf.max_concurrent_downloads));
+	sb_maxinfo.range(1, number_of_processors, 1);
+	sb_maxinfo.value(std::to_string(conf.max_data_threads));
 
 	slider.maximum(30);
 	slider.value(conf.contrast * 100);
@@ -594,7 +608,7 @@ void GUI::fm_settings()
 		conf.contrast = static_cast<double>(slider.value()) / 100;
 		apply_theme(theme::is_dark());
 		fm.bgcolor(theme::fmbg);
-		nana::api::refresh_window(bottoms.current().gpopt);
+		nana::api::refresh_window(gpopt);
 		ytdlp.refresh_theme();
 		sblock.refresh_theme();
 		queuing.refresh_theme();
@@ -717,7 +731,30 @@ void GUI::fm_settings()
 
 		ffmpeg_tip {"Here you can tell the program where to put the FFmpeg files when\nit updates FFmpeg (via Settings->Updater). "
 			"If the folder you choose\nis not the yt-dlp folder, the program will offer to set up yt-dlp\n(via config file) "
-			"to look for the FFmpeg files in that folder."};
+			"to look for the FFmpeg files in that folder."},
+		
+		maxinfo_tip {"When a URL is added to the queue, the program uses yt-dlp to get info about it,\nand about the media that can be "
+			"downloaded from it. When adding multiple\nURLs to the queue (either by pasting a list of URLs or by splitting a playlist), "
+			"the\nprogram uses multiple concurrent yt-dlp instances, up to a maximum of 4 by\ndefault. You can increase this number "
+			"up to the number of logical processors on\nyour system, but you should be aware of a few considerations before you do.\n\n"
+			"First, if you're downloading a lot from YouTube, you should consider the\npossibility that you might get banned "
+			"for making too many requests too quickly.\nI don't know how likely that is to happen, but I know it's possible.\n\n"
+			"Second, yt-dlp eats a lot of CPU resources for what it does, because Python is an\ninterpreted language (yt-dlp.exe "
+			"contains the Python interpreter, which runs the\nyt-dlp program). It's possible to max out your CPU utilization by "
+			"increasing this\nnumber, and the responsiveness of the interface may be lowered."},
+		
+		cookie_options_tip {"Additional options for the <bold>--cookies-from-browser</> argument,\nin the format <bold>[:PROFILE][::CONTAINER]</>."
+			"\n\nThe text you type is passed to yt-dlp as is, without any validation."},
+
+		cookies_tip {"The program will use <bold>--cookies-from-browser</> when downloading\nand when getting data for a URL.\n\nThis will cause "
+			"yt-dlp to automatically authenticate with the website\nyou're downloading from, if you're logged into it in your browser.\n\n"
+			"Use the drop-down list to select which browser to get cookies from,\nand type any additional options in the textbox.\n\n"
+			"WARNING: Due to recent changes to how Chrome handles cookies,\nthis will probably not work with Chrome."};
+
+	l_cookie_options.tooltip(cookie_options_tip);
+	tb_cookies.tooltip(cookie_options_tip);
+	l_cookies.tooltip(cookies_tip);
+	com_cookies.tooltip(cookies_tip);
 
 	l_ffmpeg.tooltip(ffmpeg_tip);
 	l_ffmpeg_path.tooltip(ffmpeg_tip);
@@ -772,6 +809,8 @@ void GUI::fm_settings()
 	l_res.tooltip(res_tip);
 	l_maxdl.tooltip(maxdl_tip);
 	sb_maxdl.tooltip(maxdl_tip);
+	l_maxinfo.tooltip(maxinfo_tip);
+	sb_maxinfo.tooltip(maxinfo_tip);
 	l_template.tooltip(template_tip);
 	tb_template.tooltip(template_tip);
 	l_playlist.tooltip(playlist_tip);
@@ -802,14 +841,14 @@ void GUI::fm_settings()
 		if(!conf.ytdlp_path.empty())
 			fb.init_file(conf.ytdlp_path);
 		fb.allow_multi_select(false);
-		fb.add_filter("yt-dlp executable", ytdlp_fname + ";ytdl-patched-red.exe");
-		fb.title("Locate and select yt-dlp.exe or ytdl-patched-red.exe");
+		fb.add_filter("yt-dlp executable", ytdlp_fname + (win7 ? "" : ";ytdl-patched-red.exe"));
+		fb.title("Locate and select " + ytdlp_fname + (win7 ? "" : " or ytdl-patched-red.exe"));
 		auto res {fb()};
 		if(res.size())
 		{
 			auto path {res.front()};
 			auto fname {path.filename().string()};
-			if(fname == "yt-dlp.exe" || fname == "ytdl-patched-red.exe")
+			if(fname == ytdlp_fname || fname == "ytdl-patched-red.exe")
 			{
 				conf.ytdlp_path = path;
 				get_version_ytdlp();
@@ -972,6 +1011,7 @@ void GUI::fm_settings()
 		output_template = tb_template.caption_wstring();
 		conf.playlist_indexing = tb_playlist.caption_wstring();
 		conf.max_concurrent_downloads = sb_maxdl.to_int();
+		conf.max_data_threads = sb_maxinfo.to_int();
 		conf.cb_lengthyproc = cb_lengthyproc.checked();
 		conf.cb_autostart = cb_autostart.checked();
 		conf.cb_queue_autostart = cb_queue_autostart.checked();
@@ -982,6 +1022,7 @@ void GUI::fm_settings()
 		conf.cb_sblock_remove = cb_remove.checked();
 		conf.cb_proxy = cb_proxy.checked();
 		conf.proxy = tb_proxy.caption_wstring();
+		conf.cookie_options = tb_cookies.caption();
 		conf.update_self_only = cb_selfonly.checked();
 		conf.cb_premium = cb_premium.checked();
 		conf.cb_android = cb_android.checked();
@@ -989,6 +1030,21 @@ void GUI::fm_settings()
 		conf.cb_clear_done = cb_clear_done.checked();
 		conf.cb_formats_fsize_bytes = cb_formats_fsize_bytes.checked();
 		conf.cb_add_on_focus = cb_add_on_focus.checked();
+
+		if(conf.max_concurrent_downloads > initial_maxdl && lbq.item_count() > 1)
+		{
+			for(size_t cat(0); cat < lbq.size_categ(); cat++)
+				for(auto item : lbq.at(cat))
+				{
+					auto url {item.value<lbqval_t>().url};
+					if(bottoms.at(url).started)
+					{
+						start_next_urls(url);
+						cat = lbq.size_categ();
+						break;
+					}
+				}
+		}
 
 		conf.sblock_mark.clear();
 		for(auto ip : lbmark.at(0))
@@ -1002,31 +1058,33 @@ void GUI::fm_settings()
 
 		if(conf.common_dl_options == cb_common.checked())
 		{
+			auto &curbot {bottoms.current()};
 			if(conf.common_dl_options = !conf.common_dl_options)
 			{
-				auto &curbot {bottoms.current()};
+				l_outpath.source_path(&conf.outpath);
 				bottoms.propagate_cb_options(curbot);
 				bottoms.propagate_args_options(curbot);
 				bottoms.propagate_misc_options(curbot);
+				show_btncopy(false);
+			}
+			else 
+			{
+				l_outpath.source_path(&curbot.outpath);
+				show_btncopy(true);
 			}
 			std::string cap {"Download options"};
-			for(auto &pbot : bottoms)
-			{
-				if(pbot.second->index)
-				{
-					pbot.second->gpopt.caption(conf.common_dl_options ? cap : cap + " for queue item #" + std::to_string(pbot.second->index));
-					pbot.second->show_btncopy(!conf.common_dl_options);
-					nana::api::refresh_window(pbot.second->gpopt);
-				}
-			}
+			auto sel {lbq.selected()};
+			if(!sel.empty())
+				gpopt.caption(conf.common_dl_options ? cap : cap + " for queue item #" + lbq.at(sel.front()).text(0));
+			nana::api::refresh_window(gpopt);
 		}
 
 		updater_working = false;
 		conf.get_releases_at_startup = cb_startup.checked();
 		conf.cb_ffplay = cb_ffplay.checked();
 
-		if(thr.joinable())
-			thr.join();
+		if(thr_updater.joinable())
+			thr_updater.join();
 		if(thr_releases.joinable())
 			thr_releases.detach();
 		if(thr_releases_ffmpeg.joinable())
@@ -1039,11 +1097,19 @@ void GUI::fm_settings()
 			thr_ver_ffmpeg.detach();
 
 		conf.unfinished_queue_items.clear();
-		for(auto item : lbq.at(0))
+		for(size_t cat {0}; cat < lbq.size_categ(); cat++)
 		{
-			auto text {item.text(3)};
-			if(text != "done" && (text != "error" || text == "error" && conf.cb_save_errors))
-				conf.unfinished_queue_items.push_back(nana::to_utf8(item.value<lbqval_t>().url));
+			auto icat {lbq.at(cat)};
+			if(icat.size())
+			{
+				auto &qitems {conf.unfinished_queue_items.emplace_back(icat.text(), std::vector<std::string>{}).second};
+				for(auto item : icat)
+				{
+					auto text {item.text(3)};
+					if(text != "done" && (text != "error" || text == "error" && conf.cb_save_errors))
+						qitems.push_back(nana::to_utf8(item.value<lbqval_t>().url));
+				}
+			}
 		}
 
 		if(!fn_write_conf() && errno)
@@ -1162,11 +1228,17 @@ void GUI::make_updater_page(themed_form &parent)
 		<sep2 weight=3> <weight=20>
 		<weight=30 <l_ver_ytdlp weight=170> <weight=10> <l_ytdlp_text> > <weight=10>
 		<weight=30 <l_ver_ffmpeg weight=170> <weight=10> <l_ffmpeg_text> > <weight=12>
-		<weight=25 <l_channel weight=170> <weight=20> <cb_chan_stable weight=75> <weight=10> <cb_chan_nightly weight=85> <> > <weight=17>
-		<weight=25 <weight=14> <cb_ffplay>> <weight=20>
+		<channel weight=25 <l_channel weight=170> <weight=20> <cb_chan_stable weight=75> <weight=10> <cb_chan_nightly weight=85> <> >
+		<channel_spacer weight=17> <weight=25 <weight=14> <cb_ffplay>> <weight=20>
 		<weight=30 <prog_misc> > <weight=25>
 		<weight=30 <> <btn_update_ytdlp weight=150> <weight=20> <btn_update_ffmpeg weight=160> <> >
 	)");
+
+	if(win7)
+	{
+		updater.get_place().field_display("channel", false);
+		updater.get_place().field_display("channel_spacer", false);
+	}
 
 	l_ver.create(updater, "Latest version:");
 	l_ver_ytdlp.create(updater, "Latest yt-dlp version:");
@@ -1405,13 +1477,22 @@ void GUI::updater_display_version()
 		std::string tag_name {releases[0]["tag_name"]}, vertext;
 		if(is_tag_a_new_version(tag_name))
 		{
+			if(!X64 && releases[0]["assets"].size() < 2)
+			{
+				l_vertext.error_mode(true);
+				l_vertext.caption(tag_name + " lacks a 32-bit package!");
+				return;
+			}
+			if(win7 && releases[0]["assets"].size() < 4)
+			{
+				l_vertext.error_mode(true);
+				l_vertext.caption(tag_name + " lacks a Win7 package!");
+				return;
+			}
 			vertext = tag_name + " (new version)";
 			btn_update.enabled(true);
-			std::string url_latest;
-			if(X64) url_latest = releases[0]["assets"][0]["browser_download_url"];
-			else if(releases[0]["assets"].size() > 1)
-				url_latest = releases[0]["assets"][1]["browser_download_url"];
-			btn_update.tooltip(url_latest);
+			std::string arc_url {releases[0]["assets"][X64 ? (win7 ? 2 : 0) : (win7 ? 3 : 1)]["browser_download_url"]};
+			btn_update.tooltip(arc_url);
 		}
 		else vertext = tag_name + " (current)";
 		l_vertext.caption(vertext);
@@ -1475,7 +1556,7 @@ void GUI::updater_update_self(themed_form &parent)
 {
 	static fs::path arc_path;
 	static bool btnffmpeg_state, btnytdlp_state;
-	arc_path = fs::temp_directory_path() / (X64 ? "ytdlp-interface.7z" : "ytdlp-interface_x86.7z");
+	arc_path = fs::temp_directory_path() / (X64 ? (win7 ? "ytdlp-interface_win7.7z" : "ytdlp-interface.7z") : (win7 ? "ytdlp-interface_x86_win7.7z" : "ytdlp-interface_x86.7z"));
 	if(btn_update.caption() == "Update")
 	{
 		btn_update.caption("Cancel");
@@ -1483,7 +1564,7 @@ void GUI::updater_update_self(themed_form &parent)
 		btnytdlp_state = btn_update_ytdlp.enabled();
 		btn_update_ffmpeg.enabled(false);
 		btn_update_ytdlp.enabled(false);
-		thr = std::thread {[&parent, this]
+		thr_updater = std::thread {[&parent, this]
 		{
 			updater_working = true;
 			if(!X64 && releases[0]["assets"].size() < 2)
@@ -1492,11 +1573,20 @@ void GUI::updater_update_self(themed_form &parent)
 				mbox.icon(nana::msgbox::icon_error);
 				(mbox << "The latest release on GitHub doesn't seem to contain a 32-bit build!")();
 				btn_update.caption("Update");
-				thr.detach();
+				thr_updater.detach();
 				return;
 			}
-			unsigned arc_size {releases[0]["assets"][X64 ? 0 : 1]["size"]}, progval {0};
-			std::string arc_url {releases[0]["assets"][X64 ? 0 : 1]["browser_download_url"]};
+			if(win7 && releases[0]["assets"].size() < 4)
+			{
+				::widgets::msgbox mbox {parent, "ytdlp-interface update error"};
+				mbox.icon(nana::msgbox::icon_error);
+				(mbox << "The latest release on GitHub doesn't seem to contain a Windows 7 package!")();
+				btn_update.caption("Update");
+				thr_updater.detach();
+				return;
+			}
+			unsigned arc_size {releases[0]["assets"][X64 ? (win7 ? 2 : 0) : (win7 ? 3 : 1)]["size"]}, progval {0};
+			std::string arc_url {releases[0]["assets"][X64 ? (win7 ? 2 : 0) : (win7 ? 3 : 1)]["browser_download_url"]};
 			prog_updater.amount(arc_size);
 			prog_updater.value(0);
 			auto cb_progress = [&](unsigned prog_chunk)
@@ -1529,7 +1619,7 @@ void GUI::updater_update_self(themed_form &parent)
 							params += L" self_only";
 						ShellExecuteW(NULL, L"runas", tempself.wstring().data(), params.data(), NULL, SW_SHOW);
 						updater_working = false;
-						thr.detach();
+						thr_updater.detach();
 						close();
 						return;
 					}
@@ -1544,7 +1634,7 @@ void GUI::updater_update_self(themed_form &parent)
 				btn_update_ffmpeg.enabled(btnffmpeg_state);
 				btn_update_ytdlp.enabled(btnytdlp_state);
 				updater_working = false;
-				thr.detach();
+				thr_updater.detach();
 			}
 		}};
 	}
@@ -1556,7 +1646,7 @@ void GUI::updater_update_self(themed_form &parent)
 		btn_update_ffmpeg.enabled(btnffmpeg_state);
 		btn_update_ytdlp.enabled(btnytdlp_state);
 		updater_working = false;
-		thr.detach();
+		thr_updater.detach();
 	}
 };
 
@@ -1579,7 +1669,7 @@ void GUI::updater_update_misc(bool ytdlp, fs::path target)
 		btnytdlp_state = btn_update_ytdlp.enabled();
 		btnupdate_state = btn_update.enabled();
 		btn->caption("Cancel");
-		thr = std::thread {[ytdlp, target, this]
+		thr_updater = std::thread {[ytdlp, target, this]
 		{
 			updater_working = true;
 			unsigned progval {0};
@@ -1676,7 +1766,7 @@ void GUI::updater_update_misc(bool ytdlp, fs::path target)
 				btn_update_ytdlp.enabled(btnytdlp_state);
 				btn_update.enabled(btnupdate_state);
 				updater_working = false;
-				thr.detach();
+				thr_updater.detach();
 			}
 		}};
 	}
@@ -1688,7 +1778,7 @@ void GUI::updater_update_misc(bool ytdlp, fs::path target)
 		btn_update_ffmpeg.enabled(btnffmpeg_state);
 		btn_update_ytdlp.enabled(btnytdlp_state);
 		btn_update.enabled(btnupdate_state);
-		thr.detach();
+		thr_updater.detach();
 	}
 };
 

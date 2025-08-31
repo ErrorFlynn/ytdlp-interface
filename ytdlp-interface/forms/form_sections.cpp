@@ -66,7 +66,7 @@ void GUI::fm_sections()
 	::widgets::Label l_help {fm, ""};
 	::widgets::Button btnadd {fm, "Add to list", true}, btnremove {fm, "Remove from list", true}, btnclear {fm, "Clear list", true},
 		btnclose {fm, "Close"};
-	::widgets::Listbox lbs {fm, true};
+	::widgets::Listbox lbs {fm, nullptr, true};
 	tbox tbfirst {fm}, tbsecond {fm};
 
 	fm["l_help"] << l_help;

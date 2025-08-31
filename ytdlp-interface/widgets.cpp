@@ -1,5 +1,7 @@
 ﻿#include "widgets.hpp"
+#include "util.hpp"
 #include <codecvt>
+#include <Windows.h>
 
 using namespace widgets;
 
@@ -156,6 +158,7 @@ void Label::create(nana::window parent, std::string_view text, bool dpi_adjust)
 void Text::create(nana::window parent, std::string_view text, bool dpi_adjust)
 {
 	nana::label::create(parent, true);
+	caption(text);
 	fgcolor(theme::Text_fg);
 	typeface(nana::paint::font_info {"Segoe UI", 12 - (double)(nana::API::screen_dpi(true) > 96) * 2 * dpi_adjust});
 	text_align(nana::align::left, nana::align_v::center);
@@ -238,7 +241,7 @@ void path_label::create(nana::window parent, const variant var)
 
 void path_label::update_caption()
 {
-	const std::wstring wstr {is_path ? std::get<fs::path *>(v)->wstring() : *std::get<std::wstring *>(v)};
+	const std::wstring wstr {is_path ? std::get<fs::path*>(v)->wstring() : *std::get<std::wstring*>(v)};
 	if(!is_path && wstr.empty())
 		caption("Press Ctrl+V or click here to paste and add media link");
 	else if(!size().empty())
@@ -391,13 +394,112 @@ std::string Listbox::favicon_url_from_value(std::wstring val)
 }
 
 
-nana::drawerbase::listbox::item_proxy Listbox::item_from_value(std::wstring val)
+nana::listbox::item_proxy Listbox::item_from_value(std::wstring val)
 {
-	for(size_t cat {0}; cat < size_categ(); cat++)
-		for(auto item : at(cat))
-			if(item.value<lbqval_t>() == val)
-				return item;
-	return at(0).end();
+	const auto this_thread_id {std::this_thread::get_id()};
+	if(this_thread_id == main_thread_id)
+	{
+		for(size_t cat {0}; cat < size_categ(); cat++)
+			for(auto item : listbox::at(cat))
+				if(item.value<lbqval_t>() == val)
+					return item;
+	}
+	else
+	{
+		auto item {empty_item};
+		SendMessage(hwnd_parent, WM_LBQ_URL2ITEM, reinterpret_cast<WPARAM>(&val), reinterpret_cast<LPARAM>(&item));
+		return item;
+	}
+	return empty_item;
+}
+
+
+nana::listbox::cat_proxy Listbox::at(size_type pos)
+{
+	const auto this_thread_id {std::this_thread::get_id()};
+	if(this_thread_id != main_thread_id)
+	{
+		cat_proxy cat;
+		SendMessage(hwnd_parent, WM_LBQ_GETCAT, pos, reinterpret_cast<LPARAM>(&cat));
+		return cat;
+	}
+	return listbox::at(pos);
+}
+
+
+nana::listbox::item_proxy Listbox::at(const index_pair &abs_pos)
+{
+	const auto this_thread_id {std::this_thread::get_id()};
+	if(this_thread_id != main_thread_id)
+	{
+		auto item {empty_item};
+		SendMessage(hwnd_parent, WM_LBQ_IDX2ITEM, reinterpret_cast<WPARAM>(&abs_pos), reinterpret_cast<LPARAM>(&item));
+	}
+	return listbox::at(abs_pos);
+}
+
+
+void widgets::Listbox::set_line_text(std::wstring url, qline_t text)
+{
+	if(std::this_thread::get_id() == main_thread_id)
+	{
+		auto item {item_from_value(url)};
+		if(item != empty_item)
+		{
+			for(int n{0}; n<7; n++)
+				if(!text[n].empty())
+					item.text(n+1, text[n]);
+		}
+	}
+	else if(!force_no_thread_safe_ops_ && no_thread_safe_ops && !*no_thread_safe_ops)
+	{
+		SendMessage(hwnd_parent, WM_SET_QLINE_TEXT, reinterpret_cast<WPARAM>(&url), reinterpret_cast<LPARAM>(&text));
+	}
+}
+
+
+void widgets::Listbox::refresh_window()
+{
+	if(std::this_thread::get_id() == main_thread_id)
+		nana::api::refresh_window(*this);
+	else SendMessage(hwnd_parent, WM_REFRESH, reinterpret_cast<WPARAM>(handle()), 0);
+}
+
+
+Listbox::item_proxy widgets::Listbox::erase(item_proxy ip)
+{
+	if(std::this_thread::get_id() == main_thread_id)
+	{
+		return listbox::erase(ip);
+	}
+	else
+	{
+		item_proxy res {empty_item};
+		SendMessage(hwnd_parent, WM_LBQ_ERASE, reinterpret_cast<WPARAM>(&ip), reinterpret_cast<LPARAM>(&res));
+		return res;
+	}
+}
+
+
+void widgets::Listbox::set_item_bg(std::wstring url, nana::color bg)
+{
+	if(std::this_thread::get_id() == main_thread_id)
+	{
+		auto item {item_from_value(url)};
+		if(item != empty_item)
+			item.bgcolor(bg);
+	}
+	else if(!force_no_thread_safe_ops_ && no_thread_safe_ops && !*no_thread_safe_ops)
+		SendMessage(hwnd_parent, WM_LBQ_ITEMBG, reinterpret_cast<WPARAM>(&url), reinterpret_cast<LPARAM>(&bg));
+}
+
+
+void widgets::Listbox::auto_draw(bool enable) noexcept
+{
+	if(std::this_thread::get_id() == main_thread_id)
+		return listbox::auto_draw(enable);
+	else if(!force_no_thread_safe_ops_ && no_thread_safe_ops && !*no_thread_safe_ops)
+		SendMessage(hwnd_parent, WM_LBQ_AUTODRAW, enable, 0);
 }
 
 
@@ -432,21 +534,25 @@ void Listbox::refresh_theme()
 		scheme().item_highlighted = theme::lbhilite.blend(colors::dark_grey, .25 - c / 2);
 		dw.clear();
 	}
-	if(hilite_checked)
+	auto_draw(false);
+	for(size_t cat {0}; cat < size_categ(); cat++)
 	{
-		auto_draw(false);
-		for(auto el : at(0))
+		for(auto el : listbox::at(cat))
 		{
-			el.fgcolor(el.checked() ? theme::list_check_highlight_fg : fgcolor());
+			el.bgcolor(theme::lbbg);
+			if(el.checked() && hilite_checked)
+			{
+				el.fgcolor(theme::list_check_highlight_fg);
+			}
+			else el.fgcolor(theme::lbfg);
 		}
-		auto_draw(true);
 	}
+	auto_draw(true);
 }
 
 void widgets::Listbox::fit_column_content()
 {
 	const auto number_of_columns {column_size()};
-	//size_t total_column_width {0};
 	nana::form fm;
 	nana::label l {fm};
 	l.typeface(typeface());
@@ -461,7 +567,6 @@ void widgets::Listbox::fit_column_content()
 			const auto padding {util::scale(20)};
 			if(col.width() < minw + padding)
 				col.width(minw + padding);
-			//total_column_width += column_at(n).width();
 		}
 	}
 }
@@ -505,7 +610,7 @@ void Group::create(nana::window parent, std::string title)
 	group::create(parent);
 	this->title = title;
 	caption(title);
-	enable_format_caption(true);
+	//enable_format_caption(true);
 	caption_align(nana::align::center);
 	refresh_theme();
 	events().expose([this] { refresh_theme(); });
@@ -616,6 +721,8 @@ int Combox::caption_index()
 
 void Textbox::create(nana::window parent, bool visible)
 {
+	main_thread_id = std::this_thread::get_id();
+	hwnd_parent = reinterpret_cast<HWND>(reinterpret_cast<nana::form*>(nana::api::get_widget(parent))->native_handle());
 	textbox::create(parent, visible);
 	refresh_theme();
 	events().expose([this] { refresh_theme(); });
@@ -1405,7 +1512,7 @@ void inline_widget::activate(inline_indicator &ind, index_type pos)
 {
 	indicator_ = &ind;
 	pos_ = pos;
-	if(!lb) lb = dynamic_cast<widgets::Listbox *>(&indicator_->host());
+	if(!lb) lb = dynamic_cast<widgets::Listbox*>(&indicator_->host());
 	text.fgcolor(lb->fgcolor());
 }
 
@@ -1499,4 +1606,20 @@ void thumb_label::refresh_theme()
 	auto bgparent {nana::API::get_widget(parent())->bgcolor()};
 	bgcolor(theme::is_dark() ? bgparent.blend(nana::colors::white, .020) : bgparent.blend(nana::colors::black, .020));
 	fgcolor(theme::overlay_fg);
+}
+
+void widgets::Title::create(nana::window parent, std::string_view text)
+{
+	label::create(parent);
+	caption(text);
+	fgcolor(theme::title_fg);
+	typeface(nana::paint::font_info {"Arial", 15/* - (double)(nana::API::screen_dpi(true) > 96) * 3*/, {800}});
+	text_align(nana::align::center, nana::align_v::top);
+	nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
+	events().expose([this] { refresh_theme(); });
+}
+
+void widgets::Title::refresh_theme()
+{
+	fgcolor(theme::title_fg);
 }

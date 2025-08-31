@@ -5,7 +5,7 @@ void GUI::fm_formats()
 {
 	using namespace nana;
 	using ::widgets::theme;
-	auto url {bottoms.visible()};
+	auto url {qurl};
 	auto &bottom {bottoms.at(url)};
 	auto &vidinfo {bottom.is_scplaylist ? bottom.playlist_info["entries"][0] : bottom.vidinfo};
 
@@ -41,7 +41,7 @@ void GUI::fm_formats()
 	::widgets::Separator sep1 {fm}, sep2 {fm};
 	::widgets::cbox cb_streams {fm, "Select multiple audio formats to merge into .mkv file as audio tracks "
 		"(this passes --audio-multistreams to yt-dlp)"};
-	::widgets::Listbox list {fm, true};
+	::widgets::Listbox list {fm, nullptr, true};
 	::widgets::Button btnok {fm, "Use the selected format(s)"}, btncancel {fm, "Let yt-dlp choose the best formats (default)"};
 
 	fm["l_title"] << l_title;
@@ -67,7 +67,6 @@ void GUI::fm_formats()
 
 	list.sortable(false);
 	list.checkable(true);
-	list.hilight_checked(true);
 	list.enable_single(true, false);
 	list.scheme().text_margin = dpi_scale(10) + (api::screen_dpi(true) > 96) * 4;
 	list.append_header("format", dpi_scale(280));
@@ -110,8 +109,6 @@ void GUI::fm_formats()
 
 		if(item.checked())
 		{
-			//item.fgcolor(theme::list_check_highlight_fg);
-			item.bgcolor(theme::list_check_highlight_bg);
 			list.auto_draw(false);
 			if(pos.cat == 0)
 			{
@@ -146,11 +143,6 @@ void GUI::fm_formats()
 				}
 			}
 			list.auto_draw(true);
-		}
-		else
-		{
-			item.fgcolor(list.fgcolor());
-			item.bgcolor(list.bgcolor());
 		}
 		btnok.enable(!list.checked().empty());
 	});

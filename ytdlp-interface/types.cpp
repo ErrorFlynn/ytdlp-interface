@@ -1,4 +1,6 @@
 #include "types.hpp"
+#include "icons.hpp"
+#include "util.hpp"
 
 
 std::string version_t::string()

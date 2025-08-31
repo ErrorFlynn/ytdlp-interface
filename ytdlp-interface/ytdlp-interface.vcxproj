@@ -177,11 +177,12 @@
       <SubSystem>NotSet</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>bit7z64.lib;Dwmapi.lib;Wininet.lib;nana_v143_Release_x64.lib;jpeg_Release_x64.lib;png_Release_x64.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;PowrProf.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <LinkStatus>false</LinkStatus>
       <ProgramDatabaseFile />
-      <StripPrivateSymbols>Yes</StripPrivateSymbols>
+      <StripPrivateSymbols>
+      </StripPrivateSymbols>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
     <Manifest>
@@ -189,6 +190,7 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="forms\form_alert.cpp" />
     <ClCompile Include="forms\form_changes.cpp" />
     <ClCompile Include="forms\form_colors.cpp" />
     <ClCompile Include="forms\form_formats.cpp" />
@@ -201,10 +203,14 @@
     <ClCompile Include="gui.cpp" />
     <ClCompile Include="gui_bottom.cpp" />
     <ClCompile Include="gui_bottoms.cpp" />
+    <ClCompile Include="gui_make.cpp" />
     <ClCompile Include="hsl_picker.cpp" />
+    <ClCompile Include="log.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="outbox.cpp" />
+    <ClCompile Include="progress_ex.cpp" />
     <ClCompile Include="queue.cpp" />
+    <ClCompile Include="subclass.cpp" />
     <ClCompile Include="themed_form.cpp" />
     <ClCompile Include="types.cpp" />
     <ClCompile Include="util.cpp" />
@@ -216,10 +222,12 @@
     <ClInclude Include="hsl_picker.hpp" />
     <ClInclude Include="icons.hpp" />
     <ClInclude Include="json.hpp" />
+    <ClInclude Include="log.hpp" />
     <ClInclude Include="msgbox.hpp" />
     <ClInclude Include="msgbox_icons.hpp" />
     <ClInclude Include="progress_ex.hpp" />
     <ClInclude Include="resource.h" />
+    <ClInclude Include="subclass.hpp" />
     <ClInclude Include="themed_form.hpp" />
     <ClInclude Include="types.hpp" />
     <ClInclude Include="util.hpp" />

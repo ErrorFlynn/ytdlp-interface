@@ -1,4 +1,5 @@
 #include "util.hpp"
+#include "log.hpp"
 #include "bitextractor.hpp"
 #include "bitexception.hpp"
 
@@ -11,9 +12,9 @@
 #include <codecvt>
 
 #pragma warning (disable: 4244)
+#pragma comment(lib, "winhttp.lib")
 
-std::recursive_mutex subclass::mutex_;
-std::map<HWND, subclass*> subclass::table_;
+logger g_log;
 
 std::string util::format_int(std::uint64_t i)
 {
@@ -23,12 +24,14 @@ std::string util::format_int(std::uint64_t i)
 	return ss.str();
 }
 
+
 std::string util::format_double(double f, unsigned precision)
 {
 	std::stringstream ss;
 	ss << std::fixed << std::setprecision(precision) << f;
 	return ss.str();
 }
+
 
 std::string util::int_to_filesize(std::uint64_t i, bool with_bytes)
 {
@@ -44,6 +47,7 @@ std::string util::int_to_filesize(std::uint64_t i, bool with_bytes)
 	return s;
 }
 
+
 std::string util::get_last_error_str(bool inet)
 {
 	std::string str(4096, '\0');
@@ -55,6 +59,7 @@ std::string util::get_last_error_str(bool inet)
 		str.erase(pos);
 	return str;
 }
+
 
 HWND util::hwnd_from_pid(DWORD pid)
 {
@@ -78,6 +83,7 @@ HWND util::hwnd_from_pid(DWORD pid)
 	return lparam.hwnd;
 }
 
+
 std::vector<HWND> util::hwnds_from_pid(DWORD pid)
 {
 	struct lparam_t { std::vector<HWND> hwnds; DWORD pid {0}; } lparam;
@@ -97,8 +103,14 @@ std::vector<HWND> util::hwnds_from_pid(DWORD pid)
 	return lparam.hwnds;
 }
 
-std::string util::run_piped_process(std::wstring cmd, bool *working, append_callback cbappend, progress_callback cbprog, bool *graceful_exit, std::string suppress)
+
+std::string util::run_piped_process
+(
+	std::wstring cmd, std::atomic_bool *working, append_callback cbappend, progress_callback cbprog, 
+	std::atomic_bool *graceful_exit, std::string suppress
+)
 {
+	const std::string strtid {"[tid " + (std::stringstream {} << std::hex << std::this_thread::get_id()).str() + "]"};
 	std::wstring modpath(4096, '\0');
 	modpath.resize(GetModuleFileNameW(0, &modpath.front(), modpath.size()));
 
@@ -128,24 +140,51 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 		return ret;
 	}
 
-	auto killproc = [&]
+	auto killproc = [&] (bool quick)
 	{
-		if(AttachConsole(pi.dwProcessId))
-		{
-			auto res {GenerateConsoleCtrlEvent(CTRL_C_EVENT, pi.dwProcessId)};
-			FreeConsole();
-			if(res && WaitForSingleObject(pi.hProcess, 6000) == WAIT_OBJECT_0)
+		//if(!quick)
+		//{
+			static std::mutex mtx;
+			std::lock_guard<std::mutex> lock {mtx};
+			if(AttachConsole(pi.dwProcessId))
 			{
-				if(graceful_exit)
-					*graceful_exit = true;
-				return;
+				auto res {GenerateConsoleCtrlEvent(CTRL_C_EVENT, pi.dwProcessId)};
+				FreeConsole();
+				if(res && WaitForSingleObject(pi.hProcess, 6000) == WAIT_OBJECT_0)
+				{
+					if(graceful_exit)
+						*graceful_exit = true;
+					return;
+				}
+			}
+		//}
+		auto hwnd {hwnd_from_pid(pi.dwProcessId)};
+		if(hwnd)
+		{
+			if(IsWindow(hwnd))
+			{
+				SendMessage(hwnd, WM_CLOSE, 0, 0);
+			}
+			else
+			{
+				if(!TerminateProcess(pi.hProcess, 0))
+				{
+					close_children();
+				}
 			}
 		}
-		auto hwnd {hwnd_from_pid(pi.dwProcessId)};
-		if(hwnd) SendMessageA(hwnd, WM_CLOSE, 0, 0);
+		else 
+		{
+			if(close_children(true))
+			{
+				close_children();
+			}
+		}
 		if(graceful_exit)
 			*graceful_exit = false;
 	};
+
+	const bool quick {cmd.find(L" -j ") != -1 || cmd.find(L" -J ") != -1};
 	int playlist_complete {1}, playlist_total {0};
 	bool procexit {false}, subs {false};
 	while(!procexit)
@@ -164,12 +203,12 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 			if(!dwAvail)
 				break;
 
-			if(!::ReadFile(hPipeRead, buf, min(sizeof(buf) - 1, dwAvail), &dwRead, NULL) || !dwRead)
+			if(!::ReadFile(hPipeRead, buf, std::min(static_cast<DWORD>(sizeof(buf) - 1), dwAvail), &dwRead, NULL) || !dwRead)
 				break;
 
 			if(working && !(*working))
 			{
-				killproc();
+				killproc(quick);
 				break;
 			}
 
@@ -301,18 +340,23 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 			DWORD exit_code {0};
 			GetExitCodeProcess(pi.hProcess, &exit_code);
 			if(exit_code == STILL_ACTIVE)
-				killproc();
+			{
+				killproc(quick);
+			}
 			break;
 		}
 	}
 
-	DWORD exit_code {0};
-	GetExitCodeProcess(pi.hProcess, &exit_code);
-	if(exit_code == 1 && cbprog)
-		ret = "failed";
-	if(exit_code == STILL_ACTIVE)
+	if(!quick)
 	{
-		killproc();
+		DWORD exit_code {0};
+		GetExitCodeProcess(pi.hProcess, &exit_code);
+		if(exit_code == 1 && cbprog)
+			ret = "failed";
+		if(exit_code == STILL_ACTIVE)
+		{
+			killproc(quick);
+		}
 	}
 
 	CloseHandle(hPipeWrite);
@@ -321,6 +365,7 @@ std::string util::run_piped_process(std::wstring cmd, bool *working, append_call
 	CloseHandle(pi.hThread);
 	return ret;
 }
+
 
 DWORD util::other_instance(std::wstring path)
 {
@@ -367,6 +412,41 @@ DWORD util::other_instance(std::wstring path)
 	return 0;
 }
 
+
+unsigned util::close_children(bool report_only)
+{
+	unsigned children {0};
+	std::vector<std::thread> threads;
+	HANDLE hSnapshot {CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)};
+	if(hSnapshot)
+	{
+		PROCESSENTRY32 pe32;
+		pe32.dwSize = sizeof(PROCESSENTRY32);
+		if(Process32First(hSnapshot, &pe32))
+		{
+			DWORD curpid {GetCurrentProcessId()};
+			do
+			{
+				if(pe32.th32ParentProcessID == curpid)
+				{
+					auto hwnd {hwnd_from_pid(pe32.th32ProcessID)};
+					if(hwnd)
+					{
+						children++;
+						if(!report_only)
+							threads.emplace_back([hwnd] { SendMessageA(hwnd, WM_CLOSE, 0, 0); });
+					}
+				}
+			} while(Process32Next(hSnapshot, &pe32));
+		}
+		CloseHandle(hSnapshot);
+	}
+	for(auto &thread : threads)
+		thread.join();
+	return children;
+}
+
+
 std::wstring util::get_sys_folder(REFKNOWNFOLDERID rfid)
 {
 	wchar_t *res {nullptr};
@@ -376,6 +456,7 @@ std::wstring util::get_sys_folder(REFKNOWNFOLDERID rfid)
 	CoTaskMemFree(res);
 	return sres;
 }
+
 
 std::string util::get_inet_res(std::string res, std::string *error, bool truncate)
 {
@@ -424,6 +505,7 @@ std::string util::get_inet_res(std::string res, std::string *error, bool truncat
 	else if(error) *error = get_last_error_str(true);
 	return ret;
 }
+
 
 std::string util::dl_inet_res(std::string res, fs::path fname, bool *working, std::function<void(unsigned)> cb)
 {
@@ -485,6 +567,7 @@ std::string util::dl_inet_res(std::string res, fs::path fname, bool *working, st
 	return ret;
 }
 
+
 std::string util::extract_7z(fs::path arc_path, fs::path out_path, unsigned ffmpeg, bool ytdlp_interface)
 {
 	using namespace bit7z;
@@ -500,10 +583,20 @@ std::string util::extract_7z(fs::path arc_path, fs::path out_path, unsigned ffmp
 		BitExtractor extractor {lib, ffmpeg ? BitFormat::Zip : BitFormat::SevenZip};
 		if(ffmpeg)
 		{
-			extractor.extractMatching(arc_path, L"*\\bin\\ffmpeg.exe", out_path);
-			extractor.extractMatching(arc_path, L"*\\bin\\ffprobe.exe", out_path);
-			if(ffmpeg > 1)
-				extractor.extractMatching(arc_path, L"*\\bin\\ffplay.exe", out_path);
+			if(is_win7())
+			{
+				extractor.extractMatching(arc_path, L"ffmpeg_git\\ffmpeg.exe", out_path);
+				extractor.extractMatching(arc_path, L"ffmpeg_git\\ffprobe.exe", out_path);
+				if(ffmpeg > 1)
+					extractor.extractMatching(arc_path, L"ffmpeg_git\\ffplay.exe", out_path);
+			}
+			else
+			{
+				extractor.extractMatching(arc_path, L"*\\bin\\ffmpeg.exe", out_path);
+				extractor.extractMatching(arc_path, L"*\\bin\\ffprobe.exe", out_path);
+				if(ffmpeg > 1)
+					extractor.extractMatching(arc_path, L"*\\bin\\ffplay.exe", out_path);
+			}
 		}
 		else if(ytdlp_interface)
 		{
@@ -517,6 +610,7 @@ std::string util::extract_7z(fs::path arc_path, fs::path out_path, unsigned ffmp
 		return ex.what();
 	}
 }
+
 
 std::wstring util::get_clipboard_text()
 {
@@ -540,6 +634,7 @@ std::wstring util::get_clipboard_text()
 	}
 	return text;
 }
+
 
 void util::set_clipboard_text(HWND hwnd, std::wstring text)
 {
@@ -575,6 +670,23 @@ bool util::is_dir_writable(fs::path dir)
 	return false;
 }
 
+
+bool util::is_win7()
+{
+	OSVERSIONINFOEX osvi;
+	ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
+	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
+	osvi.dwMajorVersion = 6;
+	osvi.dwMinorVersion = 1;
+
+	DWORDLONG conditionMask {0};
+	VER_SET_CONDITION(conditionMask, VER_MAJORVERSION, VER_EQUAL);
+	VER_SET_CONDITION(conditionMask, VER_MINORVERSION, VER_EQUAL);
+
+	return VerifyVersionInfo(&osvi, VER_MAJORVERSION | VER_MINORVERSION, conditionMask);
+}
+
+
 int util::scale(int val)
 {
 	const static double dpi {static_cast<double>(nana::API::screen_dpi(true))};
@@ -583,6 +695,7 @@ int util::scale(int val)
 	return val;
 };
 
+
 unsigned util::scale_uint(unsigned val)
 {
 	const static double dpi {static_cast<double>(nana::API::screen_dpi(true))};
@@ -590,6 +703,7 @@ unsigned util::scale_uint(unsigned val)
 		val = round(val * dpi / 96);
 	return val;
 }
+
 
 util::INTERNET_STATUS util::check_inet_connection()
 {
@@ -644,6 +758,7 @@ BOOL util::pwr_shutdown()
 	return ExitWindowsEx(EWX_POWEROFF | EWX_FORCE, SHTDN_REASON_MAJOR_APPLICATION | SHTDN_REASON_MINOR_OTHER | SHTDN_REASON_FLAG_PLANNED);
 }
 
+
 BOOL util::pwr_enable_shutdown_privilege()
 {
 	HANDLE hToken;
@@ -661,15 +776,18 @@ BOOL util::pwr_enable_shutdown_privilege()
 	return FALSE;
 }
 
+
 BOOL util::pwr_sleep()
 {
 	return SetSuspendState(0, 0, 0);
 }
 
+
 BOOL util::pwr_hibernate()
 {
 	return SetSuspendState(1, 0, 0);
 }
+
 
 bool util::pwr_can_hibernate()
 {

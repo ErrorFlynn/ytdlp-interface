@@ -181,7 +181,7 @@ void GUI::Outbox::append(std::wstring url, std::string text)
 {
 	if(!empty())
 	{
-		if(!visible() && url == pgui->bottoms.current().url && pgui->bottoms.at(url).btnq.caption().find("queue") != -1)
+		if(!visible() && url == pgui->qurl && pgui->btnq.caption().find("queue") != -1)
 		{
 			widget::show();
 			pgui->overlay.hide();
@@ -192,7 +192,9 @@ void GUI::Outbox::append(std::wstring url, std::string text)
 			auto cmd {text};
 			while(cmd.back() == '\r' || cmd.back() == '\n')
 				cmd.pop_back();
-			commands[url] = cmd.substr(cmd.find('\"'));
+			auto pos {cmd.find('\"')};
+			if(pos != -1)
+				commands[url] = cmd.substr(pos);
 		}
 		size_t buflim {conf.output_buffer_size}, bufsize {buf.size()}, textsize {text.size()};
 		if(conf.limit_output_buffer && bufsize + textsize > buflim)

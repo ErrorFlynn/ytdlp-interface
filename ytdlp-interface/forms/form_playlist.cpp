@@ -26,7 +26,7 @@ void GUI::fm_playlist()
 		l_title.caption("Select which items to download from the playlist");
 	::widgets::Button btnall {fm, "Select all", true}, btnnone {fm, "Select none", true}, btnclose {fm, "Close"},
 		btnrange {fm, "Select range", true};
-	::widgets::Listbox lbv {fm, true};
+	::widgets::Listbox lbv {fm, nullptr, true};
 	::widgets::Label l_first {fm, "First:"}, l_last {fm, "Last:"};
 	::widgets::Textbox tbfirst {fm}, tblast {fm};
 	::widgets::Slider slfirst {fm}, sllast {fm};

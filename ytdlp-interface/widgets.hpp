@@ -22,7 +22,6 @@
 
 #include "progress_ex.hpp"
 #include "icons.hpp"
-#include "util.hpp"
 #include "types.hpp"
 
 #pragma warning(disable : 4267)
@@ -84,8 +83,6 @@ namespace widgets
 		static double contrast() { return shade; }
 	};
 
-	//__declspec(selectany) theme_t theme;
-
 
 	class Label : public nana::label
 	{
@@ -109,7 +106,7 @@ namespace widgets
 
 	public:
 
-		Text() = default;
+		Text() : label() {}
 
 		Text(nana::window parent, std::string_view text = "", bool dpi_adjust = false) : label {parent, text}
 		{
@@ -162,6 +159,7 @@ namespace widgets
 		path_label(nana::window parent, const variant var) { create(parent, var); }
 
 		void create(nana::window parent, const variant var);
+		void source_path(const variant var) { v = var; update_caption(); }
 		void update_caption();
 		void refresh_theme();
 	};
@@ -212,13 +210,23 @@ namespace widgets
 
 	class Listbox : public nana::listbox
 	{
+		using thrid = std::thread::id;
+
 		nana::drawing dw {*this};
 		bool hicontrast {false}, hilite_checked {false};
+		thrid main_thread_id;
+		HWND hwnd_parent {nullptr};
+		bool *no_thread_safe_ops {nullptr};
+		bool force_no_thread_safe_ops_ {false};
 
 	public:
 
-		Listbox(nana::window parent, bool hicontrast = false) : listbox {parent}, hicontrast {hicontrast}
+		const item_proxy empty_item {listbox::at(0).end()};
+
+		Listbox(nana::window parent, bool *exiting = nullptr, bool hicontrast = false) : listbox {parent}, no_thread_safe_ops {exiting}, hicontrast {hicontrast}
 		{
+			main_thread_id = std::this_thread::get_id();
+			hwnd_parent = reinterpret_cast<HWND>(reinterpret_cast<nana::form*>(nana::api::get_widget(parent))->native_handle());
 			refresh_theme();
 			typeface(nana::paint::font_info {"Segoe UI", 9});
 			events().expose([this] { refresh_theme(); });
@@ -227,10 +235,20 @@ namespace widgets
 
 		size_t item_count();
 		std::string favicon_url_from_value(std::wstring val);
-		nana::drawerbase::listbox::item_proxy item_from_value(std::wstring val);
+		item_proxy item_from_value(std::wstring val);
 		void hilight_checked(bool enable) { hilite_checked = enable; refresh_theme(); }
 		void refresh_theme();
 		void fit_column_content();
+		void set_line_text(std::wstring url, qline_t text);
+		void set_item_bg(std::wstring url, nana::color bg);
+		void auto_draw(bool enable) noexcept;
+		cat_proxy at(size_type pos);
+		item_proxy at(const index_pair &abs_pos);
+		item_proxy erase(item_proxy ip);
+		void erase(nana::listbox::size_type cat) { listbox::erase(cat); }
+		void force_no_thread_safe_ops(bool enable) noexcept { force_no_thread_safe_ops_ = enable; }
+		bool force_no_thread_safe_ops() noexcept { return force_no_thread_safe_ops_; }
+		void refresh_window();
 	};
 
 
@@ -309,6 +327,8 @@ namespace widgets
 	class Textbox : public nana::textbox
 	{
 		bool highlighted {false};
+		HWND hwnd_parent {nullptr};
+		std::thread::id main_thread_id;
 
 	public:
 
@@ -321,7 +341,13 @@ namespace widgets
 
 		void set_keyword(std::string name, std::string category = "general")
 		{
-			set_keywords(category, true, true, {name});
+			if(std::this_thread::get_id() == main_thread_id)
+				set_keywords(category, true, true, {name});
+			else 
+			{
+				std::pair<std::string, std::string> params {category, name};
+				SendMessage(hwnd_parent, WM_SET_KEYWORDS, reinterpret_cast<WPARAM>(this), reinterpret_cast<LPARAM>(&params));
+			}
 		}
 
 		void create(nana::window parent, bool visible = true);
@@ -334,14 +360,16 @@ namespace widgets
 	class Title : public nana::label
 	{
 	public:
-		Title(nana::window parent, std::string text = "") : label {parent, text}
+
+		Title() : label() {};
+
+		Title(nana::window parent, std::string_view text = "")
 		{
-			fgcolor(theme::title_fg);
-			typeface(nana::paint::font_info {"Arial", 15/* - (double)(nana::API::screen_dpi(true) > 96) * 3*/, {800}});
-			text_align(nana::align::center, nana::align_v::top);
-			nana::API::effects_bground(*this, nana::effects::bground_transparent(0), 0);
-			events().expose([this] { fgcolor(theme::title_fg); });
+			create(parent, text);
 		}
+
+		void create(nana::window parent, std::string_view text = "");
+		void refresh_theme();
 	};
 
 

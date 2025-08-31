@@ -8,16 +8,6 @@ void GUI::fm_changes(nana::window parent)
 	themed_form fm {nullptr, parent, {}, appear::decorate<appear::sizable>{}};
 	fm.center(1030, 543);
 	fm.snap(conf.cbsnap);
-	fm.theme_callback([&](bool dark)
-	{
-		apply_theme(dark);
-		fm.bgcolor(theme::fmbg);
-		return false;
-	});
-	if(conf.cbtheme == 2)
-		fm.system_theme(true);
-	else fm.dark_theme(conf.cbtheme == 0);
-
 	fm.caption("ytdlp-interface - release notes");
 	fm.bgcolor(theme::fmbg);
 	fm.div(R"(vert margin=20 <tb> <weight=20>
@@ -27,7 +17,7 @@ void GUI::fm_changes(nana::window parent)
 	{
 		fm["tb"] << tb;
 		nana::API::effects_edge_nimbus(tb, nana::effects::edge_nimbus::none);
-		tb.typeface(nana::paint::font_info {"Courier New", 12});
+		tb.typeface(nana::paint::font_info {"Consolas", 12});
 		tb.line_wrapped(true);
 		tb.editable(false);
 	}
@@ -132,6 +122,19 @@ void GUI::fm_changes(nana::window parent)
 			nana::api::refresh_window(com_history);
 		}
 	});
+
+	fm.theme_callback([&](bool dark)
+	{
+		apply_theme(dark);
+		fm.bgcolor(theme::fmbg);
+		return false;
+	});
+	if(conf.cbtheme == 2)
+		fm.system_theme(true);
+	else fm.dark_theme(conf.cbtheme == 0);
+	if(theme::is_dark())
+		tb.fgcolor(theme::tbfg.blend(nana::colors::black, .15));
+	else tb.fgcolor(theme::tbfg.blend(nana::colors::white, .15));
 
 	fm.collocate();
 	fm.show();

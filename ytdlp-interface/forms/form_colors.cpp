@@ -147,6 +147,7 @@ void GUI::fm_colors(themed_form &parent)
 
 	::widgets::Group gp {fm, "JSON Viewer"};
 	gp.div("jtree margin=10");
+	gp.enable_format_caption(true);
 
 	nlohmann::json j
 	{
