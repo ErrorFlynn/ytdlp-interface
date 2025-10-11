@@ -356,3 +356,239 @@ void theme_t::from_json(const nlohmann::json &j)
 	lbhilite = j["lbhilite"];
 	lbfg = j["lbfg"];
 }
+
+
+void settings_t::to_jpreset(nlohmann::json &j) const
+{
+	using namespace nana;
+	if(!j.empty())
+		j.clear();
+	j["outpath"] = outpath;
+	j["fmt1"] = to_utf8(fmt1);
+	j["fmt2"] = to_utf8(fmt2);
+	j["ratelim"] = ratelim;
+	j["ratelim_unit"] = ratelim_unit;
+	j["cbsubs"] = cbsubs;
+	j["cbthumb"] = cbthumb;
+	j["cbtime"] = cbtime;
+	j["cbkeyframes"] = cbkeyframes;
+	j["cbmp3"] = cbmp3;
+	j["pref_res"] = pref_res;
+	j["pref_video"] = pref_video;
+	j["pref_audio"] = pref_audio;
+	j["pref_fps"] = pref_fps;
+	j["cbargs"] = cbargs;
+	if(argsets.empty())
+		j["argsets"] = nlohmann::json::array();
+	else for(auto &el : argsets)
+		j["argsets"].push_back(el);
+	j["output_template"] = to_utf8(output_template);
+	j["max_concurrent_downloads"] = max_concurrent_downloads;
+	j["cb_lengthyproc"] = cb_lengthyproc;
+	j["max_proc_dur"] = max_proc_dur.count();
+	if(outpaths.empty())
+		j["outpaths"] = nlohmann::json::array();
+	else for(auto &path : outpaths)
+		j["outpaths"].push_back(to_utf8(path));
+	j["common_dl_options"] = common_dl_options;
+	j["cb_autostart"] = cb_autostart;
+	j["cb_queue_autostart"] = cb_queue_autostart;
+	j["open_dialog_origin"] = open_dialog_origin;
+	j["playlist_indexing"] = to_utf8(playlist_indexing);
+	j["cb_zeropadding"] = cb_zeropadding;
+	j["cb_playlist_folder"] = cb_playlist_folder;
+	j["output_template_bandcamp"] = to_utf8(output_template_bandcamp);
+	j["json_hide_null"] = json_hide_null;
+	j["audio_multistreams"] = audio_multistreams;
+	for(auto i : sblock_mark)
+		j["sblock"]["mark"].push_back(i);
+	for(auto i : sblock_remove)
+		j["sblock"]["remove"].push_back(i);
+	j["sblock"]["cb_mark"] = cb_sblock_mark;
+	j["sblock"]["cb_remove"] = cb_sblock_remove;
+	j["proxy"]["enabled"] = cb_proxy;
+	j["proxy"]["URL"] = to_utf8(proxy);
+	j["pref_vcodec"] = pref_vcodec;
+	j["pref_acodec"] = pref_acodec;
+	j["argset"] = argset;
+	j["cb_premium"] = cb_premium;
+	j["cb_save_errors"] = cb_save_errors;
+	j["cb_clear_done"] = cb_clear_done;
+	j["cb_add_on_focus"] = cb_add_on_focus;
+	j["cb_android"] = cb_android;
+	j["com_chap"] = com_chap;
+	j["com_cookies"] = com_cookies;
+	j["max_data_threads"] = max_data_threads;
+	j["cookie_options"] = to_utf8(cookie_options);
+}
+
+
+void settings_t::from_jpreset(const nlohmann::json &j)
+{
+	using nana::to_wstring;
+	outpath = j["outpath"].get<std::string>();
+	fmt1 = to_wstring(j["fmt1"].get<std::string>());
+	fmt2 = to_wstring(j["fmt2"].get<std::string>());
+	ratelim = j["ratelim"];
+	ratelim_unit = j["ratelim_unit"];
+	cbsubs = j["cbsubs"];
+	cbthumb = j["cbthumb"];
+	cbtime = j["cbtime"];
+	cbkeyframes = j["cbkeyframes"];
+	cbmp3 = j["cbmp3"];
+	pref_res = j["pref_res"];
+	pref_video = j["pref_video"];
+	pref_audio = j["pref_audio"];
+	pref_fps = j["pref_fps"];
+	cbargs = j["cbargs"];
+	for(auto &el : j["argsets"])
+		argsets.push_back(el);
+	output_template = to_wstring(j["output_template"].get<std::string>());
+	max_concurrent_downloads = j["max_concurrent_downloads"];
+	cb_lengthyproc = j["cb_lengthyproc"];
+	max_proc_dur = std::chrono::milliseconds {j["max_proc_dur"].get<int>()};
+	for(auto &el : j["outpaths"])
+		outpaths.insert(to_wstring(el.get<std::string>()));
+	common_dl_options = j["common_dl_options"];
+	cb_autostart = j["cb_autostart"];
+	cb_queue_autostart = j["cb_queue_autostart"];
+	open_dialog_origin = j["open_dialog_origin"];
+	playlist_indexing = to_wstring(j["playlist_indexing"].get<std::string>());
+	cb_zeropadding = j["cb_zeropadding"];
+	cb_playlist_folder = j["cb_playlist_folder"];
+	output_template_bandcamp = to_wstring(j["output_template_bandcamp"].get<std::string>());
+	json_hide_null = j["json_hide_null"];
+	audio_multistreams = j["audio_multistreams"];
+	const auto &jblock {j["sblock"]};
+	if(jblock.contains("mark"))
+		for(auto &el : jblock["mark"])
+			sblock_mark.push_back(el.get<int>());
+	if(jblock.contains("remove"))
+		for(auto &el : jblock["remove"])
+			sblock_remove.push_back(el.get<int>());
+	cb_sblock_mark = j["sblock"]["cb_mark"];
+	cb_sblock_remove = j["sblock"]["cb_remove"];
+	cb_proxy = j["proxy"]["enabled"];
+	proxy = to_wstring(j["proxy"]["URL"].get<std::string>());
+	pref_vcodec = j["pref_vcodec"];
+	pref_acodec = j["pref_acodec"];
+	argset = j["argset"];
+	cb_premium = j["cb_premium"];
+	cb_save_errors = j["cb_save_errors"];
+	cb_clear_done = j["cb_clear_done"];
+	cb_add_on_focus = j["cb_add_on_focus"];
+	cb_android = j["cb_android"];
+	com_chap = j["com_chap"];
+	com_cookies = j["com_cookies"];
+	max_data_threads = j["max_data_threads"];
+	cookie_options = j["cookie_options"].get<std::string>();
+}
+
+
+void settings_t::from_preset(const settings_t &p)
+{
+	outpath = p.outpath;
+	fmt1 = p.fmt1;
+	fmt2 = p.fmt2;
+	ratelim = p.ratelim;
+	ratelim_unit = p.ratelim_unit;
+	cbsubs = p.cbsubs;
+	cbthumb = p.cbthumb;
+	cbtime = p.cbtime;
+	cbkeyframes = p.cbkeyframes;
+	cbmp3 = p.cbmp3;
+	pref_res = p.pref_res;
+	pref_video = p.pref_video;
+	pref_audio = p.pref_audio;
+	pref_fps = p.pref_fps;
+	cbargs = p.cbargs;
+	argsets = p.argsets;
+	output_template = p.output_template;
+	max_concurrent_downloads = p.max_concurrent_downloads;
+	cb_lengthyproc = p.cb_lengthyproc;
+	max_proc_dur = p.max_proc_dur;
+	outpaths = p.outpaths;
+	common_dl_options = p.common_dl_options;
+	cb_autostart = p.cb_autostart;
+	cb_queue_autostart = p.cb_queue_autostart;
+	open_dialog_origin = p.open_dialog_origin;
+	playlist_indexing = p.playlist_indexing;
+	cb_zeropadding = p.cb_zeropadding;
+	cb_playlist_folder = p.cb_playlist_folder;
+	output_template_bandcamp = p.output_template_bandcamp;
+	json_hide_null = p.json_hide_null;
+	audio_multistreams = p.audio_multistreams;
+	sblock_mark = p.sblock_mark;
+	sblock_remove = p.sblock_remove;
+	cb_sblock_mark = p.cb_sblock_mark;
+	cb_sblock_remove = p.cb_sblock_remove;
+	cb_proxy = p.cb_proxy;
+	proxy = p.proxy;
+	pref_vcodec = p.pref_vcodec;
+	pref_acodec = p.pref_acodec;
+	argset = p.argset;
+	cb_premium = p.cb_premium;
+	cb_save_errors = p.cb_save_errors;
+	cb_clear_done = p.cb_clear_done;
+	cb_add_on_focus = p.cb_add_on_focus;
+	cb_android = p.cb_android;
+	com_chap = p.com_chap;
+	com_cookies = p.com_cookies;
+	max_data_threads = p.max_data_threads;
+	cookie_options = p.cookie_options;
+}
+
+
+bool settings_t::equals_preset(const settings_t &p)
+{
+	return 
+		outpath == p.outpath &&
+		fmt1 == p.fmt1 &&
+		fmt2 == p.fmt2 &&
+		ratelim == p.ratelim &&
+		ratelim_unit == p.ratelim_unit &&
+		cbsubs == p.cbsubs &&
+		cbthumb == p.cbthumb &&
+		cbtime == p.cbtime &&
+		cbkeyframes == p.cbkeyframes &&
+		cbmp3 == p.cbmp3 &&
+		pref_res == p.pref_res &&
+		pref_video == p.pref_video &&
+		pref_audio == p.pref_audio &&
+		pref_fps == p.pref_fps &&
+		cbargs == p.cbargs &&
+		argsets == p.argsets &&
+		output_template == p.output_template &&
+		max_concurrent_downloads == p.max_concurrent_downloads &&
+		cb_lengthyproc == p.cb_lengthyproc &&
+		max_proc_dur == p.max_proc_dur &&
+		outpaths == p.outpaths &&
+		common_dl_options == p.common_dl_options &&
+		cb_autostart == p.cb_autostart &&
+		cb_queue_autostart == p.cb_queue_autostart &&
+		open_dialog_origin == p.open_dialog_origin &&
+		playlist_indexing == p.playlist_indexing &&
+		cb_zeropadding == p.cb_zeropadding &&
+		cb_playlist_folder == p.cb_playlist_folder &&
+		output_template_bandcamp == p.output_template_bandcamp &&
+		json_hide_null == p.json_hide_null &&
+		audio_multistreams == p.audio_multistreams &&
+		sblock_mark == p.sblock_mark &&
+		sblock_remove == p.sblock_remove &&
+		cb_sblock_mark == p.cb_sblock_mark &&
+		cb_sblock_remove == p.cb_sblock_remove &&
+		cb_proxy == p.cb_proxy &&
+		proxy == p.proxy &&
+		pref_vcodec == p.pref_vcodec &&
+		pref_acodec == p.pref_acodec &&
+		argset == p.argset &&
+		cb_premium == p.cb_premium &&
+		cb_save_errors == p.cb_save_errors &&
+		cb_clear_done == p.cb_clear_done &&
+		cb_add_on_focus == p.cb_add_on_focus &&
+		cb_android == p.cb_android &&
+		com_chap == p.com_chap &&
+		com_cookies == p.com_cookies &&
+		max_data_threads == p.max_data_threads &&
+		cookie_options == p.cookie_options;
+}

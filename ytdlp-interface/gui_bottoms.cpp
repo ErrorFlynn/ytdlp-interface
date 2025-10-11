@@ -150,6 +150,12 @@ GUI::gui_bottom &GUI::gui_bottoms::add(std::wstring url)
 		pbot->is_bclink = url.find(L"bandcamp.com") != -1;
 		pbot->is_bcchan = url.find(L".bandcamp.com/music") != -1 || url.rfind(L".bandcamp.com") == url.size() - 13
 			|| url.rfind(L".bandcamp.com/") == url.size() - 14;
+		if(url.find(L"rutube.ru/metainfo/tv/") != -1 || url.find(L"vkvideo.ru/playlist/") != -1 )
+		{
+			// dirty hack to recognize link as playlist
+			pbot->is_ytlink = true;
+			pbot->is_ytplaylist = true;
+		}
 		return *pbot;
 	}
 	return *it->second;

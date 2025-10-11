@@ -177,7 +177,7 @@
       <SubSystem>NotSet</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
       <AdditionalDependencies>bit7z64.lib;Dwmapi.lib;Wininet.lib;nana_v143_Release_x64.lib;jpeg_Release_x64.lib;png_Release_x64.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;PowrProf.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <LinkStatus>false</LinkStatus>
       <ProgramDatabaseFile />
@@ -194,6 +194,7 @@
     <ClCompile Include="forms\form_changes.cpp" />
     <ClCompile Include="forms\form_colors.cpp" />
     <ClCompile Include="forms\form_formats.cpp" />
+    <ClCompile Include="forms\form_input.cpp" />
     <ClCompile Include="forms\form_json.cpp" />
     <ClCompile Include="forms\form_loading.cpp" />
     <ClCompile Include="forms\form_playlist.cpp" />

@@ -797,3 +797,15 @@ bool util::pwr_can_hibernate()
 		return hib_enabled == 1;
 	return false;
 }
+
+
+fs::path util::to_relative_path(const fs::path &abs)
+{
+	auto path {fs::relative(abs)};
+	const auto path_string {path.string()};
+	if(path_string.starts_with("..\\") || path_string.empty())
+		return abs;
+	else if(path_string == ".")
+		return ".\\";
+	return ".\\" / path;
+}

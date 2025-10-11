@@ -107,8 +107,6 @@ namespace widgets
 			{
 				bgcolor(theme::fmbg);
 				bot_panel.bgcolor(theme::fmbg.blend(colors::grey, .1));
-				//nana::API::effects_bground(l_msg, nana::effects::bground_transparent(100), 0);
-				//l_msg.bgcolor(nana::colors::light_salmon);
 				return true;
 			});
 		}

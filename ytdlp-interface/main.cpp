@@ -17,6 +17,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 	int argc;
 	LPWSTR *argv {CommandLineToArgvW(GetCommandLineW(), &argc)};
 	fs::path modpath {argv[0]}, appdir {modpath.parent_path()};
+	fs::current_path(appdir);
 	std::error_code ec;
 	if(fs::exists(appdir / "7zxa.dll"))
 		fs::remove(appdir / "7zxa.dll", ec);
@@ -105,7 +106,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 	void(OleInitialize(0));
 	if(g_enable_log)
 	{
-		g_log.use_window = false;
+		g_log.use_window = true;
 		g_logfile.open(appdir / "debug_log.txt", std::ofstream::trunc);
 		if(!g_logfile.good())
 		{
@@ -121,9 +122,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 	API::window_icon_default(img, img);
 
 	if(fs::exists(appdir / "ytdl-patched-red.exe"))
-		GUI::conf.ytdlp_path = appdir / "ytdl-patched-red.exe";
+		GUI::conf.ytdlp_path = ".\\ytdl-patched-red.exe";
 	else if(fs::exists(appdir / ytdlp_fname))
-		GUI::conf.ytdlp_path = appdir / ytdlp_fname;
+		GUI::conf.ytdlp_path = ".\\" + ytdlp_fname;
 
 	fs::path confpath {util::get_sys_folder(FOLDERID_RoamingAppData) + L"\\ytdlp-interface.json"};
 	auto appdir_confpath {appdir / "ytdlp-interface.json"};
@@ -152,15 +153,17 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		}
 		if(!jconf.empty())
 		{
-			GUI::conf.ytdlp_path = std::string {jconf["ytdlp_path"]};
+			GUI::conf.ytdlp_path = jconf["ytdlp_path"].get<std::string>();
+			if(!GUI::conf.ytdlp_path.empty())
+				GUI::conf.ytdlp_path = util::to_relative_path(GUI::conf.ytdlp_path);
 			if(GUI::conf.ytdlp_path.empty() || !fs::exists(GUI::conf.ytdlp_path))
 			{
 				if(fs::exists(appdir / "ytdl-patched-red.exe"))
-					GUI::conf.ytdlp_path = appdir / "ytdl-patched-red.exe";
+					GUI::conf.ytdlp_path = ".\\ytdl-patched-red.exe";
 				else if(fs::exists(appdir / ytdlp_fname))
-					GUI::conf.ytdlp_path = appdir / ytdlp_fname;
+					GUI::conf.ytdlp_path = ".\\" + ytdlp_fname;
 			}
-			GUI::conf.outpath = jconf["outpath"].get<std::string>();
+			GUI::conf.outpath = util::to_relative_path(jconf["outpath"].get<std::string>());
 			GUI::conf.fmt1 = to_wstring(jconf["fmt1"].get<std::string>());
 			GUI::conf.fmt2 = to_wstring(jconf["fmt2"].get<std::string>());
 			GUI::conf.ratelim = jconf["ratelim"];
@@ -199,8 +202,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				GUI::conf.kwhilite = jconf["kwhilite"];
 				for(auto &el : jconf["argsets"])
 					GUI::conf.argsets.push_back(el);
-				if(jconf.contains("vidinfo"))
-					jconf.erase("vidinfo"); // no longer used since v1.6
 			}
 			if(jconf.contains("output_template")) // v1.6
 			{
@@ -282,10 +283,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			}
 			if(jconf.contains("sblock")) // v2.4
 			{
-				for(auto &el : jconf["sblock"]["mark"])
-					GUI::conf.sblock_mark.push_back(el.get<int>());
-				for(auto &el : jconf["sblock"]["remove"])
-					GUI::conf.sblock_remove.push_back(el.get<int>());
+				const auto &jblock {jconf["sblock"]};
+				if(jblock.contains("mark"))
+					for(auto &el : jblock["mark"])
+						GUI::conf.sblock_mark.push_back(el.get<int>());
+				if(jblock.contains("remove"))
+					for(auto &el : jblock["remove"])
+						GUI::conf.sblock_remove.push_back(el.get<int>());
 				GUI::conf.cb_sblock_mark = jconf["sblock"]["cb_mark"];
 				GUI::conf.cb_sblock_remove = jconf["sblock"]["cb_remove"];
 				GUI::conf.cb_proxy = jconf["proxy"]["enabled"];
@@ -317,6 +321,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			if(jconf.contains("ffmpeg_path")) // v2.9
 			{
 				GUI::conf.ffmpeg_path = jconf["ffmpeg_path"].get<std::string>();
+				if(!GUI::conf.ffmpeg_path.empty())
+					GUI::conf.ffmpeg_path = util::to_relative_path(GUI::conf.ffmpeg_path);
 			}
 			if(jconf.contains("cb_clear_done")) // v2.11
 			{
@@ -350,19 +356,31 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				GUI::conf.max_data_threads = jconf["max_data_threads"];
 				GUI::conf.cookie_options = jconf["cookie_options"].get<std::string>();
 			}
+			if(jconf.contains("presets")) // v2.16
+			{
+				for(auto &jpreset : jconf["presets"])
+				{
+					settings_t tempset;
+					tempset.from_jpreset(jpreset["data"]);
+					GUI::conf_presets[jpreset["name"]] = std::move(tempset);
+				}
+			}
 		}
 	}
 	else GUI::conf.outpath = util::get_sys_folder(FOLDERID_Downloads);
+
+	jconf.clear();
 
 	GUI gui;
 	gui.confpath = confpath;
 	gui.infopath = fs::path{confpath}.replace_filename("unfinished_qitems_data.json");
 
-	if(jconf.contains("playsel_strings"))
-		jconf.erase("playsel_strings");
+	//if(jconf.contains("playsel_strings"))
+	//	jconf.erase("playsel_strings");
 
-	gui.fn_write_conf = [&]
+	gui.fn_write_conf = [&confpath]
 	{
+		nlohmann::json jconf;
 		jconf["cb_custom_dark_theme"] = GUI::conf.cb_custom_dark_theme;
 		jconf["cb_custom_light_theme"] = GUI::conf.cb_custom_light_theme;
 		GUI::conf.theme_dark.to_json(jconf["theme"]["dark"]);
@@ -384,6 +402,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				for(const auto &url : el.second)
 					jcat.push_back(url);
 			}
+		}
+
+		auto &jpresets {jconf["presets"] = nlohmann::json::array()};
+		for(const auto &el : GUI::conf_presets)
+		{
+			jpresets.push_back(nlohmann::json::object());
+			auto &jpreset {jpresets.back()};
+			jpreset["name"] = el.first;
+			el.second.to_jpreset(jpreset["data"]);
 		}
 
 		jconf["com_cookies"] = GUI::conf.com_cookies;
@@ -427,8 +454,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["window"]["h"] = GUI::conf.winrect.height;
 		jconf["window"]["zoomed"] = GUI::conf.zoomed;
 		jconf["window"]["dpi"] = API::screen_dpi(true);
-		if(jconf.contains("outpaths"))
-			jconf["outpaths"].clear();
 		for(auto &path : GUI::conf.outpaths)
 			jconf["outpaths"].push_back(to_utf8(path));
 		jconf["get_releases_at_startup"] = GUI::conf.get_releases_at_startup;
@@ -459,14 +484,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["cb_add_on_focus"] = GUI::conf.cb_add_on_focus;
 		jconf["max_data_threads"] = GUI::conf.max_data_threads;
 		jconf["cookie_options"] = GUI::conf.cookie_options;
-
-		if(jconf.contains("sblock"))
-		{
-			if(jconf["sblock"].contains("mark"))
-				jconf["sblock"]["mark"].clear();
-			if(jconf["sblock"].contains("remove"))
-				jconf["sblock"]["remove"].clear();
-		}
 
 		for(auto i : GUI::conf.sblock_mark)
 			jconf["sblock"]["mark"].push_back(i);

@@ -380,6 +380,7 @@ void GUI::make_form_bottom()
 
 	if(conf.ratelim)
 		tbrate.caption(util::format_double(conf.ratelim, 1));
+	else tbrate.caption("");
 
 	tbrate.set_accept([this](wchar_t wc)->bool
 	{
@@ -567,7 +568,8 @@ void GUI::make_form_bottom()
 			{
 				auto &curbot {bottoms.current()};
 				conf.outpaths.insert(outpath);
-				curbot.outpath = outpath = conf.outpath = res.front();
+				auto newpath {util::to_relative_path(res.front())};
+				outpath = conf.outpath = newpath;
 				l_outpath.caption(outpath.u8string());
 				if(conf.common_dl_options)
 					bottoms.propagate_misc_options(curbot);
@@ -842,7 +844,7 @@ void GUI::make_message_handlers()
 					{
 						if(sel.size() == lbq.at(sel.front().cat).size())
 							queue_remove_all(sel.front().cat);
-						else queue_remove_selected();
+						else queue_remove_items(sel);
 					}
 				}
 			}

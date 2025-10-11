@@ -3,6 +3,7 @@
 #include <chrono>
 #include <unordered_set>
 #include <nana/gui.hpp>
+#include <iostream>
 #include "json.hpp"
 
 #define WM_SET_QLINE_TEXT (WM_APP + 0x0001)
@@ -88,11 +89,10 @@ struct theme_t
 	void from_json(const nlohmann::json &j);
 };
 
-
 struct settings_t
 {
 	std::filesystem::path ytdlp_path, ffmpeg_path, outpath;
-	const std::wstring output_template_default {L"%(title)s.%(ext)s"}, playlist_indexing_default {L"%(playlist_index)d - "},
+	std::wstring output_template_default {L"%(title)s.%(ext)s"}, playlist_indexing_default {L"%(playlist_index)d - "},
 		output_template_default_bandcamp {L"%(artist)s - %(album)s - %(track_number)02d - %(track)s.%(ext)s"};
 	std::wstring fmt1, fmt2, output_template {output_template_default}, playlist_indexing {playlist_indexing_default},
 		output_template_bandcamp {output_template_default_bandcamp}, proxy;
@@ -120,4 +120,8 @@ struct settings_t
 	std::vector<int> sblock_mark, sblock_remove;
 	std::wstring url_passed_as_arg;
 	theme_t theme_dark {true}, theme_light;
+	void to_jpreset(nlohmann::json &j) const;
+	void from_jpreset(const nlohmann::json &j);
+	void from_preset(const settings_t &p);
+	bool equals_preset(const settings_t &p);
 };

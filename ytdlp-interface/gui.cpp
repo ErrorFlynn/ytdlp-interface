@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 
 settings_t GUI::conf;
+std::unordered_map<std::string, settings_t> GUI::conf_presets;
 
 
 GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::_1)}
@@ -166,7 +167,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 		}
 	});
 
-	use_ffmpeg_location = !ffmpeg_location_in_conf_file();	
+	use_ffmpeg_location = !ffmpeg_location_in_conf_file();
 
 	center(MINW, MINH);
 	show_queue(false);
@@ -234,6 +235,7 @@ bool GUI::process_queue_item(std::wstring url)
 			btndl.caption("Stop download");
 		bottom.started = true;
 		bottom.idx_error = 0;
+		taskbar_overall_progress();
 		auto item {lbq.item_from_value(url)};
 		if(item.checked())
 		{
@@ -403,8 +405,14 @@ bool GUI::process_queue_item(std::wstring url)
 		if(bottom.cbkeyframes && argset.find("--force-keyframes-at-cuts") == -1)
 			cmd += L"--force-keyframes-at-cuts ";
 		if(!conf.ffmpeg_path.empty() && conf.ffmpeg_path != conf.ytdlp_path.parent_path())
+		{
 			if(argset.find("--ffmpeg-location") == -1 && use_ffmpeg_location)
-				cmd += L"--ffmpeg-location \"" + conf.ffmpeg_path.wstring() + L"\" ";
+			{
+				if(conf.ffmpeg_path != L".\\")
+					cmd += L"--ffmpeg-location \"" + conf.ffmpeg_path.wstring() + L"\" ";
+				else cmd += L"--ffmpeg-location .\\ ";
+			}
+		}
 		if(tbrate.to_double() && argset.find("-r ") == -1)
 			cmd += L"-r " + tbrate.caption_wstring() + (com_rate.option() ? L"M " : L"K ");
 		if(bottom.cbmp3 && argset.find("--audio-format") == -1)
@@ -869,10 +877,10 @@ bool GUI::process_queue_item(std::wstring url)
 		auto text {item.text(3)};
 		auto pos {text.find(']')};
 		if(pos != -1)
-			item.text(3, "stopped (" + text.substr(1, pos-1) + ")");
+			lbq.set_line_text(url, {"", "", "stopped (" + text.substr(1, pos - 1) + ")", "", "", "", ""});
 		else if(text.find('%') != -1)
-			item.text(3, "stopped (" + text + ")");
-		else item.text(3, "stopped");
+			lbq.set_line_text(url, {"", "", "stopped (" + text + ")", "", "", "", ""});
+		else lbq.set_line_text(url, {"", "", "stopped", "", "", "", ""});
 		if(tbpipe.current() == url)
 		{
 			auto ca {tbpipe.colored_area_access()};
@@ -889,6 +897,7 @@ bool GUI::process_queue_item(std::wstring url)
 		bottom.started = false;
 		if(conf.cb_autostart)
 			start_next_urls(url);
+		else if(i_taskbar) i_taskbar->SetProgressState(hwnd, TBPF_NOPROGRESS);
 		return false; // stopped
 	}
 }
@@ -1382,8 +1391,15 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq, const size_t cat)
 										media_website = "bandcamp.com";
 									else media_website = bottom.playlist_info["webpage_url_domain"];
 									if(bottom.is_yttab)
-										media_title = "[channel tab] " + std::string {bottom.playlist_info["title"]};
-									else media_title = "[playlist] " + std::string {bottom.playlist_info["title"]};
+										media_title = "[channel tab] " + bottom.playlist_info["title"].get<std::string>();
+									else 
+									{
+										if(bottom.playlist_info.contains("title"))
+											media_title = "[playlist] " + bottom.playlist_info["title"].get<std::string>();
+										else if(bottom.playlist_info.contains("id"))
+											media_title = "[playlist] " + bottom.playlist_info["id"].get<std::string>();
+										else media_title = to_utf8(url);
+									}
 									if(vidsel_item.m && lbq.item_from_value(url).selected())
 									{
 										auto &m {*vidsel_item.m};
@@ -1782,7 +1798,9 @@ void GUI::get_latest_ffmpeg(nana::window parent_for_msgbox)
 					for(auto &el : rel["assets"])
 					{
 						std::string url {el["browser_download_url"]};
-						if(win7 && url.find(X64 ? "/win64_win64_" : "/win32_win32_") != -1 || url.find(X64 ? "ffmpeg-master-latest-win64-gpl.zip" : "ffmpeg-master-latest-win32-gpl.zip") != -1)
+						if(win7 && url.find(X64 ? "/win64_win64_" : "/win32_win32_") != -1 || 
+							url.find(X64 ? "ffmpeg-master-latest-win64-gpl.zip" : "ffmpeg-master-latest-win32-gpl.zip") != -1 ||
+							url.find(X64 ? "win64-gpl.zip" : "win32-gpl.zip") != -1)
 						{
 							url_latest_ffmpeg = url;
 							size_latest_ffmpeg = el["size"];
@@ -2010,18 +2028,33 @@ bool GUI::is_scplaylist(std::wstring url)
 
 void GUI::taskbar_overall_progress()
 {
-	ULONGLONG completed {0}, total {lbq.item_count()};
+	ULONGLONG completed {0}, skip {0}, total {lbq.item_count()}, startable {0};
 	if(i_taskbar && total > 1)
 	{
 		for(size_t cat {0}; cat < lbq.size_categ(); cat++)
+		{
 			for(auto &item : lbq.at(cat))
-				if(item.text(3) == "done" || item.text(3) == "skip")
+			{
+				if(item.text(3) == "done")
 					completed++;
-		if(completed)
-			if(completed == total)
+				else if(item.text(3) == "skip")
+					skip++;
+				else startable++;
+			}
+		}
+		total -= skip;
+		if(completed || startable)
+		{
+			if(completed == total || !startable)
 				i_taskbar->SetProgressState(hwnd, TBPF_NOPROGRESS);
-			else i_taskbar->SetProgressValue(hwnd, completed, total);
-		else i_taskbar->SetProgressValue(hwnd, 1, -1);
+			else 
+			{
+				if(completed == 0)
+					i_taskbar->SetProgressValue(hwnd, 1, ULLONG_MAX);
+				else i_taskbar->SetProgressValue(hwnd, completed, total);
+			}
+		}
+		else i_taskbar->SetProgressState(hwnd, TBPF_NOPROGRESS);
 	}
 }
 
@@ -2029,7 +2062,6 @@ void GUI::taskbar_overall_progress()
 void GUI::on_btn_dl(std::wstring url)
 {
 	use_ffmpeg_location = !ffmpeg_location_in_conf_file();
-	taskbar_overall_progress();
 	if(process_queue_item(url)) // if the current url was started (as opposed to stopped)
 		start_next_urls(url);    // also start the next ones if any are startable	
 }

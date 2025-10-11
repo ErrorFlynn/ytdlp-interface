@@ -113,7 +113,13 @@ void GUI::fm_playlist()
 			durstr += ':' + ss.str();
 		}
 
-		string title {entry["title"]};
+		string title {"title not available"};
+		if(entry.contains("title"))
+			title = entry["title"].get<std::string>();
+		else if(entry.contains("id"))
+			title = entry["id"].get<std::string>();
+		else if(entry.contains("url"))
+			title = entry["url"].get<std::string>();
 		if(!is_utf8(title))
 		{
 			std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> u16conv;

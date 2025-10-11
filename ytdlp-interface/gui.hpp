@@ -31,6 +31,7 @@ public:
 	GUI();
 
 	static settings_t conf;
+	static std::unordered_map<std::string, settings_t> conf_presets;
 	fs::path confpath, infopath;
 	std::function<bool()> fn_write_conf;
 	nlohmann::json unfinished_qitems_data;
@@ -55,7 +56,7 @@ private:
 		thr_qitem_data, thr_queue_remove;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.15.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 5)};
+	const std::string ver_tag {"v2.16.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 5)};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
 	nana::timer tmsg, tqueue, t_load_qitem_data, t_unload;
@@ -241,7 +242,8 @@ private:
 /*************/
 
 	widgets::conf_page updater;	
-	widgets::Label l_ver, l_ver_ytdlp, l_ver_ffmpeg, l_channel;
+	widgets::Label l_ver, l_ver_ytdlp, l_ver_ffmpeg, l_channel, l_ytdlp, l_ffmpeg;
+	widgets::path_label l_ytdlp_path, l_ffmpeg_path;
 	widgets::Text l_vertext, l_ytdlp_text, l_ffmpeg_text;
 	widgets::Button btn_changes, btn_update, btn_update_ytdlp, btn_update_ffmpeg;
 	widgets::cbox cb_startup, cb_selfonly, cb_chan_stable, cb_chan_nightly, cb_ffplay;
@@ -260,6 +262,7 @@ private:
 	void updater_display_version_ytdlp();
 	void updater_update_self(themed_form &parent);
 	void updater_update_misc(bool ytdlp, fs::path target = "");
+	bool updater_check_paths(bool ffmpeg_only);
 	void fm_settings();
 	void fm_settings_info(nana::window owner);
 	void fm_changes(nana::window parent);
@@ -271,9 +274,10 @@ private:
 	void fm_colors(themed_form &parent);
 	void fm_loading(bool saving = false);
 	std::unique_ptr<themed_form> fm_alert(std::string main, std::string sub, bool show = true);
+	std::pair<bool, std::string> input_box(nana::window owner, std::string caption, std::string prompt);
 
 	void queue_remove_all(size_t cat = 0);
-	void queue_remove_selected();
+	void queue_remove_items(const nana::listbox::index_pairs &items);
 	void queue_make_listbox();
 	std::wstring queue_pop_menu(int x, int y);
 

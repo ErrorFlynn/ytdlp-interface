@@ -322,7 +322,8 @@ std::wstring GUI::queue_pop_menu(int x, int y)
 			const auto is_live {bottom.vidinfo_contains("is_live") && bottom.vidinfo["is_live"] ||
 							   bottom.vidinfo_contains("live_status") && bottom.vidinfo["live_status"] == "is_live"};
 			static std::vector<drawerbase::listbox::item_proxy> stoppable, startable;
-			static std::vector<std::wstring> completed;
+			//static std::vector<std::wstring> completed;
+			static listbox::index_pairs completed;
 			stoppable.clear();
 			startable.clear();
 			completed.clear();
@@ -330,7 +331,8 @@ std::wstring GUI::queue_pop_menu(int x, int y)
 			{
 				const auto text {item.text(3)};
 				if(text == "done")
-					completed.push_back(item.value<lbqval_t>().url);
+					//completed.push_back(item.value<lbqval_t>().url);
+					completed.push_back(item.pos());
 				else if(text.find("stopped") == -1 && text.find("queued") == -1 && text.find("error") == -1 && text.find("skip") == -1)
 					stoppable.push_back(item);
 				else startable.push_back(item);
@@ -518,45 +520,31 @@ std::wstring GUI::queue_pop_menu(int x, int y)
 				m.append_splitter();
 				if(!completed.empty())
 				{
-					m.append("Clear completed", [this](menu::item_proxy)
+					m.append("Clear completed", [&](menu::item_proxy)
 					{
-						lbq.auto_draw(false);
-						autostart_next_item = false;
-						for(auto &url : completed)
-						{
-							auto item {lbq.item_from_value(url)};
-							if(item != lbq.empty_item)
-								queue_remove_item(url, false);
-						}
-						autostart_next_item = true;
-						auto sel {lbq.selected()};
-						if(sel.size() > 1)
-							for(auto n {1}; n < sel.size(); n++)
-								lbq.at(sel[n]).select(false);
-						lbq.auto_draw(true);
-						queue_save();
+						queue_remove_items(completed);
 					});
 				}
 				if(!startable.empty())
 				{
 					m.append("Start all", [&](menu::item_proxy)
 					{
-						thr_menu_start_stop = std::thread([&]
-						{
-							menu_working = true;
+						//thr_menu_start_stop = std::thread([&]
+						//{
+							//menu_working = true;
 							autostart_next_item = false;
 							for(auto item : startable)
 							{
-								if(!menu_working) break;
+								//if(!menu_working) break;
 								auto url {item.value<lbqval_t>().url};
 								process_queue_item(url);
 							}
-						});
-						if(menu_working)
-							api::refresh_window(btndl);
+						//});
+						//if(menu_working)
+							//api::refresh_window(btndl);
 						autostart_next_item = true;
-						if(thr_menu_start_stop.joinable())
-							thr_menu_start_stop.detach();
+						//if(thr_menu_start_stop.joinable())
+							//thr_menu_start_stop.detach();
 					});
 				}
 				if(!stoppable.empty())
@@ -571,7 +559,8 @@ std::wstring GUI::queue_pop_menu(int x, int y)
 							{
 								if(!menu_working) break;
 								auto url {item.value<lbqval_t>().url};
-								on_btn_dl(url);
+								//on_btn_dl(url);
+								process_queue_item(url);
 							}
 							if(menu_working)
 								api::refresh_window(btndl);
@@ -647,7 +636,7 @@ std::wstring GUI::queue_pop_menu(int x, int y)
 				const auto sel {lbq.selected()};
 				if(sel.size() == lbq.at(sel.front().cat).size())
 					queue_remove_all(sel.front().cat);
-				else queue_remove_selected();
+				else queue_remove_items(sel);
 			});
 
 			m.append("Refresh selected", [&, sel](menu::item_proxy)
@@ -876,19 +865,18 @@ void GUI::queue_remove_all(size_t cat)
 }
 
 
-void GUI::queue_remove_selected()
+void GUI::queue_remove_items(const nana::listbox::index_pairs &items)
 {
 	using namespace nana;
 
 	if(!thr_queue_remove.joinable())
 	{
 		std::wstring val;
-		auto sel {lbq.selected()};
-		if(sel.back().item < lbq.at(sel.back().cat).size() - 1)
-			val = lbq.at(listbox::index_pair {sel.back().cat, sel.back().item + 1}).value<lbqval_t>().url;
+		if(items.back().item < lbq.at(items.back().cat).size() - 1)
+			val = lbq.at(listbox::index_pair {items.back().cat, items.back().item + 1}).value<lbqval_t>().url;
 		else
 		{
-			for(auto n {sel.back()}; n.item != npos; n.item--)
+			for(auto n {items.back()}; n.item != npos; n.item--)
 				if(!lbq.at(n).selected())
 				{
 					val = lbq.at(n).value<lbqval_t>().url;
@@ -902,7 +890,7 @@ void GUI::queue_remove_selected()
 
 		std::vector<std::wstring> sel_urls;
 
-		for(auto ip : sel)
+		for(auto ip : items)
 			sel_urls.push_back(lbq.at(ip).value<lbqval_t>().url);
 
 		lbq.auto_draw(false);

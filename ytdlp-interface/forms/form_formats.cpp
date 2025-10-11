@@ -286,7 +286,7 @@ void GUI::fm_formats()
 			auto item {lbq.at(lbq.selected().front())};
 			auto it {std::find_if(vidinfo["formats"].begin(), vidinfo["formats"].end(), [&](const auto &el)
 			{
-				return el["format"].get<std::string>().rfind(nana::to_utf8(strfmt)) != -1;
+				return el["format_id"].get<std::string>() == nana::to_utf8(strfmt);
 			})};
 			std::string fsize {"---"}, fmt_note, ext, fmtid;
 			if(it != vidinfo["formats"].end())

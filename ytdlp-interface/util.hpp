@@ -63,6 +63,7 @@ namespace util
 	BOOL pwr_sleep();
 	BOOL pwr_hibernate();
 	bool pwr_can_hibernate();
+	fs::path to_relative_path(const fs::path &abs);
 }
 
 
