@@ -328,6 +328,8 @@ void GUI::gui_bottom::from_json(const nlohmann::json &j)
 		is_yttab = j["is_yttab"];
 	if(j.contains("is_ytplaylist"))
 		is_ytplaylist = j["is_ytplaylist"];
+	if(j.contains("is_gen_playlist"))
+		is_gen_playlist = j["is_gen_playlist"];
 	if(j.contains("output_buffer"))
 		pgui->outbox.buffer(url, j["output_buffer"].get<std::string>());
 	if(j.contains("dlcmd"))
@@ -391,6 +393,8 @@ void GUI::gui_bottom::to_json(nlohmann::json &j)
 		j["is_yttab"] = true;
 	if(is_ytplaylist)
 		j["is_ytplaylist"] = true;
+	if(is_gen_playlist)
+		j["is_gen_playlist"] = is_gen_playlist;
 	if(!pgui->outbox.buffer(url).empty())
 		j["output_buffer"] = pgui->outbox.buffer(url);
 	if(pgui->outbox.commands.contains(url))

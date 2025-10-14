@@ -21,6 +21,10 @@
 #define WM_LBQ_GETCAT (WM_APP + 0x000D)
 #define WM_LBQ_HEADERS (WM_APP + 0x000E)
 #define WM_LBQ_SELECT_EX (WM_APP + 0x000F)
+#define WM_COLORED_AREA_CLEAR (WM_APP + 0x0010)
+#define WM_PROGEX_CAPTION (WM_APP + 0x0011)
+#define WM_OUTBOX_APPEND (WM_APP + 0x0012)
+#define WM_PROGEX_VALUE (WM_APP + 0x0013)
 
 using qline_t = std::array<std::string, 7>;
 

@@ -106,7 +106,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 	void(OleInitialize(0));
 	if(g_enable_log)
 	{
-		g_log.use_window = true;
+		g_log.use_window = false;
 		g_logfile.open(appdir / "debug_log.txt", std::ofstream::trunc);
 		if(!g_logfile.good())
 		{

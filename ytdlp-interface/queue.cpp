@@ -416,10 +416,10 @@ std::wstring GUI::queue_pop_menu(int x, int y)
 			if(item.text(3) != "error" || !bottom.vidinfo.empty())
 			{
 				m.append_splitter();
-				if(bottom.is_ytplaylist || bottom.is_bcplaylist || bottom.is_scplaylist)
+				if(bottom.is_ytplaylist || bottom.is_bcplaylist || bottom.is_scplaylist || bottom.is_gen_playlist)
 				{
 					auto count {bottom.playlist_selection.size()};
-					std::string item_text {(bottom.is_ytplaylist ? "Select videos (" : "Select songs (") + (count && !bottom.playlist_info.empty() ?
+					std::string item_text {(bottom.is_ytplaylist || bottom.is_gen_playlist ? "Select videos (" : "Select songs (") + (count && !bottom.playlist_info.empty() ?
 						std::to_string(bottom.playlist_selected()) + '/' + std::to_string(count) + ")" : "getting data...)")};
 
 					auto mitem = m.append(item_text, [this](menu::item_proxy)

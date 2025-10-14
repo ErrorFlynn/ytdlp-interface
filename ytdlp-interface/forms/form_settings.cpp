@@ -468,6 +468,16 @@ void GUI::fm_settings()
 			lb_presets.at(0).back().select(true);
 	}
 
+	lb_presets.events().key_press([&](const nana::arg_keyboard &arg)
+	{
+		if(arg.key == nana::keyboard::del)
+		{
+			auto sel {lb_presets.selected()};
+			if(!sel.empty())
+				btn_delete.events().click.emit({}, btn_delete);
+		}
+	});
+
 	tb_add.multi_lines(false);
 	tb_add.padding(0, 5, 0, 5);
 	tb_add.events().key_press([&](const nana::arg_keyboard &arg)
@@ -1758,6 +1768,7 @@ void GUI::updater_display_version_ytdlp()
 
 void GUI::updater_update_self(themed_form &parent)
 {
+	queue_save_data();
 	static fs::path arc_path;
 	static bool btnffmpeg_state, btnytdlp_state;
 	arc_path = fs::temp_directory_path() / (X64 ? (win7 ? "ytdlp-interface_win7.7z" : "ytdlp-interface.7z") : (win7 ? "ytdlp-interface_x86_win7.7z" : "ytdlp-interface_x86.7z"));
@@ -1789,8 +1800,64 @@ void GUI::updater_update_self(themed_form &parent)
 				thr_updater.detach();
 				return;
 			}
-			unsigned arc_size {releases[0]["assets"][X64 ? (win7 ? 2 : 0) : (win7 ? 3 : 1)]["size"]}, progval {0};
-			std::string arc_url {releases[0]["assets"][X64 ? (win7 ? 2 : 0) : (win7 ? 3 : 1)]["browser_download_url"]};
+			//               0    1       2        3
+			// asset order: x64, x86, x64_win7, x86_win7
+			std::map<std::string, unsigned> arc_sizes;
+			std::map<std::string, std::string> arc_urls;
+			auto j_assets {releases[0]["assets"]};
+			for(const auto &asset : j_assets)
+			{
+				if(asset.contains("name"))
+				{
+					const auto name {asset["name"].get<std::string>()};
+					arc_sizes[name] = asset["size"];
+					arc_urls[name] = asset["browser_download_url"];
+				}
+			}
+			std::string arc_url;
+			unsigned arc_size {0}, progval {0};
+			if(X64)
+			{
+				if(win7)
+				{
+					if(arc_sizes.contains("ytdlp-interface_win7.7z"))
+						arc_size = arc_size["ytdlp-interface_win7.7z"];
+					else arc_size = j_assets[2]["size"];
+					if(arc_urls.contains("ytdlp-interface_win7.7z"))
+						arc_url = arc_urls["ytdlp-interface_win7.7z"];
+					else arc_url = j_assets[2]["browser_download_url"];
+				}
+				else
+				{
+					if(arc_sizes.contains("ytdlp-interface.7z"))
+						arc_size = arc_size["ytdlp-interface.7z"];
+					else arc_size = j_assets[0]["size"];
+					if(arc_urls.contains("ytdlp-interface.7z"))
+						arc_url = arc_urls["ytdlp-interface.7z"];
+					else arc_url = j_assets[0]["browser_download_url"];
+				}
+			}
+			else
+			{
+				if(win7)
+				{
+					if(arc_sizes.contains("ytdlp-interface_x86_win7.7z"))
+						arc_size = arc_size["ytdlp-interface_x86_win7.7z"];
+					else arc_size = j_assets[3]["size"];
+					if(arc_urls.contains("ytdlp-interface_x86_win7.7z"))
+						arc_url = arc_urls["ytdlp-interface_x86_win7.7z"];
+					else arc_url = j_assets[3]["browser_download_url"];
+				}
+				else
+				{
+					if(arc_sizes.contains("ytdlp-interface_x86.7z"))
+						arc_size = arc_size["ytdlp-interface_x86.7z"];
+					else arc_size = j_assets[1]["size"];
+					if(arc_urls.contains("ytdlp-interface_x86.7z"))
+						arc_url = arc_urls["ytdlp-interface_x86.7z"];
+					else arc_url = j_assets[1]["browser_download_url"];
+				}
+			}
 			prog_updater.amount(arc_size);
 			prog_updater.value(0);
 			auto cb_progress = [&](unsigned prog_chunk)
@@ -1824,7 +1891,7 @@ void GUI::updater_update_self(themed_form &parent)
 						ShellExecuteW(NULL, L"runas", tempself.wstring().data(), params.data(), NULL, SW_SHOW);
 						updater_working = false;
 						thr_updater.detach();
-						close();
+						ExitProcess(0);
 						return;
 					}
 					catch(fs::filesystem_error const &e) {

@@ -1190,4 +1190,34 @@ void GUI::make_message_handlers()
 		reinterpret_cast<::widgets::Textbox*>(target)->set_keywords(pair.first, true, true, {pair.second});
 		return false;
 	});
+
+
+	msg.make_before(WM_COLORED_AREA_CLEAR, [&](UINT, WPARAM ca, LPARAM, LRESULT *)
+	{
+		reinterpret_cast<textbox::colored_area_access_interface*>(ca)->clear();
+		return false;
+	});
+
+
+	msg.make_before(WM_PROGEX_CAPTION, [&](UINT, WPARAM progex, LPARAM utf8, LRESULT *)
+	{
+		reinterpret_cast<progress_ex*>(progex)->caption(*reinterpret_cast<std::string*>(utf8));
+		return false;
+	});
+
+
+	msg.make_before(WM_PROGEX_VALUE, [&](UINT, WPARAM progex, LPARAM value, LRESULT *)
+	{
+		reinterpret_cast<progress_ex*>(progex)->value(value);
+		return false;
+	});
+
+
+	msg.make_before(WM_OUTBOX_APPEND, [&](UINT, WPARAM wparam, LPARAM lparam, LRESULT *)
+	{
+		auto &outbox {*reinterpret_cast<GUI::Outbox*>(wparam)};
+		auto &args {*reinterpret_cast<std::pair<std::wstring, std::string>*>(lparam)};
+		outbox.append(args.first, args.second);
+		return false;
+	});
 }

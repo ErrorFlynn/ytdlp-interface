@@ -56,7 +56,7 @@ private:
 		thr_qitem_data, thr_queue_remove;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.16.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 5)};
+	const std::string ver_tag {"v2.16.1"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 5)*/};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
 	nana::timer tmsg, tqueue, t_load_qitem_data, t_unload;
@@ -88,7 +88,7 @@ private:
 	public:
 		gui_bottom(GUI &gui);
 
-		bool is_ytlink {false}, use_strfmt {false}, received_procmsg {false}, info_thread_active {false},
+		bool is_ytlink {false}, use_strfmt {false}, received_procmsg {false}, info_thread_active {false}, is_gen_playlist {false},
 			is_ytplaylist {false}, is_ytchan {false}, is_bcplaylist {false}, is_bclink {false}, is_bcchan {false}, is_yttab {false},
 			is_scplaylist {false}, cbtime {false}, cbthumb {false}, cbsubs {false}, cbkeyframes {false}, cbmp3 {false}, cbargs {false}, started {false};
 
@@ -159,6 +159,7 @@ private:
 		std::map<std::wstring, std::string> buffers {{L"", ""}};
 		std::wstring current_;
 		std::thread thr;
+		std::thread::id main_thread_id;
 		bool working {false};
 		GUI *pgui {nullptr};
 
@@ -224,7 +225,7 @@ private:
 	widgets::Group gpopt {*this, "Download options"};
 	nana::place plcopt {*this};
 	widgets::Textbox tbrate {gpopt};
-	widgets::Progress prog {*this};
+	widgets::Progress prog {*this, this};
 	widgets::Button btn_ytfmtlist {*this, "Select formats"}, btndl {*this, "Start download"}, btnerase {gpopt},
 		btnq {*this, "Show output"}, btncopy {*this, "Apply options to all queue items"};
 	widgets::Label l_out {gpopt, "Download folder:"}, l_rate {gpopt, "Download rate limit:"}, l_chap {gpopt, "Chapters:"};

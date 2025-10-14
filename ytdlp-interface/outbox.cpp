@@ -3,6 +3,7 @@
 
 void GUI::Outbox::create(GUI *parent, bool visible)
 {
+	main_thread_id = std::this_thread::get_id();
 	pgui = parent;
 	Textbox::create(*parent, visible);
 	editable(false);
@@ -181,52 +182,60 @@ void GUI::Outbox::append(std::wstring url, std::string text)
 {
 	if(!empty())
 	{
-		if(!visible() && url == pgui->qurl && pgui->btnq.caption().find("queue") != -1)
+		if(std::this_thread::get_id() == main_thread_id)
 		{
-			widget::show();
-			pgui->overlay.hide();
-		}
-		auto &buf {buffers[url]};
-		if(buf.empty() && text.starts_with("[GUI]"))
-		{
-			auto cmd {text};
-			while(cmd.back() == '\r' || cmd.back() == '\n')
-				cmd.pop_back();
-			auto pos {cmd.find('\"')};
-			if(pos != -1)
-				commands[url] = cmd.substr(pos);
-		}
-		size_t buflim {conf.output_buffer_size}, bufsize {buf.size()}, textsize {text.size()};
-		if(conf.limit_output_buffer && bufsize + textsize > buflim)
-		{
-			if(url == current_)
+			if(!visible() && url == pgui->qurl && pgui->btnq.caption().find("queue") != -1)
 			{
-				auto ca {colored_area_access()};
-				if(ca->size())
-					ca->remove(0);
+				widget::show();
+				pgui->overlay.hide();
 			}
-			std::string newbuf(buflim, ' ');
-			if(textsize > buflim)
-				buf = text.substr(textsize - buflim, buflim);
+			auto &buf {buffers[url]};
+			if(buf.empty() && text.starts_with("[GUI]"))
+			{
+				auto cmd {text};
+				while(cmd.back() == '\r' || cmd.back() == '\n')
+					cmd.pop_back();
+				auto pos {cmd.find('\"')};
+				if(pos != -1)
+					commands[url] = cmd.substr(pos);
+			}
+			size_t buflim {conf.output_buffer_size}, bufsize {buf.size()}, textsize {text.size()};
+			if(conf.limit_output_buffer && bufsize + textsize > buflim)
+			{
+				if(url == current_)
+				{
+					auto ca {colored_area_access()};
+					if(ca->size())
+						ca->remove(0);
+				}
+				std::string newbuf(buflim, ' ');
+				if(textsize > buflim)
+					buf = text.substr(textsize - buflim, buflim);
+				else
+				{
+					newbuf = buf.substr(bufsize + textsize - buflim);
+					newbuf += text;
+					buf = std::move(newbuf);
+				}
+				if(url == current_)
+				{
+					textbox::caption(buf);
+					editable(true);
+					caret_pos({0, static_cast<unsigned>(text_line_count() - 1)});
+					editable(false);
+				}
+			}
 			else
 			{
-				newbuf = buf.substr(bufsize + textsize - buflim);
-				newbuf += text;
-				buf = std::move(newbuf);
-			}
-			if(url == current_)
-			{
-				textbox::caption(buf);
-				editable(true);
-				caret_pos({0, static_cast<unsigned>(text_line_count() - 1)});
-				editable(false);
+				buf += text;
+				if(url == current_)
+					textbox::append(text, false);
 			}
 		}
-		else
+		else 
 		{
-			buf += text;
-			if(url == current_)
-				textbox::append(text, false);
+			std::pair<std::wstring, std::string> lparam {url, text};
+			SendMessage(pgui->hwnd, WM_OUTBOX_APPEND, reinterpret_cast<WPARAM>(this), reinterpret_cast<LPARAM>(&lparam));
 		}
 	}
 }

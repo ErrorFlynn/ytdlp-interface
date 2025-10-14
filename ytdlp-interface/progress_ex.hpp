@@ -3,6 +3,8 @@
 #include <nana/gui/drawing.hpp>
 #include <nana/gui/widgets/progress.hpp>
 #include <array>
+#include <nana/gui.hpp>
+#include <Windows.h>
 
 #pragma warning( disable : 4244 4018)
 
@@ -20,39 +22,30 @@ namespace nana
 			return create(parent, {}, visible);
 		}
 
-		bool create(window parent, const rectangle &r = {}, bool visible = true);
+		bool create(window parent, const rectangle &r = {}, bool visible = true, nana::form *pform = nullptr);
 
 		progress_ex() : progress() {}
 		progress_ex(window parent, bool visible) { create(parent, visible); }
-		progress_ex(window parent, const rectangle &r = {}, bool visible = true) { create(parent, r, visible); }
+		progress_ex(window parent, const rectangle &r = {}, bool visible = true, nana::form *pform = nullptr) { create(parent, r, visible, pform); }
 
-		widget& caption(std::string utf8)
-		{
-			text = utf8;
-			API::refresh_window(*this);
-			return progress::caption(utf8);
-		}
-
-		widget& caption(std::wstring wstr)
-		{
-			text = charset{wstr}.to_bytes(unicode::utf8);
-			API::refresh_window(*this);
-			return progress::caption(wstr);
-		}
+		widget &caption(std::string utf8);
+		widget &caption(std::wstring wstr);
+		unsigned value(unsigned val);
+		unsigned value() const { return progress::value(); }
 
 		void text_mode(text_modes m) { tmode = m; API::refresh_window(*this); }
 		text_modes text_mode() const noexcept { return tmode; }
 
 		// this color is used if text contrast is disabled
 		void text_color(color clr) { clr_normal = clr;  API::refresh_window(*this); }
-		color text_color() { return clr_normal; }
+		color text_color() const { return clr_normal; }
 		void outline_color(color clr) { clr_outline = clr; }
 		
 		void text_contrast_colors(color full, color empty) { clr_left = full; clr_right = empty; API::refresh_window(*this); }
 		std::pair<color, color> text_contrast_colors() { return std::make_pair(clr_left, clr_right); }
 
 		void text_contrast(bool enable) { contrast = enable; API::refresh_window(*this); }
-		bool text_contrast() { return contrast; }
+		bool text_contrast() const { return contrast; }
 
 		void dark_bg(bool enable) { darkbg = enable; }
 
@@ -70,11 +63,14 @@ namespace nana
 
 		void image(paint::image &i) { img = i; }
 		void image(paint::image &&i) { img = i; }
-		auto &image() { return img; }
+		auto &image() const { return img; }
 		void shadow_progress(int amount, int value) { shadow_amount = amount; shadow_value = value; }
 
 	private:
 
+		std::thread::id main_thread_id;
+		nana::form *parent_form {nullptr};
+		HWND parent_hwnd {nullptr};
 		paint::image img;
 		std::string text;
 		text_modes tmode{text_modes::caption};

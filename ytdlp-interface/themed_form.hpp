@@ -28,6 +28,7 @@ public:
 	void subclass_after(UINT msgid, std::function<bool(UINT, WPARAM, LPARAM, LRESULT*)> handler) { msg.make_after(msgid, handler); }
 	void subclass_umake_after(UINT msgid) { msg.umake_after(msgid); }
 	void subclass_umake_before(UINT msgid) { msg.umake_before(msgid); }
+	void subclass_clear() { msg.clear(); }
 
 	void change_field_attr(nana::place &plc, std::string field, std::string attr, unsigned new_val);
 	void change_field_attr(std::string field, std::string attr, unsigned new_val) { change_field_attr(get_place(), field, attr, new_val); }

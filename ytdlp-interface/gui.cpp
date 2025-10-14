@@ -522,7 +522,7 @@ bool GUI::process_queue_item(std::wstring url)
 		if((!bottom.cbargs || argset.find("-o ") == -1) && !conf.output_template.empty())
 		{
 			std::wstring folder;
-			if(bottom.is_ytplaylist)
+			if(bottom.is_ytplaylist || bottom.is_gen_playlist)
 			{
 				if(conf.cb_playlist_folder)
 					folder = L"%(playlist_title)s\\";
@@ -574,7 +574,7 @@ bool GUI::process_queue_item(std::wstring url)
 				else cmd2 += L" -o \"" + bottom.outfile.filename().wstring() + L'\"';
 			}
 		}
-		if((bottom.is_ytplaylist || bottom.is_bcplaylist || bottom.is_scplaylist) && !bottom.playsel_string.empty())
+		if((bottom.is_ytplaylist || bottom.is_bcplaylist || bottom.is_scplaylist || bottom.is_gen_playlist) && !bottom.playsel_string.empty())
 			cmd2 += L" -I " + bottom.playsel_string + L" --compat-options no-youtube-unavailable-videos";
 		cmd2 += L" \"" + url + L'\"';
 		display_cmd += cmd2;
@@ -591,7 +591,7 @@ bool GUI::process_queue_item(std::wstring url)
 			bool ca_change {false};
 			if(outbox.current() == url)
 			{
-				ca->clear();
+				SendMessage(hwnd, WM_COLORED_AREA_CLEAR, reinterpret_cast<WPARAM>(ca), 0);
 				ca_change = true;
 			}
 			if(fs::exists(conf.ytdlp_path))
@@ -656,7 +656,7 @@ bool GUI::process_queue_item(std::wstring url)
 					if(playlist_progress)
 						text = "[" + std::to_string(playlist_completed + 1) + " of " + std::to_string(playlist_total) + "]\t" + text;
 					if(current)
-						prog.caption(text);
+						SendMessage(hwnd, WM_PROGEX_CAPTION, reinterpret_cast<WPARAM>(&prog), reinterpret_cast<LPARAM>(&text));
 					bottom.progtext = text;
 				}
 				else
@@ -700,13 +700,13 @@ bool GUI::process_queue_item(std::wstring url)
 								{
 									prog.shadow_progress(1000, completed);
 									prog.value(playlist_completed + 1);
-									prog.caption(bottom.progtext);
+									SendMessage(hwnd, WM_PROGEX_CAPTION, reinterpret_cast<WPARAM>(&prog), reinterpret_cast<LPARAM>(&bottom.progtext));
 								}
 							}
 							else 
 							{
 								if(current)
-									prog.caption(text);
+									SendMessage(hwnd, WM_PROGEX_CAPTION, reinterpret_cast<WPARAM>(&prog), reinterpret_cast<LPARAM>(&text));
 								bottom.progtext = text;
 							}
 						}
@@ -787,7 +787,7 @@ bool GUI::process_queue_item(std::wstring url)
 				std::error_code ec;
 				fs::remove(tempfile, ec);
 			}
-			else if(bottom.is_ytplaylist && bottom.playlist_info.contains("title") && bottom.playlist_info["title"] != nullptr)
+			else if((bottom.is_ytplaylist || bottom.is_gen_playlist) && bottom.playlist_info.contains("title") && bottom.playlist_info["title"] != nullptr)
 			{
 				bottom.printed_path = bottom.outpath / bottom.playlist_info["title"].get<std::string>();
 			}
@@ -1059,7 +1059,8 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq, const size_t cat)
 					if(outbox.current() == url)
 					{
 						auto ca {outbox.colored_area_access()};
-						ca->clear();
+						//ca->clear();
+						SendMessage(hwnd, WM_COLORED_AREA_CLEAR, reinterpret_cast<WPARAM>(ca), 0);
 						auto p {ca->get(0)};
 						p->fgcolor = ::widgets::theme::is_dark() ? ::widgets::theme::path_link_fg : color {"#569"};
 					}
@@ -1072,9 +1073,9 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq, const size_t cat)
 
 				std::wstring force_android {conf.cb_android ? L"--extractor-args youtube:player_client=android " : L""};
 
-				if(bottom.is_ytlink && !bottom.is_ytchan || bottom.is_bcplaylist || bottom.is_scplaylist)
+				if(bottom.is_ytlink && !bottom.is_ytchan || bottom.is_bcplaylist || bottom.is_scplaylist || bottom.is_gen_playlist)
 				{
-					if(bottom.is_ytplaylist || bottom.is_bcplaylist || bottom.is_scplaylist)
+					if(bottom.is_ytplaylist || bottom.is_bcplaylist || bottom.is_scplaylist || bottom.is_gen_playlist)
 					{
 						std::wstring flat {bottom.is_scplaylist ? L"" : L"--flat-playlist "};
 						std::wstring compat_options {bottom.is_ytplaylist ? L" --compat-options no-youtube-unavailable-videos" : L""},
@@ -1272,7 +1273,7 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq, const size_t cat)
 								media_title = u8conv.to_bytes(wstr);
 							}
 
-							if(bottom.is_ytplaylist)
+							if(bottom.is_ytplaylist || bottom.is_gen_playlist)
 							{
 								std::string URL {bottom.playlist_info["entries"][0]["url"]};
 								cmd = L" --no-warnings -j " + cookies + fmt_sort + to_wstring(URL);
@@ -1379,7 +1380,7 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq, const size_t cat)
 					{
 						if(media_info[0] == '{')
 						{
-							if(bottom.is_ytplaylist || bottom.is_bcplaylist || bottom.is_scplaylist)
+							if(bottom.is_ytplaylist || bottom.is_bcplaylist || bottom.is_scplaylist || bottom.is_gen_playlist)
 							{
 								if(!bottom.playlist_info.empty())
 								{
@@ -1496,7 +1497,8 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq, const size_t cat)
 							if(outbox.current() == url)
 							{
 								auto ca {outbox.colored_area_access()};
-								ca->clear();
+								//ca->clear();
+								SendMessage(hwnd, WM_COLORED_AREA_CLEAR, reinterpret_cast<WPARAM>(ca), 0);
 								auto p {ca->get(0)};
 								p->fgcolor = ::widgets::theme::is_dark() ? ::widgets::theme::path_link_fg : color {"#569"};
 							}

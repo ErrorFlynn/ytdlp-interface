@@ -258,7 +258,7 @@ namespace widgets
 
 		Progress() : progress_ex() {}
 
-		Progress(nana::window parent) : progress_ex {parent}
+		Progress(nana::window parent, nana::form *pform = nullptr) : progress_ex {parent, {}, true, pform}
 		{
 			create(parent);
 		}
