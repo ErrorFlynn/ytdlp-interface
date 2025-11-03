@@ -104,6 +104,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 	}
 
 	void(OleInitialize(0));
+	g_exiting = false;
 	if(g_enable_log)
 	{
 		g_log.use_window = false;
@@ -193,7 +194,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 				GUI::conf.cbargs = jconf["cbargs"];
 				if(jconf.contains("args"))
 				{
-					GUI::conf.argsets.push_back(jconf["args"]);
+					GUI::conf.argsets.push_back(jconf["args"].get<std::string>());
 					jconf.erase("args"); // no longer used since v1.5
 				}
 			}
@@ -201,7 +202,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 			{
 				GUI::conf.kwhilite = jconf["kwhilite"];
 				for(auto &el : jconf["argsets"])
-					GUI::conf.argsets.push_back(el);
+					GUI::conf.argsets.push_back(el.get<std::string>());
 			}
 			if(jconf.contains("output_template")) // v1.6
 			{
@@ -365,6 +366,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 					GUI::conf_presets[jpreset["name"]] = std::move(tempset);
 				}
 			}
+			if(jconf.contains("cb_display_custom_filenames")) // v2.17
+			{
+				GUI::conf.cb_display_custom_filenames = jconf["cb_display_custom_filenames"];
+			}
 		}
 	}
 	else GUI::conf.outpath = util::get_sys_folder(FOLDERID_Downloads);
@@ -374,9 +379,6 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 	GUI gui;
 	gui.confpath = confpath;
 	gui.infopath = fs::path{confpath}.replace_filename("unfinished_qitems_data.json");
-
-	//if(jconf.contains("playsel_strings"))
-	//	jconf.erase("playsel_strings");
 
 	gui.fn_write_conf = [&confpath]
 	{
@@ -494,6 +496,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 		jconf["sblock"]["cb_remove"] = GUI::conf.cb_sblock_remove;
 		jconf["proxy"]["enabled"] = GUI::conf.cb_proxy;
 		jconf["proxy"]["URL"] = to_utf8(GUI::conf.proxy);
+		jconf["cb_display_custom_filenames"] = GUI::conf.cb_display_custom_filenames;
 
 		return (std::ofstream {confpath} << std::setw(4) << jconf).good();
 	};

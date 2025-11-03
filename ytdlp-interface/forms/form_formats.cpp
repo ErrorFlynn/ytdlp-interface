@@ -260,14 +260,14 @@ void GUI::fm_formats()
 			auto &val {list.at(pos).value<std::wstring>()};
 			if(pos.cat == vidcat || pos.cat == 0)
 			{
-				fmt1 = std::move(val);
+				fmt1 = val;
 				if(mergeall) break;
 			}
 			else if(!mergeall)
 			{
 				if(!fmt2.empty())
 					fmt2 += '+';
-				fmt2 += std::move(val);
+				fmt2 += val;
 			}
 		}
 		strfmt = fmt1;
@@ -312,16 +312,17 @@ void GUI::fm_formats()
 		else
 		{
 			auto item {lbq.at(lbq.selected().front())};
-			auto it1 {std::find_if(vidinfo["formats"].begin(), vidinfo["formats"].end(), [&](const auto &el)
+			auto begin {vidinfo["formats"].begin()}, end {vidinfo["formats"].end()};
+			auto it1 {std::find_if(begin, end, [&](const auto &el)
 			{
 				return el["format_id"].get<std::string>() == nana::to_utf8(fmt1);
 			})};
-			auto it2 {std::find_if(vidinfo["formats"].begin(), vidinfo["formats"].end(), [&](const auto &el)
+			auto it2 {std::find_if(begin, end, [&](const auto &el)
 			{
-				return el["format_id"].get<std::string>() == nana::to_utf8(fmt2);
+				return el["format_id"].get<std::string>() == nana::to_utf8(fmt2.substr(0, fmt2.find('+')));
 			})};
 
-			if(it1 != vidinfo["formats"].end() && it2 != vidinfo["formats"].end())
+			if(it1 != end && it2 != end)
 			{
 				std::string fsize, fsize1 {"---"}, fsize2 {"---"}, fmt_note, ext;
 				std::uint64_t size1 {0}, size2 {0};
@@ -530,11 +531,24 @@ void GUI::fm_formats()
 				catidx = 2; // video only
 			else if(vcodec == "none")
 				catidx = 1; // audio only
+			//if(catidx == 0 && fmt.contains("language") && fmt["language"].is_string())
+			//	format += " (" + fmt["language"].get<std::string>() + ")";
 			list.at(catidx).append({format, acodec, vcodec, ext, fps, chan, vbr, abr, tbr, asr, filesize});
 			auto idstr {to_wstring(fmt["format_id"].get<std::string>())};
 			auto item {list.at(catidx).back()};
 			item.value(idstr);
-			if(idstr == conf.fmt1 || (conf.audio_multistreams ? conf.fmt2.find(idstr) != -1 : idstr == conf.fmt2))
+			if(conf.audio_multistreams)
+			{
+				using namespace std;
+				wstringstream ss {conf.fmt2};
+				vector<wstring> ids;
+				wstring fmt;
+				while(getline(ss, fmt, L'+'))
+					ids.push_back(fmt);
+				if(find(ids.begin(), ids.end(), idstr) != ids.end() || idstr == conf.fmt1)
+					list.at(catidx).back().select(true);
+			}
+			else if(idstr == conf.fmt1 || idstr == conf.fmt2)
 				list.at(catidx).back().select(true);
 			if(!format_id1.empty() && format_id1 == to_utf8(idstr))
 				item.text(0, format + " *");
@@ -561,7 +575,7 @@ void GUI::fm_formats()
 	}
 
 	list.refresh_theme();
-	list.fit_column_content();
+	auto columns_width {list.fit_column_content()};
 	list.auto_draw(true);
 
 	fm.events().unload([&]
@@ -583,8 +597,7 @@ void GUI::fm_formats()
 	if(conf.cbtheme == 2)
 		fm.system_theme(true);
 	else fm.dark_theme(conf.cbtheme == 0);
-
-	fm.center(1000, std::max(429.0 + list.item_count() * 20.5, double(600)));
+	fm.center(std::max((unsigned)util::scale(1000), columns_width + util::scale(41) + 25), util::scale(std::max(429.0 + list.item_count() * 20.5, double(600))), false);
 	api::track_window_size(fm, dpi_scale_size(900, 600), false);
 
 	fm.collocate();

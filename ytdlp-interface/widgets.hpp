@@ -238,7 +238,7 @@ namespace widgets
 		item_proxy item_from_value(std::wstring val);
 		void hilight_checked(bool enable) { hilite_checked = enable; refresh_theme(); }
 		void refresh_theme();
-		void fit_column_content();
+		unsigned fit_column_content();
 		void set_line_text(std::wstring url, qline_t text);
 		void set_item_bg(std::wstring url, nana::color bg);
 		void auto_draw(bool enable) noexcept;
@@ -345,8 +345,9 @@ namespace widgets
 				set_keywords(category, true, true, {name});
 			else 
 			{
-				std::pair<std::string, std::string> params {category, name};
-				SendMessage(hwnd_parent, WM_SET_KEYWORDS, reinterpret_cast<WPARAM>(this), reinterpret_cast<LPARAM>(&params));
+				//std::pair<std::string, std::string> params {category, name};
+				auto params {new std::pair<std::string, std::string> {category, name}};
+				PostMessage(hwnd_parent, WM_SET_KEYWORDS, reinterpret_cast<WPARAM>(this), reinterpret_cast<LPARAM>(params));
 			}
 		}
 

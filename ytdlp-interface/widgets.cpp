@@ -404,7 +404,7 @@ nana::listbox::item_proxy Listbox::item_from_value(std::wstring val)
 				if(item.value<lbqval_t>() == val)
 					return item;
 	}
-	else
+	else if(!g_exiting)
 	{
 		auto item {empty_item};
 		SendMessage(hwnd_parent, WM_LBQ_URL2ITEM, reinterpret_cast<WPARAM>(&val), reinterpret_cast<LPARAM>(&item));
@@ -453,7 +453,9 @@ void widgets::Listbox::set_line_text(std::wstring url, qline_t text)
 	}
 	else if(!force_no_thread_safe_ops_ && no_thread_safe_ops && !*no_thread_safe_ops)
 	{
-		SendMessage(hwnd_parent, WM_SET_QLINE_TEXT, reinterpret_cast<WPARAM>(&url), reinterpret_cast<LPARAM>(&text));
+		auto purl {new std::wstring {url}};
+		auto ptext {new qline_t {text}};
+		PostMessage(hwnd_parent, WM_SET_QLINE_TEXT, reinterpret_cast<WPARAM>(purl), reinterpret_cast<LPARAM>(ptext));
 	}
 }
 
@@ -550,11 +552,13 @@ void Listbox::refresh_theme()
 	auto_draw(true);
 }
 
-void widgets::Listbox::fit_column_content()
+unsigned widgets::Listbox::fit_column_content()
 {
 	const auto number_of_columns {column_size()};
 	nana::form fm;
 	nana::label l {fm};
+	int total_width {0};
+	const auto padding {util::scale(20)};
 	l.typeface(typeface());
 	for(size_t n {0}; n < number_of_columns; n++)
 	{
@@ -564,11 +568,12 @@ void widgets::Listbox::fit_column_content()
 			col.fit_content();
 			l.caption(col.text());
 			const auto minw {l.measure(0).width};
-			const auto padding {util::scale(20)};
 			if(col.width() < minw + padding)
 				col.width(minw + padding);
+			total_width += col.width();
 		}
 	}
+	return total_width;
 }
 
 

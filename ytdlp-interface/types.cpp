@@ -420,6 +420,7 @@ void settings_t::to_jpreset(nlohmann::json &j) const
 	j["com_cookies"] = com_cookies;
 	j["max_data_threads"] = max_data_threads;
 	j["cookie_options"] = to_utf8(cookie_options);
+	j["cb_display_custom_filenames"] = cb_display_custom_filenames;
 }
 
 
@@ -442,7 +443,7 @@ void settings_t::from_jpreset(const nlohmann::json &j)
 	pref_fps = j["pref_fps"];
 	cbargs = j["cbargs"];
 	for(auto &el : j["argsets"])
-		argsets.push_back(el);
+		argsets.push_back(el.get<std::string>());
 	output_template = to_wstring(j["output_template"].get<std::string>());
 	max_concurrent_downloads = j["max_concurrent_downloads"];
 	cb_lengthyproc = j["cb_lengthyproc"];
@@ -482,6 +483,8 @@ void settings_t::from_jpreset(const nlohmann::json &j)
 	com_cookies = j["com_cookies"];
 	max_data_threads = j["max_data_threads"];
 	cookie_options = j["cookie_options"].get<std::string>();
+	if(jblock.contains("cb_display_custom_filenames"))
+		cb_display_custom_filenames = j["cb_display_custom_filenames"];
 }
 
 
@@ -536,6 +539,7 @@ void settings_t::from_preset(const settings_t &p)
 	com_cookies = p.com_cookies;
 	max_data_threads = p.max_data_threads;
 	cookie_options = p.cookie_options;
+	cb_display_custom_filenames = p.cb_display_custom_filenames;
 }
 
 
@@ -590,5 +594,26 @@ bool settings_t::equals_preset(const settings_t &p)
 		com_chap == p.com_chap &&
 		com_cookies == p.com_cookies &&
 		max_data_threads == p.max_data_threads &&
+		cb_display_custom_filenames == p.cb_display_custom_filenames &&
 		cookie_options == p.cookie_options;
 }
+
+
+/*void argset_t::set(std::string_view text)
+{
+	if(text.starts_with('['))
+	{
+		auto pos {text.find(']')};
+		if(pos != -1)
+		{
+			label_ = text.substr(0, ++pos);
+			auto pos2 {text.find_first_not_of(" \t", pos)};
+			if(pos2 != -1)
+			{
+				argset_ = text.substr(pos2);
+			}
+		}
+		else argset_ = text;
+	}
+	else argset_ = text;
+}*/

@@ -96,7 +96,12 @@ void GUI::fm_loading(bool saving)
 				thr_qitem_data.detach();
 			if(good)
 			{
-				while(!items_initialized) Sleep(50);
+				while(!items_initialized)
+				{
+					Sleep(50);
+					if(unfinished_qitems_data.empty())
+						break;
+				}
 				lbq.auto_draw(true);
 				fm.close();
 			}

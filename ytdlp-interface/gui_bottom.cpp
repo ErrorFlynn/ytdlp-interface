@@ -222,6 +222,8 @@ bool GUI::gui_bottom::browse_for_filename()
 		if(conf.outpaths.size() >= 11 && conf.outpaths.find(outpath) == conf.outpaths.end())
 			conf.outpaths.erase(conf.outpaths.begin());
 		conf.outpaths.insert(outpath);
+		if(conf.cb_display_custom_filenames)
+			pgui->lbq.item_from_value(url).text(2, outfile.filename().string());
 		return true;
 	}
 	return false;

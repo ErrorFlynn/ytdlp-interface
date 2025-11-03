@@ -820,7 +820,7 @@ void GUI::queue_remove_all(size_t cat)
 			}
 			lbq.auto_draw(false);
 			auto item {lbq.at(cat).begin()};
-			while(item != lbq.at(cat).end() && !exiting)
+			while(item != lbq.at(cat).end() && !g_exiting)
 			{
 				auto url {item.value<lbqval_t>().url};
 				auto &bottom {bottoms.at(url)};
@@ -850,7 +850,8 @@ void GUI::queue_remove_all(size_t cat)
 			{
 				auto vis {lbq.visibles()};
 				if(!vis.empty())
-					lbq.at(vis.front().cat).at(0).select(true);
+					//lbq.at(vis.front().cat).at(0).select(true);
+					lbq_url_to_select = lbq.at(vis.front().cat).at(0).value<lbqval_t>();
 			}
 			adjust_lbq_headers();
 			lbq.auto_draw(true);
@@ -934,6 +935,11 @@ void GUI::queue_remove_items(const nana::listbox::index_pairs &items)
 				outbox.erase(url);
 			}
 			lbq.force_no_thread_safe_ops(false);
+
+			if(lbq.size_categ() > 1)
+				for(size_t cat_idx {1}; cat_idx < lbq.size_categ(); cat_idx++)
+					if(lbq.at(cat_idx).size() == 0)
+						lbq.erase(cat_idx);
 
 			if(!val.empty())
 			{
@@ -1037,7 +1043,7 @@ bool GUI::queue_save()
 }
 
 
-void GUI::queue_save_data()
+void GUI::queue_save_data(size_t max_qitems_to_process)
 {
 	conf.unfinished_queue_items.clear();
 	unfinished_qitems_data.clear();
@@ -1060,9 +1066,10 @@ void GUI::queue_save_data()
 		}
 	}
 
-	if(unfinished_qitems_with_data < 50)
+	if(unfinished_qitems_with_data <= 50 || max_qitems_to_process != -1)
 	{
-		for(size_t cat {0}; cat < lbq.size_categ(); cat++)
+		size_t qitems_processed {0};
+		for(size_t cat {0}; cat < lbq.size_categ() && qitems_processed < max_qitems_to_process; cat++, qitems_processed++)
 		{
 			auto icat {lbq.at(cat)};
 			if(icat.size())
@@ -1079,18 +1086,26 @@ void GUI::queue_save_data()
 						auto &bottom {bottoms.at(url)};
 						if(!bottom.vidinfo.empty() || !bottom.playlist_info.empty())
 						{
-							auto &j {unfinished_qitems_data[url]};
-							bottom.to_json(j);
-							j["columns"]["website"] = item.text(1);
-							j["columns"]["status"] = text;
-							j["columns"]["format"] = item.text(4);
-							j["columns"]["format_note"] = item.text(5);
-							j["columns"]["ext"] = item.text(6);
-							j["columns"]["fsize"] = item.text(7);
+							if(max_qitems_to_process == -1 || bottom.playlist_info.empty() || bottom.playlist_info["entries"].size() <= 10)
+							{
+								auto &j {unfinished_qitems_data[url]};
+								bottom.to_json(j);
+								j["columns"]["website"] = item.text(1);
+								j["columns"]["status"] = text;
+								j["columns"]["format"] = item.text(4);
+								j["columns"]["format_note"] = item.text(5);
+								j["columns"]["ext"] = item.text(6);
+								j["columns"]["fsize"] = item.text(7);
+							}
 						}
 					}
 				}
 			}
+		}
+		if(fs::exists(infopath))
+		{
+			std::error_code ec;
+			fs::remove(infopath, ec);
 		}
 		if(!unfinished_qitems_data.empty())
 			std::ofstream {infopath} << unfinished_qitems_data;

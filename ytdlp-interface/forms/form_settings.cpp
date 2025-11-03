@@ -185,15 +185,13 @@ void GUI::fm_settings()
 		paint::image_process::selector().stretch("bilinear interpolation");
 	});
 
-	widgets::Label l_res {ytdlp, "Preferred resolution:"}, l_vcodec {ytdlp, "Preferred video codec:"},
-		l_acodec {ytdlp, "Preferred audio codec:"},
-		l_video {ytdlp, "Preferred video container:"}, l_audio {ytdlp, "Preferred audio container:"},
-		l_theme {gui, "Color theme:"}, l_contrast {gui, "Contrast:"}, /*l_ytdlp {ytdlp, "Path to yt-dlp:"}, l_ffmpeg {ytdlp, "FFmpeg folder:"},*/
+	widgets::Label l_res {ytdlp, "Preferred resolution:"}, l_vcodec {ytdlp, "Preferred video codec:"}, l_acodec {ytdlp, "Preferred audio codec:"},
+		l_video {ytdlp, "Preferred video container:"}, l_audio {ytdlp, "Preferred audio container:"}, l_theme {gui, "Color theme:"}, l_contrast {gui, "Contrast:"}, 
 		l_template {ytdlp, "Output template:"}, l_maxdl {queuing, "Max concurrent downloads:"}, l_playlist {ytdlp, "Playlist indexing:"},
 		l_opendlg_origin {gui, "When browsing for the output folder, start in:"}, l_sblock {sblock, ""},
 		l_cookies {ytdlp, "Load cookies from browser:"}, l_cookie_options {ytdlp, "Additional options:"},
 		l_maxinfo {queuing, "Max number of concurrent yt-dlp instances used for getting data:"};
-	//widgets::path_label l_ytdlp_path {ytdlp, &conf.ytdlp_path}, l_ffmpeg_path {ytdlp, &conf.ffmpeg_path};
+
 	widgets::Textbox tb_template {ytdlp}, tb_playlist {ytdlp}, tb_proxy {ytdlp}, tb_cookies {ytdlp};
 	widgets::Combox com_res {ytdlp}, com_video {ytdlp}, com_audio {ytdlp}, com_vcodec {ytdlp}, com_acodec {ytdlp}, com_cookies {ytdlp};
 	widgets::cbox cbfps {ytdlp, "Prefer a higher framerate"}, cbtheme_dark {gui, "Dark"}, cbtheme_light {gui, "Light"},
@@ -210,7 +208,8 @@ void GUI::fm_settings()
 		cb_save_errors {queuing, "Save queue items with \"error\" status to the settings file"},
 		cb_clear_done {queuing, "Automatically remove completed items (with \"done\" status)"},
 		cb_formats_fsize_bytes {gui, "Formats window: display file sizes with exact byte value"},
-		cb_add_on_focus {queuing, "When the main window is activated, automatically add the URL from clipboard"};
+		cb_add_on_focus {queuing, "When the main window is activated, automatically add the URL from clipboard"},
+		cb_display_custom_filenames {queuing, "Display any custom file names in the \"Media title\" column"};
 	widgets::Separator sep1 {ytdlp}, sep2 {ytdlp}, sep3 {gui}, sep4 {fm};
 	widgets::Button btn_close {fm, " Close"}, btn_default {ytdlp, "Reset to default", true},
 		btn_playlist_default {ytdlp, "Reset to default", true}, btn_info {ytdlp};
@@ -379,6 +378,7 @@ void GUI::fm_settings()
 		<weight=25 <cb_save_errors>> <weight=20>
 		<weight=25 <cb_clear_done>> <weight=20>
 		<weight=25 <cb_add_on_focus>> <weight=20>
+		<weight=25 <cb_display_custom_filenames>>
 	)");
 
 	l_maxdl.text_align(nana::align::left, nana::align_v::center);
@@ -395,6 +395,7 @@ void GUI::fm_settings()
 	queuing["cb_save_errors"] << cb_save_errors;
 	queuing["cb_clear_done"] << cb_clear_done;
 	queuing["cb_add_on_focus"] << cb_add_on_focus;
+	queuing["cb_display_custom_filenames"] << cb_display_custom_filenames;
 
 	gui.div(R"(vert		
 		<weight=25 <l_theme weight=100> <weight=20> <cbtheme_dark weight=65> <weight=20> 
@@ -625,6 +626,7 @@ void GUI::fm_settings()
 		cb_save_errors.check(conf.cb_save_errors);
 		cb_clear_done.check(conf.cb_clear_done);
 		cb_add_on_focus.check(conf.cb_add_on_focus);
+		cb_display_custom_filenames.check(conf.cb_display_custom_filenames);
 
 		const auto &bottom {bottoms.current()};
 		const bool bctemplate {bottom.is_bcplaylist || bottom.is_bcchan};
@@ -868,6 +870,7 @@ void GUI::fm_settings()
 		conf.cb_clear_done = cb_clear_done.checked();
 		conf.cb_formats_fsize_bytes = cb_formats_fsize_bytes.checked();
 		conf.cb_add_on_focus = cb_add_on_focus.checked();
+		conf.cb_display_custom_filenames = cb_display_custom_filenames.checked();
 
 		conf.sblock_mark.clear();
 		for(auto ip : lbmark.at(0))
@@ -962,6 +965,11 @@ void GUI::fm_settings()
 	cb_add_on_focus.tooltip("If this option is checked, whenever the main window receives the input focus,\nany URL in the clipboard will "
 		"be automatically added to the queue (if it's not\nalready there). This only works for a single URL (if you have a multi-line list "
 		"of\nURLs, you'll have to add it manually)."
+	);
+
+	cb_display_custom_filenames.tooltip("You can provide a custom file name for a queue item by selecting\n<bold>Set file name for item #</> "
+		"from the queue menu, or by pressing <bold>F2</>.\nThis name is \"custom\" because it overrides the output template\ndefined in the settings.\n\n"
+		"If you check this option, then if a queue item has a custom file name,\nit will be shown in the \"Media title\" column instead of the media title."
 	);
 
 	const auto res_tip {"Download the best video with the largest resolution available that is\n"
@@ -1126,6 +1134,7 @@ void GUI::fm_settings()
 			thr_ver_ffmpeg.detach();
 
 		conf.unfinished_queue_items.clear();
+		lbq.auto_draw(false);
 		for(size_t cat {0}; cat < lbq.size_categ(); cat++)
 		{
 			auto icat {lbq.at(cat)};
@@ -1134,12 +1143,38 @@ void GUI::fm_settings()
 				auto &qitems {conf.unfinished_queue_items.emplace_back(icat.text(), std::vector<std::string>{}).second};
 				for(auto item : icat)
 				{
-					auto text {item.text(3)};
+					const auto &bottom {bottoms.at(item.value<lbqval_t>().url)};
+					const auto outfile {bottom.outfile.filename().string()};
+					if(conf.cb_display_custom_filenames)
+					{
+						if(!bottom.outfile.empty())
+							item.text(2, outfile);
+					}
+					else
+					{
+						if(item.text(2).size() == outfile.size())
+						{
+							std::string media_title {bottom.media_title};
+							if(!nana::is_utf8(media_title))
+							{
+								std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> u16conv;
+								auto u16str {u16conv.from_bytes(media_title)};
+								std::wstring wstr(u16str.size(), L'\0');
+								memcpy(&wstr.front(), &u16str.front(), wstr.size() * 2);
+								std::wstring_convert<std::codecvt_utf8<wchar_t>> u8conv;
+								media_title = u8conv.to_bytes(wstr);
+							}
+							item.text(2, media_title);
+						}
+					}
+
+					const auto text {item.text(3)};
 					if(text != "done" && (text != "error" || text == "error" && conf.cb_save_errors))
 						qitems.push_back(nana::to_utf8(item.value<lbqval_t>().url));
 				}
 			}
 		}
+		lbq.auto_draw(true);
 
 		if(!fn_write_conf() && errno)
 		{
@@ -1332,9 +1367,11 @@ void GUI::make_updater_page(themed_form &parent)
 		"but there's a relatively long time until one comes out.");
 	cb_chan_nightly.tooltip("\"Nightly\" releases come out every day around midnight\nUTC and contain the latest patches and changes. "
 		"This is\nthe recommended channel for regular users of yt-dlp.");
-	cb_selfonly.tooltip("To update the program, an archive is downloaded from GitHub,\nwhich contains the following files:\n\n<bold>"
-		"7z.dll\nffmpeg.exe\nffprobe.exe\nyt-dlp.exe\nytdlp-interface.exe</>\n\nCheck this option if you don't want your current "
-		"versions of\nyt-dlp and ffmpeg to be overwritten with those in the archive.");
+	std::string selfonly_tip {"To update the program, an archive is downloaded from GitHub,\nwhich contains the following files:\n\n<bold>7z.dll\n"};
+	selfonly_tip += win7 || !X64 ? "libwinpthread-1.dll\nqjs.exe\n" : "deno.exe\n";
+	selfonly_tip += "ffmpeg.exe\nffprobe.exe\nyt-dlp.exe\nytdlp-interface.exe</>\n\nCheck this option if you don't want your current "
+		"versions of\nyt-dlp and ffmpeg to be overwritten with those in the archive.";
+	cb_selfonly.tooltip(selfonly_tip);
 
 	if(!rgp_chan.size())
 	{
@@ -1962,7 +1999,12 @@ void GUI::updater_update_misc(bool ytdlp, fs::path target)
 			if(ytdlp)
 			{
 				btn_update_ffmpeg.enabled(false);
-				download_result = util::dl_inet_res(arc_url, target / fname, &updater_working, cb_progress);
+				if(fs::exists(fs::temp_directory_path() / fname))
+				{
+					std::error_code ec;
+					fs::remove(fs::temp_directory_path() / fname, ec);
+				}
+				download_result = util::dl_inet_res(arc_url, fs::temp_directory_path() / fname, &updater_working, cb_progress);
 			}
 			else
 			{
@@ -2021,12 +2063,19 @@ void GUI::updater_update_misc(bool ytdlp, fs::path target)
 					}
 					else // yt-dlp downloaded
 					{
-						conf.ytdlp_path = target / fname;
-						ver_ytdlp = ver_ytdlp_latest;
-						btnytdlp_state = false;
-						prog_updater_misc.caption("yt-dlp update complete");
-						l_ytdlp_text.caption(ver_ytdlp_latest.string() + "  (current)  [click to see changelog]");
-						btn_update_ytdlp.tooltip("");
+						std::error_code ec;
+						fs::rename(fs::temp_directory_path() / fname, target / fname, ec);
+						if(!ec)
+						{
+							conf.ytdlp_path = target / fname;
+							ver_ytdlp = ver_ytdlp_latest;
+							btnytdlp_state = false;
+							prog_updater_misc.caption("yt-dlp update complete");
+							l_ytdlp_text.caption(ver_ytdlp_latest.string() + "  (current)  [click to see changelog]");
+							l_ytdlp_text.error_mode(false);
+							btn_update_ytdlp.tooltip("");
+						}
+						else prog_updater_misc.caption("Failed to move " + fname + " to set folder: " + ec.message());
 					}
 				}
 				else prog_updater_misc.caption(download_result);

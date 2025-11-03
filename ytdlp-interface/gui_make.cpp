@@ -1,5 +1,6 @@
 #include "gui.hpp"
 #include <nana/gui/filebox.hpp>
+#include <TlHelp32.h>
 
 
 void GUI::make_form()
@@ -46,6 +47,15 @@ void GUI::make_form()
 	else if(dpi > 96)
 		btn_settings.image(arr_config22_png, sizeof arr_config22_png);
 	else btn_settings.image(arr_config16_png, sizeof arr_config16_png);
+
+	if(dpi == 288)
+		btnlabel.image(arr_text_field_48_png, sizeof arr_text_field_48_png);
+	else if(dpi >= 192)
+		btnlabel.image(arr_text_field_32_png, sizeof arr_text_field_32_png);
+	else if(dpi > 96)
+		btnlabel.image(arr_text_field_22_png, sizeof arr_text_field_22_png);
+	else btnlabel.image(arr_text_field_16_png, sizeof arr_text_field_16_png);
+
 	btn_settings.events().click([this] { fm_settings(); });
 	btn_qact.tooltip("Pops up a menu with actions that can be performed on\nthe queue items (same as right-clicking on the queue).");
 
@@ -148,7 +158,13 @@ void GUI::make_form()
 
 	events().unload([&](const arg_unload &arg)
 	{
-		if(exiting) return;
+		if(g_exiting) return;
+		g_exiting = true;
+		for(auto &bottom : bottoms)
+		{
+			bottom.second->working_info = false;
+			bottom.second->working = false;
+		}
 		if(thr_queue_remove.joinable())
 		{
 			arg.cancel = true;
@@ -179,43 +195,80 @@ void GUI::make_form()
 		conf.argset = bottoms.current().argset;
 
 		queue_save_data();
+		if(!fn_write_conf() && errno)
+		{
+			std::string error {std::strerror(errno)};
+			::widgets::msgbox mbox {*this, "ytdlp-interface - error writing settings file"};
+			mbox.icon(msgbox::icon_error);
+			(mbox << confpath.string() << "\n\nAn error occured when trying to save the settings file:\n\n" << error)();
+		}
+		auto pfm {fm_alert("Shutting down active yt-dlp instances", "Please wait...", false)};
 		if(bottoms.joinable_info_threads() || bottoms.joinable_dl_threads())
 		{
+			pfm->show();
 			lbq.force_no_thread_safe_ops(true);
-			auto pfm {fm_alert("Shutting down active yt-dlp instances", "Please wait...")};
 			api::refresh_window(*pfm);
-			exiting = true;
-			bottoms.detached_info_threads.clear();
-			bottoms.detached_dl_threads.clear();
+			util::close_children();
 			for(auto &bottom : bottoms)
 			{
 				auto &bot {*bottom.second};
 				if(bot.url == L"") continue;
 
-				const std::string strtid {"[tid " + (std::stringstream {} << std::hex << bot.info_thread.get_id()).str() + "]"};
+				TerminateThread(bot.info_thread.native_handle(), 0);
 				if(bot.info_thread.joinable())
-				{
-					if(bot.info_thread_active)
-					{
-						bot.working_info = false;
-						bot.info_thread.join();
-					}
-					else
-					{
-						bot.working_info = false;
-						bot.info_thread.join();
-					}
-				}
+					bot.info_thread.detach();
 				if(bot.dl_thread.joinable())
 				{
-					bot.working = false;
-					fm_alert_text.caption(bot.url);
-					bot.dl_thread.join();
+					//fm_alert_text.caption(bot.url);
+					TerminateThread(bot.dl_thread.native_handle(), 0);
+					bot.dl_thread.detach();
 				}
 			}
-			events().unload.clear();
-			arg.cancel = true;
-			t_unload.start();
+		}
+		HANDLE hSnapshot {CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)};
+		if(hSnapshot)
+		{
+			PROCESSENTRY32 pe32;
+			pe32.dwSize = sizeof(PROCESSENTRY32);
+			if(Process32First(hSnapshot, &pe32))
+			{
+				auto program_PID {GetCurrentProcessId()};
+				std::string ytdlp;
+				if(!conf.ytdlp_path.empty())
+					ytdlp = conf.ytdlp_path.filename().string();
+				if(ytdlp.empty())
+					ytdlp = ytdlp_fname;
+				else std::transform(ytdlp.begin(), ytdlp.end(), ytdlp.begin(), ::tolower);
+				do
+				{
+					auto exe {nana::to_utf8(pe32.szExeFile)};
+					std::transform(exe.begin(), exe.end(), exe.begin(), ::tolower);
+					if(exe == ytdlp)
+					{
+						bool is_running {false};
+						HANDLE hProcess {OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, pe32.th32ParentProcessID)};
+						if(hProcess)
+						{
+							DWORD exitCode {0};
+							is_running = (GetExitCodeProcess(hProcess, &exitCode) && exitCode == STILL_ACTIVE);
+							CloseHandle(hProcess);
+							if(!is_running || pe32.th32ParentProcessID == program_PID)
+							{
+								auto hwnd {util::hwnd_from_pid(pe32.th32ProcessID)};
+								if(hwnd)
+									SendMessageA(hwnd, WM_CLOSE, 0, 0);
+							}
+						}
+						else
+						{
+							auto hwnd {util::hwnd_from_pid(pe32.th32ProcessID)};
+							if(hwnd)
+								SendMessageA(hwnd, WM_CLOSE, 0, 0);
+						}
+					}
+				} while(Process32Next(hSnapshot, &pe32));
+			}
+			CloseHandle(hSnapshot);
 		}
 		g_log.close();
 	});
@@ -260,7 +313,7 @@ void GUI::make_form_bottom()
 				<> <cbtime weight=304> <> <cbsubs weight=140>
 			> <weight=20>
 			<weight=25 <l_chap weight=67> <weight=10> <com_chap weight=65> <> <cbkeyframes weight=194> <> <cbthumb weight=152> <> <cbmp3 weight=181>>
-			<weight=20> <weight=24 <cbargs weight=164> <weight=15> <com_args> <weight=10> <btnerase weight=24>>
+			<weight=20> <weight=24 <cbargs weight=164> <weight=15> <com_args> <weight=10> <btnlabel weight=24> <weight=10> <btnerase weight=24>>
 		)");
 
 	gpopt["l_out"] << l_out;
@@ -277,6 +330,7 @@ void GUI::make_form_bottom()
 	gpopt["cbtime"] << cbtime;
 	gpopt["cbargs"] << cbargs;
 	gpopt["com_args"] << com_args;
+	gpopt["btnlabel"] << btnlabel;
 	gpopt["btnerase"] << btnerase;
 
 	const auto dpi {API::screen_dpi(true)};
@@ -303,8 +357,14 @@ void GUI::make_form_bottom()
 
 	tbrate.multi_lines(false);
 
-	for(auto &str : conf.argsets)
-		com_args.push_back(to_utf8(str));
+	//for(auto &str : conf.argsets)
+	//	com_args.push_back(to_utf8(str));
+	for(int n {0}; n < conf.argsets.size(); n++)
+	{
+		const auto argset {to_utf8(conf.argsets[n])};
+		const auto key {argset_without_label(argset)};
+		com_args[key].text(argset);
+	}
 	com_args.caption(conf.argset);
 	com_args.editable(true);
 
@@ -338,11 +398,44 @@ void GUI::make_form_bottom()
 		if(api::focus_window() == com_args && !bot_showing)
 		{
 			if(conf.common_dl_options)
+			{
 				for(auto &pbot : bottoms)
 				{
 					auto &bot {*pbot.second};
 					bot.argset = com_args.caption();
 				}
+			}
+			else bottoms.current().argset = com_args.caption();
+		}
+	});
+
+	btnlabel.events().click([&]
+	{
+		const auto existing_label {label_from_argset(com_args.caption())};
+		auto input {input_box(*this, "Argset label", "Label for argument set:", existing_label.data())};
+		if(input.first)
+		{
+			while(!input.second.empty() && input.second.front() == '[')
+				input.second.erase(0, 1);
+			while(!input.second.empty() && input.second.back() == ']')
+				input.second.pop_back();
+			const auto caption {com_args.caption()};
+			const auto argset {argset_without_label(caption)};
+			const auto new_text {input.second.empty() ? argset : '[' + input.second + "] " + argset};
+			auto it {std::find(conf.argsets.begin(), conf.argsets.end(), caption)};
+			if(it != conf.argsets.end())
+				*it = new_text;
+			if(com_args.caption_index() != -1)
+				com_args[argset].text(new_text);
+			com_args.caption(new_text);
+			if(conf.common_dl_options)
+			{
+				for(auto &pbot : bottoms)
+				{
+					auto &bot {*pbot.second};
+					bot.argset = new_text;
+				}
+			}
 			else bottoms.current().argset = com_args.caption();
 		}
 	});
@@ -509,6 +602,7 @@ void GUI::make_form_bottom()
 		"The video is discarded if present, so it's preferable to download an audio-only\n"
 		"format if one is available. (<bold>-x --audio-format mp3</>)\n\n"
 		"To download the best audio-only format available, use the custom\nargument <bold>-f ba</>");
+	btnlabel.tooltip("Label this argument set");
 	btnerase.tooltip("Remove this argument set from the list");
 	btncopy.tooltip("Copy the options for this queue item to all the other queue items.");
 	btn_ytfmtlist.tooltip("Choose formats manually, instead of letting yt-dlp\nchoose automatically. "
@@ -851,13 +945,13 @@ void GUI::make_message_handlers()
 		}
 		else if(wparam == 'F')
 		{
-			if(GetAsyncKeyState(VK_CONTROL) & 0xff00 && queue_panel.visible())
+			if(GetAsyncKeyState(VK_CONTROL) & 0xff00)
 			{
 				if(bottoms.current().btnfmt_visible())
 					fm_formats();
 			}
 		}
-		else if(wparam == 'A')
+		else if(wparam == 'A' && api::focus_window() != com_args && api::focus_window() == tbrate)
 		{
 			if(GetAsyncKeyState(VK_CONTROL) & 0xff00 && queue_panel.visible() && !lbq.first_visible().empty())
 			{
@@ -942,7 +1036,7 @@ void GUI::make_message_handlers()
 					}
 				}
 			}
-			else if(wparam == VK_HOME)
+			else if(wparam == VK_HOME && api::focus_window() != com_args && api::focus_window() == tbrate)
 			{
 				if(!lbq.first_visible().empty())
 				{
@@ -978,7 +1072,7 @@ void GUI::make_message_handlers()
 					}
 				}
 			}
-			else if(wparam == VK_END)
+			else if(wparam == VK_END && api::focus_window() != com_args && api::focus_window() == tbrate)
 			{
 				if(!lbq.first_visible().empty())
 				{
@@ -1082,7 +1176,11 @@ void GUI::make_message_handlers()
 
 	msg.make_before(WM_SET_QLINE_TEXT, [&](UINT, WPARAM url, LPARAM text, LRESULT *)
 	{
-		lbq.set_line_text(*reinterpret_cast<std::wstring*>(url), *reinterpret_cast<qline_t*>(text));
+		auto purl {reinterpret_cast<std::wstring*>(url)};
+		auto ptext {reinterpret_cast<qline_t*>(text)};
+		lbq.set_line_text(*purl, *ptext);
+		delete purl;
+		delete ptext;
 		return false;
 	});
 
@@ -1186,8 +1284,9 @@ void GUI::make_message_handlers()
 
 	msg.make_before(WM_SET_KEYWORDS, [&](UINT, WPARAM target, LPARAM params, LRESULT *)
 	{
-		const auto &pair {*reinterpret_cast<std::pair<std::string, std::string>*>(params)};
-		reinterpret_cast<::widgets::Textbox*>(target)->set_keywords(pair.first, true, true, {pair.second});
+		const auto ppair {reinterpret_cast<std::pair<std::string, std::string>*>(params)};
+		reinterpret_cast<::widgets::Textbox*>(target)->set_keywords(ppair->first, true, true, {ppair->second});
+		delete ppair;
 		return false;
 	});
 

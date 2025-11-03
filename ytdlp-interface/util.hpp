@@ -13,9 +13,10 @@
 
 #include <nana/gui.hpp>
 
-#pragma warning(disable : 4267)
+#pragma warning(disable : 4267 4099)
 
 extern logger g_log;
+extern bool g_exiting;
 namespace fs = std::filesystem;
 
 namespace util

@@ -43,7 +43,7 @@ private:
 	fs::path self_path, appdir;
 	std::thread::id main_thread_id;
 	std::string inet_error, url_latest_ffmpeg, url_latest_ytdlp, url_latest_ytdlp_relnotes;
-	std::wstring drop_cliptext_temp;
+	std::wstring drop_cliptext_temp, lbq_url_to_select;
 	std::atomic_int active_info_threads {0}, total_info_threads {0};
 	std::wstringstream multiple_url_text;
 	long minw {0}, minh {0}; // min frame size
@@ -51,30 +51,30 @@ private:
 	bool menu_working {false}, thumbthr_working {false}, use_ffmpeg_location {false},
 		autostart_next_item {true}, lbq_can_drag {false}, no_draw_freeze {true}, save_queue {false},
 		pwr_can_shutdown {false}, pwr_shutdown {false}, pwr_hibernate {false}, pwr_sleep {false}, start_suspend_fm {false}, 
-		close_when_finished {false}, bot_showing {false}, exiting {false};
+		close_when_finished {false}, bot_showing {false};
 	std::thread thr_updater, thr_releases, thr_versions, thr_ver_ffmpeg, thr_thumb, thr_menu_start_stop, thr_releases_ffmpeg, thr_releases_ytdlp,
 		thr_qitem_data, thr_queue_remove;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.16.1"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 5)*/};
+	const std::string ver_tag {"v2.17.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 5)};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
-	nana::timer tmsg, tqueue, t_load_qitem_data, t_unload;
+	nana::timer tmsg, tqueue, t_load_qitem_data;
 	std::string tmsg_title, tmsg_text;
 	nana::window tmsg_parent;
 
 	struct { nana::menu *m {nullptr}; std::size_t pos {0}; } vidsel_item;
 
 	const std::vector<std::wstring>
-		com_res_options {L"none", L"4320", L"2160", L"1440", L"1080", L"720", L"480", L"360"},
+		com_res_options {L"none", L"4320", L"2160", L"1440", L"1080", L"720", L"480", L"360", L"240", L"144"},
 		com_audio_options {L"none", L"m4a", L"mp3", L"ogg", L"webm", L"flac", L"opus"},
 		com_video_options {L"none", L"mp4", L"webm", L"mkv"},
 		com_vcodec_options {L"none", L"av01", L"vp9.2", L"vp9", L"h265", L"h264", L"vp8", L"h263", L"theora"},
 		com_acodec_options {L"none", L"flac", L"alac", L"wav", L"aiff", L"opus", L"vorbis", L"aac", L"mp4a", 
 			L"mp3", L"ac4", L"eac3", L"ac3", L"dts"},
 		sblock_cats_mark {L"all", L"sponsor", L"intro", L"outro", L"selfpromo", L"preview", L"filler", L"interaction", L"music_offtopic",
-			L"poi_highlight", L"chapter"},
-		sblock_cats_remove {L"all", L"sponsor", L"intro", L"outro", L"selfpromo", L"preview", L"filler", L"interaction", L"music_offtopic"},
+			L"poi_highlight", L"chapter", L"hook"},
+		sblock_cats_remove {L"all", L"sponsor", L"intro", L"outro", L"selfpromo", L"preview", L"filler", L"interaction", L"music_offtopic", L"hook"},
 		com_cookies_options {L"none", L"brave", L"chrome", L"chromium", L"edge", L"firefox", L"opera", L"safari", L"vivaldi", L"whale"};
 
 	
@@ -123,7 +123,6 @@ private:
 		GUI *gui {nullptr};
 
 	public:
-		std::vector<gui_bottom*> detached_info_threads, detached_dl_threads;
 		gui_bottoms(GUI *g) : gui {g} { add(L""); }
 		auto contains(std::wstring key) { return bottoms.contains(key); }
 		gui_bottom &at(std::wstring key) { return *bottoms.at(key); }
@@ -213,7 +212,7 @@ private:
 	widgets::Overlay overlay {*this, &outbox};
 	nana::panel<false> queue_panel {*this};
 	nana::place plc_queue {queue_panel};
-	widgets::Listbox lbq {queue_panel, &exiting};
+	widgets::Listbox lbq {queue_panel, &g_exiting};
 	widgets::Button btn_qact {queue_panel, "Queue actions", true}, btn_settings {queue_panel, "Settings", true};
 	std::wstring qurl;
 	widgets::path_label l_url {queue_panel, &qurl};
@@ -226,7 +225,7 @@ private:
 	nana::place plcopt {*this};
 	widgets::Textbox tbrate {gpopt};
 	widgets::Progress prog {*this, this};
-	widgets::Button btn_ytfmtlist {*this, "Select formats"}, btndl {*this, "Start download"}, btnerase {gpopt},
+	widgets::Button btn_ytfmtlist {*this, "Select formats"}, btndl {*this, "Start download"}, btnlabel {gpopt}, btnerase {gpopt},
 		btnq {*this, "Show output"}, btncopy {*this, "Apply options to all queue items"};
 	widgets::Label l_out {gpopt, "Download folder:"}, l_rate {gpopt, "Download rate limit:"}, l_chap {gpopt, "Chapters:"};
 	widgets::path_label l_outpath {gpopt, &conf.outpath};
@@ -275,7 +274,7 @@ private:
 	void fm_colors(themed_form &parent);
 	void fm_loading(bool saving = false);
 	std::unique_ptr<themed_form> fm_alert(std::string main, std::string sub, bool show = true);
-	std::pair<bool, std::string> input_box(nana::window owner, std::string caption, std::string prompt);
+	std::pair<bool, std::string> input_box(nana::window owner, std::string caption, std::string prompt, std::string init_text = "");
 
 	void queue_remove_all(size_t cat = 0);
 	void queue_remove_items(const nana::listbox::index_pairs &items);
@@ -311,7 +310,7 @@ private:
 	void write_settings() { events().unload.emit({}, *this); }
 	bool ffmpeg_location_in_conf_file();
 	bool queue_save();
-	void queue_save_data();
+	void queue_save_data(size_t max_qitems_to_process = -1);
 
 	std::unordered_map<std::string, std::pair<std::string, std::string>> sblock_infos
 	{
@@ -328,6 +327,8 @@ private:
 		              "This usually includes merchandise or promotion of monetized platforms."}},
 
 		{"preview", {"Preview/Recap", "Collection of clips that show what is coming up in in this video or other videos in a series."}},
+
+		{"hook", {"Hook/Greetings", "Narrated trailers for the upcoming video, greetings and goodbyes. Does not include conclusions with information."}},
 
 		{"filler", {"Filler Tangent/Jokes", "Tangential scenes added only for filler or humor, that are not required to understand the main "
 		           "content of the video. This can also include: Timelapses / B-Roll, Fake Sponsors and slow-motion clips that do not provide "
@@ -378,6 +379,34 @@ private:
 			}
 		}
 		else items_initialized = true;
+	}
+
+
+	std::string argset_without_label(const std::string &text)
+	{
+		if(!text.empty() && text[0] == '[')
+		{
+			auto pos {text.find(']')};
+			if(pos != -1)
+			{
+				auto pos2 {text.find_first_not_of(" \t", ++pos)};
+				if(pos2 != -1)
+					return text.substr(pos2);
+			}
+		}
+		return text;
+	}
+
+
+	std::string label_from_argset(const std::string &text)
+	{
+		if(text.starts_with('['))
+		{
+			auto pos {text.find(']')};
+			if(pos != -1)
+				return text.substr(1, pos - 1);
+		}
+		return "";
 	}
 
 

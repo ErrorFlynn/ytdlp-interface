@@ -15,6 +15,7 @@
 #pragma comment(lib, "winhttp.lib")
 
 logger g_log;
+bool g_exiting;
 
 std::string util::format_int(std::uint64_t i)
 {
@@ -142,8 +143,8 @@ std::string util::run_piped_process
 
 	auto killproc = [&] (bool quick)
 	{
-		//if(!quick)
-		//{
+		if(!g_exiting)
+		{
 			static std::mutex mtx;
 			std::lock_guard<std::mutex> lock {mtx};
 			if(AttachConsole(pi.dwProcessId))
@@ -157,7 +158,11 @@ std::string util::run_piped_process
 					return;
 				}
 			}
-		//}
+		}
+		/*if(!TerminateProcess(pi.hProcess, 0))
+		{
+			close_children();
+		}*/
 		auto hwnd {hwnd_from_pid(pi.dwProcessId)};
 		if(hwnd)
 		{
