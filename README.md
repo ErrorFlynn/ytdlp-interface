@@ -3,13 +3,13 @@ This is a Windows graphical interface for [yt-dlp](https://github.com/yt-dlp/yt-
 
 To use, unpack the archive in a new folder at a location of your choice, and run `ytdlp-interface.exe`.
 
-Download link for the latest version (64 bit): https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v2.17.0/ytdlp-interface.7z
+Download link for the latest version (64 bit): https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v2.18.0/ytdlp-interface.7z
 
-32 bit build: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v2.17.0/ytdlp-interface_x86.7z
+32 bit build: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v2.18.0/ytdlp-interface_x86.7z
 
-Windows 7 64 bit: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v2.17.0/ytdlp-interface_win7.7z
+Windows 7 64 bit: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v2.18.0/ytdlp-interface_win7.7z
 
-Windows 7 32 bit: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v2.17.0/ytdlp-interface_x86_win7.7z
+Windows 7 32 bit: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v2.18.0/ytdlp-interface_x86_win7.7z
 
 
 ---
@@ -23,12 +23,12 @@ The program also uses [JSON for modern C++](https://github.com/nlohmann/json) to
 
 ---
 
-![ytdlp-interface settings](https://github.com/ErrorFlynn/ytdlp-interface/assets/20293505/adb02d8a-5857-46dc-ad51-fd71c3a6bd96)
+<img width="822" height="682" alt="settings" src="https://github.com/user-attachments/assets/2bf18ef3-e3d7-4e4c-9641-01419e21a6aa" />
 
 ---
 
-![ytdlp-interface queue](https://github.com/ErrorFlynn/ytdlp-interface/assets/20293505/86fd2013-4247-4f1e-8038-334ed31a3d4e)
+<img width="1002" height="735" alt="queue" src="https://github.com/user-attachments/assets/215bb101-fa44-4817-8fcb-2fc0e32c883e" />
 
 ---
 
-![ytdlp-interface output](https://github.com/ErrorFlynn/ytdlp-interface/assets/20293505/a99f8e21-95e0-4641-b589-7211a37ee454)
+<img width="1002" height="735" alt="output" src="https://github.com/user-attachments/assets/95fd8a51-9c1f-47c1-89fb-b07d6d4dcb60" />
