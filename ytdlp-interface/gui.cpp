@@ -59,7 +59,7 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 	});
 	tmsg.start();
 
-	tqueue.interval(std::chrono::milliseconds {500});
+	tqueue.interval(std::chrono::milliseconds {350});
 	tqueue.elapse([this]
 	{
 		if(conf.cb_clear_done)
@@ -278,7 +278,6 @@ bool GUI::process_queue_item(std::wstring url)
 				auto idx {com_args.caption_index()};
 				if(idx == -1)
 				{
-					//com_args.push_back(args);
 					com_args[argset_without_label(args)].text(args);
 					com_args.option(size);
 					if(size >= 10)
@@ -296,6 +295,18 @@ bool GUI::process_queue_item(std::wstring url)
 
 		std::wstring cmd {L'\"' + conf.ytdlp_path.wstring() + L'\"'};
 
+		if(conf.cb_aria)
+		{
+			cmd += L" --downloader aria2c";
+			if(!conf.aria_options.empty())
+			{
+				cmd += L" --downloader-args aria2c:";
+				if(conf.aria_options.front() == '\"' && conf.aria_options.back() == '\"')
+					cmd += nana::to_wstring(conf.aria_options);
+				else cmd += L'\"' + nana::to_wstring(conf.aria_options) + L'\"';
+			}
+		}
+
 		if(bottom.is_ytlink || bottom.is_ytplaylist)
 		{
 			std::error_code ec;
@@ -303,11 +314,10 @@ bool GUI::process_queue_item(std::wstring url)
 				cmd += L" --js-runtimes quickjs";
 		}
 
-		if(bottom.is_ytlink && conf.cb_android)
-			cmd += L" --extractor-args youtube:player_client=android";
-
 		if(conf.com_cookies)
 			cmd += L" --cookies-from-browser " + com_cookies_options[conf.com_cookies] + nana::to_wstring(conf.cookie_options);
+		else if(conf.cb_cookies && !conf.cookies_path.empty())
+			cmd += L" --cookies \"" + conf.cookies_path.wstring() + L"\"";
 
 		if(!bottom.using_custom_fmt())
 		{
@@ -334,31 +344,8 @@ bool GUI::process_queue_item(std::wstring url)
 				else if(bottom.fmt2.find('+') != -1 || bottom.fmt2 == L"mergeall")
 				{
 					cmd += L" --audio-multistreams";
-					if(!bottom.vidinfo.empty() && bottom.vidinfo_contains("formats"))
-					{
-						const auto &formats {bottom.vidinfo["formats"]};
-						using namespace std;
-						wstringstream ss {conf.fmt2};
-						wstring fmt, langs;
-						int idx {0};
-						while(getline(ss, fmt, L'+'))
-						{
-							for(const auto &el : formats)
-							{
-								if(el.contains("format_id") && el["format_id"].get<string>() == nana::to_utf8(fmt) && el.contains("language"))
-								{
-									const auto lang_tag {el["language"].get<string>()};
-									if(!langs.empty())
-										langs += L" ";
-									langs += L"-metadata:s:a:" + to_wstring(idx) + L" language=" + nana::to_wstring(lang_tag);
-									break;
-								}
-							}
-							++idx;							
-						}
-						if(!langs.empty())
-							cmd += L" --postprocessor-args FFmpeg:\"" + langs + L"\"";
-					}
+					if(!bottom.cbargs || bottom.argset.find("--embed-metadata") == -1)
+						cmd += L" --embed-metadata";
 				}
 				if(!bottom.fmt1.empty() && conf.pref_video == 3)
 					cmd += L" --remux-video mkv";
@@ -456,6 +443,17 @@ bool GUI::process_queue_item(std::wstring url)
 			cmd += L"--embed-chapters ";
 		if(bottom.cbsubs && argset.find("--embed-subs") == -1)
 			cmd += L"--embed-subs ";
+		if(bottom.cbsubs || argset.find("--embed-subs") != -1 || argset.find("--write-subs") != -1)
+		{
+			if(!bottom.sub_format.empty())
+				cmd += L"--sub-format " + nana::to_wstring(bottom.sub_format) + L" ";
+			else if(!conf.sub_format.empty())
+				cmd += L"--sub-format " + nana::to_wstring(conf.sub_format) + L" ";
+			if(!bottom.sub_langs.empty())
+				cmd += L"--sub-langs " + nana::to_wstring(bottom.sub_langs) + L" ";
+			else if(!conf.sub_format.empty())
+				cmd += L"--sub-langs " + nana::to_wstring(conf.sub_langs) + L" ";
+		}
 		if(bottom.cbthumb && argset.find("--embed-thumbnail") == -1)
 			cmd += L"--embed-thumbnail ";
 		if(bottom.cbtime && argset.find("--no-mtime") == -1)
@@ -468,7 +466,6 @@ bool GUI::process_queue_item(std::wstring url)
 			{
 				if(conf.ffmpeg_path != L".\\")
 					cmd += L"--ffmpeg-location \"" + conf.ffmpeg_path.wstring() + L"\" ";
-				else cmd += L"--ffmpeg-location .\\ ";
 			}
 		}
 		if(tbrate.to_double() && argset.find("-r ") == -1)
@@ -559,10 +556,13 @@ bool GUI::process_queue_item(std::wstring url)
 		ss << hwnd;
 		auto strhwnd {ss.str()};
 		strhwnd.erase(0, strhwnd.find_first_not_of('0'));
-		cmd += L"--exec \"after_video:\\\"" + self_path.wstring() + L"\\\" ytdlp_status " + std::to_wstring(YTDLP_POSTPROCESS)
-			+ L" " + strhwnd + L" \\\"" + url + L"\\\"\" ";
-		cmd += L"--exec \"before_dl:\\\"" + self_path.wstring() + L"\\\" ytdlp_status " + std::to_wstring(YTDLP_DOWNLOAD)
-			+ L" " + strhwnd + L" \\\"" + url + L"\\\"\" ";
+		if(!bottom.is_ytplaylist && !bottom.is_scplaylist && !bottom.is_gen_playlist && !bottom.is_bcplaylist && !bottom.is_bcchan && !bottom.is_ytchan)
+		{
+			cmd += L"--exec \"after_video:\\\"" + self_path.wstring() + L"\\\" ytdlp_status " + std::to_wstring(YTDLP_POSTPROCESS)
+				+ L" " + strhwnd + L" \\\"" + url + L"\\\"\" ";
+			cmd += L"--exec \"before_dl:\\\"" + self_path.wstring() + L"\\\" ytdlp_status " + std::to_wstring(YTDLP_DOWNLOAD)
+				+ L" " + strhwnd + L" \\\"" + url + L"\\\"\" ";
+		}
 		fs::path tempfile;
 		if(!bottom.is_ytplaylist && !bottom.is_ytchan && !bottom.is_bcplaylist)
 		{
@@ -570,13 +570,12 @@ bool GUI::process_queue_item(std::wstring url)
 			cmd += L"--print-to-file after_move:filepath " + tempfile.wstring();
 		}
 		std::wstring cmd2;
-		if(!bottom.cbargs || argset.find("-P ") == -1)
-		{
-			auto wstr {bottom.outpath.wstring()};
-			if(wstr.find(' ') == -1)
-				cmd2 += L" -P " + wstr;
-			else cmd2 += L" -P \"" + wstr + L"\"";
-		}
+
+		auto wstr {bottom.outpath.wstring()};
+		if(wstr.find(' ') == -1)
+			cmd2 += L" -P " + wstr;
+		else cmd2 += L" -P \"" + wstr + L"\"";
+
 		if((!bottom.cbargs || argset.find("-o ") == -1) && !conf.output_template.empty())
 		{
 			std::wstring folder;
@@ -666,6 +665,7 @@ bool GUI::process_queue_item(std::wstring url)
 				if(qurl == url)
 					btndl.caption("Start download");
 				bottom.started = false;
+				working = false;
 				if(bottom.dl_thread.joinable())
 					bottom.dl_thread.detach();
 				return;
@@ -699,18 +699,12 @@ bool GUI::process_queue_item(std::wstring url)
 					{
 						auto strprog {"[" + std::to_string(playlist_completed + 1) + "/" + std::to_string(playlist_total) + "] "};
 						lbq.set_line_text(url, {"", "", strprog + strpct, "", "", "", ""});
-						/*thread_local qline_t line;
-						line = {"", "", strprog + strpct, "", "", "", ""};
-						PostMessage(hwnd, WM_SET_QLINE_TEXT, reinterpret_cast<WPARAM>(&url), reinterpret_cast<LPARAM>(&line));*/
 						if(i_taskbar && bottoms.size() == 2)
 							i_taskbar->SetProgressValue(hwnd, playlist_completed, playlist_total > 1 ? playlist_total - 1 : playlist_total);
 					}
 					else if(working)
 					{
 						lbq.set_line_text(url, {"", "", strpct, "", "", "", ""});
-						/*thread_local qline_t line;
-						line = {"", "", strpct, "", "", "", ""};
-						PostMessage(hwnd, WM_SET_QLINE_TEXT, reinterpret_cast<WPARAM>(&url), reinterpret_cast<LPARAM>(&line));*/
 						if(i_taskbar && bottoms.size() == 2)
 							i_taskbar->SetProgressValue(hwnd, completed, total);
 					}
@@ -779,25 +773,33 @@ bool GUI::process_queue_item(std::wstring url)
 							}
 						}
 					}
-					if(total == -1 && text.find("[download]") == 0)
+					if(total == -1)
 					{
-						auto pos {text.find("has already been downloaded")};
-						if(pos != -1)
+						if(text.find("[download]") == 0)
 						{
-							try { bottom.download_path = fs::u8path(text.substr(11, pos - 2)); }
-							catch(...) { bottom.download_path.clear(); }
-						}
-						else
-						{
-							pos = text.find("Destination: ");
+							auto pos {text.find("has already been downloaded")};
 							if(pos != -1)
 							{
-								try { bottom.download_path = fs::u8path(text.substr(24)); }
+								try { bottom.download_path = fs::u8path(text.substr(11, pos - 2)); }
 								catch(...) { bottom.download_path.clear(); }
 							}
-							else bottom.download_path.clear();
+							else
+							{
+								pos = text.find("Destination: ");
+								if(pos != -1)
+								{
+									try { bottom.download_path = fs::u8path(text.substr(24)); }
+									catch(...) { bottom.download_path.clear(); }
+								}
+								else bottom.download_path.clear();
+							}
+							return;
 						}
-						return;
+						else if(playlist_completed == -1 && playlist_total == -1) // aria2c fragmented download
+						{
+							SendMessage(hwnd, WM_PROGEX_CAPTION, reinterpret_cast<WPARAM>(&prog), reinterpret_cast<LPARAM>(&text));
+							return;
+						}
 					}
 				}
 				if(playlist_progress)
@@ -1073,7 +1075,7 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq, const size_t cat)
 						format_note {j["columns"]["format_note"].get<std::string>()},
 						ext = j["columns"]["ext"].get<std::string>(),
 						fsize = j["columns"]["fsize"].get<std::string>();
-					lbq.set_line_text(url, {website, media_title, status, format, format_note, ext, fsize});
+					lbq.set_line_text(url, {website, media_title, status, format, format_note, ext, fsize}, false);
 				}
 				unfinished_qitems_data.erase(url8);
 			}
@@ -1119,6 +1121,8 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq, const size_t cat)
 
 				if(conf.com_cookies)
 					cookies = L" --cookies-from-browser " + com_cookies_options[conf.com_cookies] + nana::to_wstring(conf.cookie_options) + L" ";
+				else if(conf.cb_cookies && !conf.cookies_path.empty())
+					cookies = L" --cookies \"" + conf.cookies_path.wstring() + L"\" ";
 
 				std::string media_info, media_website {"---"}, media_title, format_id {"---"}, format_note {"---"}, ext {"---"}, filesize {"---"};
 				auto json_error = [&](const nlohmann::detail::exception &e)
@@ -1140,8 +1144,6 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq, const size_t cat)
 						overlay.hide();
 					}
 				};
-
-				std::wstring force_android {conf.cb_android ? L"--extractor-args youtube:player_client=android " : L""};
 
 				if(bottom.is_ytlink && !bottom.is_ytchan || bottom.is_bcplaylist || bottom.is_scplaylist || bottom.is_gen_playlist)
 				{
@@ -1203,7 +1205,7 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq, const size_t cat)
 										bottom.playlist_info["entries"].erase(--it);
 									}
 									std::string URL {bottom.playlist_info["entries"][0]["url"]};
-									cmd = L" --no-warnings -j " + qjs + cookies + (bottom.is_ytplaylist ? force_android : L"") + fmt_sort + to_wstring(URL);
+									cmd = L" --no-warnings -j " + qjs + cookies + fmt_sort + to_wstring(URL);
 									media_info = {util::run_piped_process(L'\"' + conf.ytdlp_path.wstring() + L'\"' + cmd, &bottom.working_info)};
 									if(!bottom.working_info)
 									{
@@ -1233,7 +1235,7 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq, const size_t cat)
 					}
 					else // YouTube video
 					{
-						std::wstring cmd {L" --no-warnings -j " + qjs + cookies + force_android + (conf.output_template.empty() ? L"" : L"-o \"" +
+						std::wstring cmd {L" --no-warnings -j " + qjs + cookies + (conf.output_template.empty() ? L"" : L"-o \"" +
 							conf.output_template + L'\"') + fmt_sort + L'\"' + url + L'\"'};
 						if(conf.cb_proxy && !conf.proxy.empty())
 							cmd = L" --proxy " + conf.proxy + cmd;
@@ -1612,12 +1614,30 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq, const size_t cat)
 					auto item {lbq.item_from_value(url)};
 					if(vidsel_item.m && item != lbq.empty_item && item.selected())
 					{
+						const auto &vidinfo {bottom.vidinfo};
 						auto &m {*vidsel_item.m};
 						for(int n {0}; n < m.size(); n++)
 						{
 							m.enabled(n, true);
 							if(m.text(n) == "Select formats" && !bottom.btnfmt_visible())
 								m.erase(n--);
+							if(m.text(n) == "Select subtitles")
+							{
+								if(!vidinfo.empty() && vidinfo.contains("subtitles") && vidinfo.at("subtitles").is_object())
+								{
+									try
+									{
+										const auto &jsubs {vidinfo.at("subtitles")};
+										int subcount {0};
+										for(auto it {jsubs.begin()}; it != jsubs.end(); it++)
+											if(it.key() != "live_chat" && it->is_array() && it->size() && it->front().contains("name"))
+												subcount++;
+										m.text(n, "Select subtitles (0/" + std::to_string(subcount) + ')');
+									}
+									catch(...) {};
+								}
+								else (m.text(n, "Select subtitles (0/0)"));
+							}
 						}
 						SendMessage(hwnd, WM_REFRESH, reinterpret_cast<WPARAM>(m.handle()), 0);
 						vidsel_item.m = nullptr;
@@ -2166,6 +2186,8 @@ unsigned GUI::start_next_urls(std::wstring current_url)
 			{
 				for(auto &item : lbq.at(cat))
 				{
+					if(item == current_item)
+						continue;
 					auto status_text {item.text(3)};
 					if(status_text == "queued" || status_text.find("stopped") == 0 || !bottoms.at(item.value<lbqval_t>().url).started && status_text.find("%") != -1)
 					{

@@ -239,7 +239,7 @@ namespace widgets
 		void hilight_checked(bool enable) { hilite_checked = enable; refresh_theme(); }
 		void refresh_theme();
 		unsigned fit_column_content();
-		void set_line_text(std::wstring url, qline_t text);
+		void set_line_text(std::wstring url, qline_t text, bool post = true);
 		void set_item_bg(std::wstring url, nana::color bg);
 		void auto_draw(bool enable) noexcept;
 		cat_proxy at(size_type pos);

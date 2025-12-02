@@ -338,6 +338,10 @@ void GUI::gui_bottom::from_json(const nlohmann::json &j)
 		pgui->outbox.commands[url] = j["dlcmd"].get<std::string>();
 	if(j.contains("media_title"))
 		media_title = j["media_title"].get<std::string>();
+	if(j.contains("sub_format"))
+		sub_format = j["sub_format"].get<std::string>();
+	if(j.contains("sub_langs"))
+		sub_langs = j["sub_langs"].get<std::string>();
 	if(j.contains("outfile"))
 	{
 		outfile = fs::u8path(j["outfile"].get<std::string>());
@@ -405,6 +409,10 @@ void GUI::gui_bottom::to_json(nlohmann::json &j)
 		j["outfile"] = outfile.string();
 	if(!media_title.empty())
 		j["media_title"] = media_title;
+	if(!sub_format.empty())
+		j["sub_format"] = sub_format;
+	if(!sub_langs.empty())
+		j["sub_langs"] = sub_langs;
 
 	j["outpath"] = outpath.string();
 	j["tbrate"] = rate;

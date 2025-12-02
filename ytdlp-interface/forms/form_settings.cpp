@@ -22,7 +22,7 @@ void GUI::fm_settings()
 	unsigned initial_maxdl {conf.max_concurrent_downloads};
 
 	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize>{}};
-	fm.center(820, 610);
+	fm.center(820, 650);
 	fm.caption(title + " - settings");
 	fm.bgcolor(theme::fmbg);
 	fm.snap(conf.cbsnap);
@@ -39,24 +39,11 @@ void GUI::fm_settings()
 		return true;
 	});
 
-	widgets::Separator sep {fm};
-	fm["sep"] << sep;
-	nana::picture checkpic {fm};
-	nana::paint::image checkimg;
-	if(nana::api::screen_dpi(true) > 96)
-		checkimg.open(arr_checkmark48_png, sizeof arr_checkmark48_png);
-	else checkimg.open(arr_checkmark32_png, sizeof arr_checkmark32_png);
-	checkpic.load(checkimg);
-	checkpic.stretchable(false);
-	checkpic.align(nana::align::center, nana::align_v::center);
-	fm["checkpic"] << checkpic;
-	fm.get_place().field_visible("checkpic", false);
-
 	widgets::conf_page ytdlp {fm}, queuing {fm}, gui {fm}, sblock {fm}, about {fm}, presets {fm};
 	updater.create(fm);
 	make_updater_page(fm);
 
-	std::function<void(void)> update_conf, update_preset_widgets;
+	std::function<void(void)> update_conf, update_preset_widgets, update_ytdlp_page;
 
 	auto page_callback = [&] (std::string name)
 	{
@@ -103,21 +90,21 @@ void GUI::fm_settings()
 	fm["about"] << about;
 
 	about.div(R"(vert
-		<pnl_header weight=35> <weight=10> <l_about_ver weight=50> <weight=14>
-		<about_sep1 weight=3> <weight=20> <libtitle weight=25> <weight=14>
-		<weight=24 <l_nana> <weight=20> <l_nana_ver>>
-		<weight=24 <l_json> <weight=20> <l_json_ver>>
-		<weight=24 <l_jpeg> <weight=20> <l_jpeg_ver>>
-		<weight=24 <l_png> <weight=20> <l_png_ver>>
-		<weight=24 <l_bit7z> <weight=20> <l_bit7z_ver>> <weight=17>
-		<about_sep2 weight=3> <weight=20> <kbtitle weight=25> <weight=14>
-		<weight=24 <l_ctrls> <weight=20> <l_settings>>
-		<weight=24 <l_ctrlf> <weight=20> <l_formats>>
-		<weight=24 <l_ctrltab> <weight=20> <l_view>>
-		<weight=24 <l_f2> <weight=20> <l_fname>>
-		<weight=24 <l_del> <weight=20> <l_delitem>>
-		<weight=24 <l_ctrlnum0> <weight=20> <l_winpos>>
-		<weight=24 <l_esc> <weight=20> <l_close>>
+		<pnl_header weight=35> <weight=10> <l_about_ver weight=50> <weight=15>
+		<about_sep1 weight=3> <weight=20> <libtitle weight=28> <weight=15>
+		<weight=28 <l_nana> <weight=20> <l_nana_ver>>
+		<weight=28 <l_json> <weight=20> <l_json_ver>>
+		<weight=28 <l_jpeg> <weight=20> <l_jpeg_ver>>
+		<weight=28 <l_png> <weight=20> <l_png_ver>>
+		<weight=28 <l_bit7z> <weight=20> <l_bit7z_ver>> <weight=18>
+		<about_sep2 weight=3> <weight=20> <kbtitle weight=28> <weight=15>
+		<weight=28 <l_ctrls> <weight=20> <l_settings>>
+		<weight=28 <l_ctrlf> <weight=20> <l_formats>>
+		<weight=28 <l_ctrltab> <weight=20> <l_view>>
+		<weight=28 <l_f2> <weight=20> <l_fname>>
+		<weight=28 <l_del> <weight=20> <l_delitem>>
+		<weight=28 <l_ctrlnum0> <weight=20> <l_winpos>>
+		<weight=28 <l_esc> <weight=20> <l_close>>
 	)");
 
 	std::string vertext {ver_tag + " (" + (X64 ? "64-bit)" : "32-bit)") +
@@ -133,9 +120,10 @@ void GUI::fm_settings()
 		l_png {about, "libpng"}, l_json {about, "JSON for Modern C++"}, l_ctrls {about, "Ctrl+S"}, l_ctrlf {about, "Ctrl+F"},
 		l_ctrltab {about, "Ctrl+Tab"}, l_f2 {about, "F2"}, l_del {about, "Delete"}, l_esc {about, "Esc"}, l_ctrlnum0 {about, "Ctrl+Num0"};
 	widgets::Text l_nana_ver {about, "v1.8 (custom)"}, l_jpeg_ver {about, "v2.1.5.1"}, l_bit7z_ver {about, "v3.1.3"},
-		l_png_ver {about, "v1.6.37"}, l_json_ver {about, "v3.11.3"}, l_settings {about, "Settings"}, l_formats {about, "Formats"},
+		l_png_ver {about, "v1.6.37"}, l_json_ver {about, "v3.12.0"}, l_settings {about, "Settings"}, l_formats {about, "Formats"},
 		l_view {about, "Switch view (queue/output)"}, l_fname {about, "Set file name of queue item"}, 
 		l_delitem {about, "Delete queue item(s)"}, l_close {about, "Close window"}, l_winpos {about, "Reset window size and position"};
+
 	about["title"] << title;
 	about["pnl_header"] << pnl_header;
 	about["l_about_ver"] << l_about_ver;
@@ -192,7 +180,8 @@ void GUI::fm_settings()
 		l_cookies {ytdlp, "Load cookies from browser:"}, l_cookie_options {ytdlp, "Additional options:"},
 		l_maxinfo {queuing, "Max number of concurrent yt-dlp instances used for getting data:"};
 
-	widgets::Textbox tb_template {ytdlp}, tb_playlist {ytdlp}, tb_proxy {ytdlp}, tb_cookies {ytdlp};
+	widgets::path_label l_cookies_path {ytdlp, &conf.cookies_path};
+	widgets::Textbox tb_template {ytdlp}, tb_playlist {ytdlp}, tb_proxy {ytdlp}, tb_cookies {ytdlp}, tb_aria {ytdlp};
 	widgets::Combox com_res {ytdlp}, com_video {ytdlp}, com_audio {ytdlp}, com_vcodec {ytdlp}, com_acodec {ytdlp}, com_cookies {ytdlp};
 	widgets::cbox cbfps {ytdlp, "Prefer a higher framerate"}, cbtheme_dark {gui, "Dark"}, cbtheme_light {gui, "Light"},
 		cbtheme_system {gui, "System preference"}, cb_lengthyproc {queuing, "Start next item on lengthy processing"},
@@ -209,14 +198,20 @@ void GUI::fm_settings()
 		cb_clear_done {queuing, "Automatically remove completed items (with \"done\" status)"},
 		cb_formats_fsize_bytes {gui, "Formats window: display file sizes with exact byte value"},
 		cb_add_on_focus {queuing, "When the main window is activated, automatically add the URL from clipboard"},
-		cb_display_custom_filenames {queuing, "Display any custom file names in the \"Media title\" column"};
-	widgets::Separator sep1 {ytdlp}, sep2 {ytdlp}, sep3 {gui}, sep4 {fm};
+		cb_display_custom_filenames {queuing, "Display any custom file names in the \"Media title\" column"},
+		cb_aria {ytdlp, "Tell yt-dlp to download with aria2c  (--downloader aria2c)"}, cb_cookies {ytdlp, "Load cookies from file:"};
+	widgets::Separator sep1 {ytdlp}, sep2 {ytdlp}, sep3 {gui}, sep_aria {ytdlp, "aria2c integration"};
 	widgets::Button btn_close {fm, " Close"}, btn_default {ytdlp, "Reset to default", true},
 		btn_playlist_default {ytdlp, "Reset to default", true}, btn_info {ytdlp};
 	widgets::Spinbox sb_maxdl {queuing}, sb_maxinfo {queuing};
 	widgets::Slider slider {gui};
 	widgets::sblock_listbox lbmark {sblock}, lbremove {sblock};
 	widgets::Infobox l_info {sblock};
+	widgets::Label l_aria_present {ytdlp, ""}, l_aria_options {ytdlp, "Options for aria2c (--downloader-args):"};
+	l_aria_present.text_align(nana::align::left, nana::align_v::center);
+	nana::picture pic_aria_present {ytdlp};
+	pic_aria_present.align(nana::align::center, nana::align_v::center);
+	nana::api::effects_bground(pic_aria_present, nana::effects::bground_transparent(0), 0.0);
 
 	ytdlp.div(R"(vert
 		<weight=26 <weight=42> <l_res weight=156> <weight=10> <com_res weight=56> <> 
@@ -230,7 +225,6 @@ void GUI::fm_settings()
 			<l_acodec weight=198> <weight=10> <com_acodec weight=66>
 		>
 		<spacer_premium weight=18> <row_premium weight=26 <prem_pad weight=36><cb_premium>>
-		<spacer_android weight=15> <weight=25 <weight=36><cb_android>>
 		<weight=18> <sep1 weight=3> <weight=18>
 		<weight=25 <l_template weight=132> <weight=10> <tb_template> <weight=15> <btn_default weight=140>> <weight=18>
 		<weight=25 <l_playlist weight=132> <weight=10> <tb_playlist> <weight=15> <btn_playlist_default weight=140>> <weight=18>
@@ -238,6 +232,11 @@ void GUI::fm_settings()
 		<weight=18> <sep2 weight=3> <weight=18>
 		<weight=25 <> <cb_proxy weight=125> <weight=10> <tb_proxy weight=468> > <weight=18>
 		<weight=25 <l_cookies weight=200> <weight=10> <com_cookies weight=80> <weight=10> <l_cookie_options weight=140> <weight=10> <tb_cookies>>
+		<weight=18> <weight=25 <weight=5> <cb_cookies weight=180> <weight=10> <l_cookies_path>>
+		<weight=20> <sep_aria weight=3> <weight=20>
+		<weight=25 <pic_aria_present weight=25> <aria_spacer weight=5> <l_aria_present>> <weight=18>
+		<weight=25 <weight=5> <cb_aria>> <weight=17>
+		<weight=25 <l_aria_options weight=283> <weight=10> <tb_aria>>
 	)");
 
 	ytdlp["l_res"] << l_res;
@@ -270,6 +269,126 @@ void GUI::fm_settings()
 	ytdlp["com_cookies"] << com_cookies;
 	ytdlp["l_cookie_options"] << l_cookie_options;
 	ytdlp["tb_cookies"] << tb_cookies;
+	ytdlp["sep_aria"] << sep_aria;
+	ytdlp["l_aria_present"] << l_aria_present;
+	ytdlp["pic_aria_present"] << pic_aria_present;
+	ytdlp["cb_aria"] << cb_aria;
+	ytdlp["l_aria_options"] << l_aria_options;
+	ytdlp["tb_aria"] << tb_aria;
+	ytdlp["cb_cookies"] << cb_cookies;
+	ytdlp["l_cookies_path"] << l_cookies_path;
+
+	cb_cookies.events().checked([&]
+	{
+		if(cb_cookies.checked())
+			com_cookies.option(0);
+	});
+
+	com_cookies.events().selected([&]
+	{
+		if(com_cookies.option() != 0)
+			cb_cookies.check(false);
+	});
+
+	l_cookies_path.events().click([&]
+	{
+		nana::filebox fb {ytdlp, true};
+		if(!conf.cookies_path.empty())
+		{
+			if(conf.cookies_path.string().find(".\\") == 0)
+				fb.init_file(appdir / conf.cookies_path.filename());
+			else fb.init_file(conf.cookies_path);
+		}
+		else fb.init_path(appdir);
+		fb.allow_multi_select(false);
+		fb.add_filter("Cookies file", "*.txt;*.*");
+		fb.title("Locate and select a text file that contains cookies exported from a browser");
+		auto res {fb()};
+		if(res.size())
+		{
+			auto path {res.front()};
+			auto fname {path.filename().string()};
+			conf.cookies_path = util::to_relative_path(path);
+			l_cookies_path.update_caption();
+		}
+	});
+
+	update_ytdlp_page = [&]
+	{
+		const auto dpi {nana::api::screen_dpi(true)};
+		std::error_code ec;
+		bool aria_in_ytdlp_dir {fs::exists(conf.ytdlp_path.parent_path() / "aria2c.exe")},
+			aria_in_sys_path {false};
+		if(!aria_in_ytdlp_dir)
+			aria_in_sys_path = util::is_file_in_sys_path(L"aria2c.exe");
+		if(aria_in_ytdlp_dir || aria_in_sys_path)
+		{
+			pic_aria_present.stretchable(false);
+			nana::paint::image img;
+			if(dpi >= 216)
+			{
+				ytdlp.get_place().field_display("aria_spacer", true);
+				img.open(arr_checkmark64_png, sizeof arr_checkmark64_png);
+			}
+			else if(dpi >= 192)
+			{
+				ytdlp.get_place().field_display("aria_spacer", false);
+				img.open(arr_checkmark48_png, sizeof arr_checkmark48_png);
+			}
+			else if(dpi >= 168)
+			{
+				ytdlp.get_place().field_display("aria_spacer", true);
+				img.open(arr_checkmark48_png, sizeof arr_checkmark48_png);
+			}
+			else if(dpi >= 144)
+			{
+				ytdlp.get_place().field_display("aria_spacer", false);
+				img.open(arr_checkmark32_png, sizeof arr_checkmark32_png);
+			}
+			else if(dpi > 96)
+			{
+				ytdlp.get_place().field_display("aria_spacer", true);
+				img.open(arr_checkmark32_png, sizeof arr_checkmark32_png);
+			}
+			else 
+			{
+				ytdlp.get_place().field_display("aria_spacer", false);
+				img.open(arr_checkmark22_png, sizeof arr_checkmark22_png);
+			}
+			ytdlp.get_place().collocate();
+			pic_aria_present.load(img);
+			if(aria_in_ytdlp_dir)
+				l_aria_present.caption("aria2c.exe found in the yt-dlp folder");
+			else l_aria_present.caption("aria2c.exe found in the %path% system variable");
+		}
+		else
+		{
+			nana::paint::image img;
+			if(dpi == 120)
+				pic_aria_present.stretchable(true);
+			else pic_aria_present.stretchable(false);
+
+			if(dpi >= 216)
+				img.open(arr_info64_png, sizeof arr_info64_png);
+			else if(dpi >= 192)
+				img.open(arr_info48_png, sizeof arr_info48_png);
+			else if(dpi >= 168)
+				img.open(arr_info48_png, sizeof arr_info48_png);
+			else if(dpi > 96)
+				img.open(arr_info32_png, sizeof arr_info32_png);
+			else img.open(arr_info22_ico, sizeof arr_info22_ico);
+			pic_aria_present.load(img);
+			l_aria_present.caption("aria2c.exe not found in the yt-dlp folder or the %path% system variable");
+			ytdlp.get_place().field_display("aria_spacer", true);
+			ytdlp.get_place().collocate();
+		}
+	};
+
+	fm.events().focus([&](const nana::arg_focus &arg)
+	{
+		if(arg.getting && update_ytdlp_page)
+			update_ytdlp_page();
+	});
 
 	sblock.div(R"(vert		
 		<l_sblock weight=25> <weight=18>
@@ -285,6 +404,10 @@ void GUI::fm_settings()
 	sblock["lbremove"] << lbremove;
 	sblock["l_info"] << l_info;
 
+	tb_aria.multi_lines(false);
+	tb_aria.padding(0, 5, 0, 5);
+	tb_aria.typeface(nana::paint::font_info {"Tahoma", 10});
+	
 	tb_proxy.multi_lines(false);
 	tb_proxy.padding(0, 5, 0, 5);
 	tb_proxy.typeface(nana::paint::font_info {"Tahoma", 10});
@@ -650,8 +773,10 @@ void GUI::fm_settings()
 		cb_zeropadding.check(conf.cb_zeropadding);
 		cb_playlist_folder.check(conf.cb_playlist_folder);
 		cb_premium.check(conf.cb_premium);
-		cb_android.check(conf.cb_android);
 		cb_proxy.check(conf.cb_proxy);
+		cb_cookies.check(conf.cb_cookies);
+		cb_aria.check(conf.cb_aria);
+		tb_aria.caption(conf.aria_options);
 
 		cb_mark.check(conf.cb_sblock_mark);
 		cb_remove.check(conf.cb_sblock_remove);
@@ -841,6 +966,7 @@ void GUI::fm_settings()
 
 	update_conf = [&]
 	{
+		conf.aria_options = tb_aria.caption();
 		conf.pref_res = com_res.option();
 		conf.pref_video = com_video.option();
 		conf.pref_audio = com_audio.option();
@@ -865,12 +991,13 @@ void GUI::fm_settings()
 		conf.cookie_options = tb_cookies.caption();
 		conf.update_self_only = cb_selfonly.checked();
 		conf.cb_premium = cb_premium.checked();
-		conf.cb_android = cb_android.checked();
 		conf.cb_save_errors = cb_save_errors.checked();
 		conf.cb_clear_done = cb_clear_done.checked();
 		conf.cb_formats_fsize_bytes = cb_formats_fsize_bytes.checked();
 		conf.cb_add_on_focus = cb_add_on_focus.checked();
 		conf.cb_display_custom_filenames = cb_display_custom_filenames.checked();
+		conf.cb_aria = cb_aria.checked();
+		conf.cb_cookies = cb_cookies.checked();
 
 		conf.sblock_mark.clear();
 		for(auto ip : lbmark.at(0))
@@ -1050,14 +1177,14 @@ void GUI::fm_settings()
 		{
 			plc.field_display("row_premium", false);
 			plc.field_display("spacer_premium", false);
-			change_field_attr(plc, "spacer_android", "weight", 18);
 		}
 		else
 		{
 			plc.field_display("row_premium", true);
 			plc.field_display("spacer_premium", true);
-			change_field_attr(plc, "spacer_android", "weight", 13);
 		}
+		plc.collocate();
+		nana::api::refresh_window(ytdlp);
 	};
 
 	for(auto &opt : com_vcodec_options)
@@ -1192,7 +1319,6 @@ void GUI::fm_settings()
 		ytdlp.bgcolor(theme::fmbg);
 		queuing.bgcolor(theme::fmbg);
 		gui.bgcolor(theme::fmbg);
-		checkpic.bgcolor(theme::fmbg);
 		l_sblock.caption(std::regex_replace(sblock_text, std::regex {"\\b(0x)"}, theme::is_dark() ? link_dark : link_light));
 		l_about_ver.caption(std::regex_replace(vertext, std::regex {"\\b(0x)"}, theme::is_dark() ? link_dark : link_light));
 		updater_display_version_ytdlp();
@@ -1291,10 +1417,10 @@ void GUI::make_updater_page(themed_form &parent)
 		<weight=20>
 		<weight=30 <btn_update weight=100> <weight=20> <prog> > <weight=25>
 		<sep2 weight=3> <weight=20>
-		<weight=25 <l_ytdlp weight=132> <weight=10> <l_ytdlp_path> > <weight=18>
-		<weight=25 <l_ffmpeg weight=132> <weight=10> <l_ffmpeg_path> > <weight=18>
-		<weight=30 <l_ver_ytdlp weight=170> <weight=10> <l_ytdlp_text> > <weight=10>
-		<weight=30 <l_ver_ffmpeg weight=170> <weight=10> <l_ffmpeg_text> > <weight=12>
+		<weight=25 <l_ytdlp weight=132> <weight=10> <l_ytdlp_path> > <weight=20>
+		<weight=25 <l_ffmpeg weight=132> <weight=10> <l_ffmpeg_path> > <weight=20>
+		<weight=30 <l_ver_ytdlp weight=170> <weight=10> <l_ytdlp_text> > <weight=11>
+		<weight=30 <l_ver_ffmpeg weight=170> <weight=10> <l_ffmpeg_text> > <weight=13>
 		<channel weight=25 <l_channel weight=170> <weight=20> <cb_chan_stable weight=75> <weight=10> <cb_chan_nightly weight=85> <> >
 		<channel_spacer weight=17> <weight=25 <weight=14> <cb_ffplay>> <weight=20>
 		<weight=30 <prog_misc> > <weight=25>

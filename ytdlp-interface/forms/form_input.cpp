@@ -24,7 +24,6 @@ std::pair<bool, std::string> GUI::input_box(nana::window owner, std::string capt
 	::widgets::Textbox tb {fm};
 	tb.multi_lines(false);
 	tb.padding(0, 5, 0, 5);
-	tb.caption(init_text);
 	tb.events().key_press([&](const arg_keyboard &arg)
 	{
 		if(arg.key == keyboard::enter)

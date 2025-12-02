@@ -432,30 +432,25 @@ std::wstring GUI::queue_pop_menu(int x, int y)
 						mitem.enabled(false);
 						vidsel_item = {&m, mitem.index()};
 					}
-					else m.append("Split playlist (add videos to queue)", [&, url](menu::item_proxy)
+					else m.append("Split playlist (add videos to queue)", [&, count, url](menu::item_proxy)
 					{
+						lbq.item_from_value(url).select(false);
 						url_of_item_to_delete = url;
 						lbq.auto_draw(false);
 						auto cat {lbq.append(item.text(2))};
 						cat.inline_factory(1, nana::pat::make_factory<inline_widget>());
+						std::wstring first_url_in_list;
 						for(unsigned n {0}; n < count; n++)
 						{
 							if(bottom.playlist_selection[n])
 							{
 								auto url {to_wstring(bottom.playlist_info["entries"][n]["url"].get<std::string>())};
+								if(!n) first_url_in_list = url;
 								add_url(url, false, false, cat.position());
 							}
 						}
-						if(cat.size())
-						{
-							cat.at(0).select(true, true);
-							if(cat.size() > 1)
-							{
-								cat.at(1).select(true);
-								cat.at(1).select(false);
-							}
-							else last_selected = nullptr;
-						}
+						if(!first_url_in_list.empty())
+							lbq_erase_url_to_select = first_url_in_list;
 						lbq.auto_draw(true);
 					});
 				}
@@ -476,12 +471,30 @@ std::wstring GUI::queue_pop_menu(int x, int y)
 				}
 
 				if(item.text(2) == "..." && !bottom.is_ytchan)
+				{
 					m.append("Select formats", [this](menu::item_proxy) { fm_formats(); }).enabled(false);
+					m.append("Select subtitles", [this](menu::item_proxy) { fm_subs(); }).enabled(false);
+				}
 				else if(bottom.btnfmt_visible())
 				{
 					m.append("Select formats", [this](menu::item_proxy)
 					{
 						fm_formats();
+					});
+					int subcount {0}, selcount {0};
+					try
+					{
+						const auto &jsubs {bottom.vidinfo.at("subtitles")};
+						for(auto it {jsubs.begin()}; it != jsubs.end(); it++)
+							if(it.key() != "live_chat" && it->is_array() && it->size() && it->front().contains("name"))
+								subcount++;
+					}
+					catch(...) {};
+					if(subcount && !bottom.sub_langs.empty())
+						selcount = std::ranges::count(bottom.sub_langs, ',') + 1;
+					m.append("Select subtitles (" + std::to_string(selcount) + '/' + std::to_string(subcount) + ')', [this](menu::item_proxy)
+					{
+						fm_subs();
 					});
 				}
 
@@ -654,63 +667,73 @@ std::wstring GUI::queue_pop_menu(int x, int y)
 			if(!skippers.empty() || !startables_not_done.empty())
 				m.append_splitter();
 
-			if(!startables_not_done.empty())
+			if((startables_not_done.empty() || skippers.empty()) && (!startables_not_done.empty() || !skippers.empty()))
 			{
-				m.append("Do not download", [startables_not_done, this](menu::item_proxy)
+				m.append("Do not download", [skippers, startables_not_done, this](menu::item_proxy)
 				{
-					lbq.auto_draw(false);
-					for(auto item : startables_not_done)
+					bool check {false};
+					if(startables_not_done.empty())
+						check = true;
+					auto &src {check ? skippers : startables_not_done};
+					check = !check;
+					for(auto item : src)
 					{
-						item.text(3, "skip");
-						item.check(true);
+						item.text(3, check ? "skip" : "queued");
+						item.check(check);
 					}
 					lbq.refresh_theme();
-				});
+					taskbar_overall_progress();
+				}).checked(startables_not_done.empty());
 			}
-
-			if(!skippers.empty())
+			else
 			{
-				m.append("Make downloadable", [skippers, this](menu::item_proxy)
+				if(!startables_not_done.empty())
 				{
-					lbq.auto_draw(false);
-					for(auto item : skippers)
+					m.append("Do not download", [startables_not_done, this](menu::item_proxy)
 					{
-						item.text(3, "queued");
-						item.check(false);
-					}
-					lbq.refresh_theme();
-				});
-			}
-
-			if(!skippers.empty() && !startables_not_done.empty())
-			{
-				m.append("Toggle download ability", [startables_not_done, skippers, this](menu::item_proxy)
-				{
-					lbq.auto_draw(false);
-					for(auto item : startables_not_done)
-					{
-						item.text(3, "skip");
-						item.check(true);
-					}
-					for(auto item : skippers)
-					{
-						item.text(3, "queued");
-						item.check(false);
-					}
-					lbq.refresh_theme();
-				});
-			}
-
-			m.append("Refresh (reacquire data)", [sel, this](menu::item_proxy)
-			{
-				for(auto ip : sel)
-				{
-					auto url {lbq.at(ip).value<lbqval_t>().url};
-					if(!bottoms.at(url).started)
-						add_url(url, true, false);
+						lbq.auto_draw(false);
+						for(auto item : startables_not_done)
+						{
+							item.text(3, "skip");
+							item.check(true);
+						}
+						lbq.refresh_theme();
+					});
 				}
-				api::refresh_window(lbq);
-			});
+
+				if(!skippers.empty())
+				{
+					m.append("Make downloadable", [skippers, this](menu::item_proxy)
+					{
+						lbq.auto_draw(false);
+						for(auto item : skippers)
+						{
+							item.text(3, "queued");
+							item.check(false);
+						}
+						lbq.refresh_theme();
+					});
+				}
+
+				if(!skippers.empty() && !startables_not_done.empty())
+				{
+					m.append("Toggle download ability", [startables_not_done, skippers, this](menu::item_proxy)
+					{
+						lbq.auto_draw(false);
+						for(auto item : startables_not_done)
+						{
+							item.text(3, "skip");
+							item.check(true);
+						}
+						for(auto item : skippers)
+						{
+							item.text(3, "queued");
+							item.check(false);
+						}
+						lbq.refresh_theme();
+					});
+				}
+			}
 		}
 
 		m.append_splitter();
@@ -799,7 +822,7 @@ void GUI::queue_remove_all(size_t cat)
 	if(!thr_queue_remove.joinable())
 	{
 		bottoms.show(L"");
-		qurl = L"";
+		qurl.clear();
 		l_url.update_caption();
 		auto *pfm {fm_alert("Shutting down active yt-dlp instances", "Please wait...", false).release()};
 		activate();
@@ -844,13 +867,12 @@ void GUI::queue_remove_all(size_t cat)
 			{
 				lbq.erase(cat);
 				if(lbq.at(cat - 1).size())
-					lbq.at(cat - 1).back().select(true, true);
+					lbq_url_to_select = lbq.at(cat - 1).back().value<lbqval_t>();
 			}
 			else
 			{
 				auto vis {lbq.visibles()};
 				if(!vis.empty())
-					//lbq.at(vis.front().cat).at(0).select(true);
 					lbq_url_to_select = lbq.at(vis.front().cat).at(0).value<lbqval_t>();
 			}
 			adjust_lbq_headers();
@@ -905,7 +927,6 @@ void GUI::queue_remove_items(const nana::listbox::index_pairs &items)
 			if(active_info_threads || bottoms.joinable_dl_threads())
 			{
 				pfm->show();
-				//nana::api::refresh_window(*pfm);
 				PostMessage(hwnd, WM_REFRESH, reinterpret_cast<WPARAM>(pfm->handle()), 0);
 				subclass::eat_mouse = true;
 			}
@@ -946,7 +967,8 @@ void GUI::queue_remove_items(const nana::listbox::index_pairs &items)
 				auto item {lbq.item_from_value(val)};
 				if(!item.empty())
 				{
-					item.select(true);
+					//item.select(true);
+					lbq_url_to_select = val;
 					auto cat {lbq.at(item.pos().cat)};
 					int idx {1};
 					for(auto ip : cat)
@@ -1167,9 +1189,18 @@ void GUI::queue_remove_item(std::wstring url, bool save)
 				}
 				else
 				{
-					bottoms.show(L"");
-					qurl = L"";
-					l_url.update_caption();
+					if(lbq_erase_url_to_select.empty())
+					{
+						bottoms.show(L"");
+						qurl.clear();
+						l_url.update_caption();
+					}
+					else
+					{
+						qurl = lbq_erase_url_to_select;
+						l_url.update_caption();
+						lbq_erase_url_to_select.clear();
+					}
 				}
 				bottoms.erase(url);
 				outbox.erase(url);

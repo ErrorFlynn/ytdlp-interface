@@ -159,32 +159,14 @@ std::string util::run_piped_process
 				}
 			}
 		}
-		/*if(!TerminateProcess(pi.hProcess, 0))
-		{
-			close_children();
-		}*/
 		auto hwnd {hwnd_from_pid(pi.dwProcessId)};
 		if(hwnd)
 		{
 			if(IsWindow(hwnd))
-			{
 				SendMessage(hwnd, WM_CLOSE, 0, 0);
-			}
-			else
-			{
-				if(!TerminateProcess(pi.hProcess, 0))
-				{
-					close_children();
-				}
-			}
+			else TerminateProcess(pi.hProcess, 0);
 		}
-		else 
-		{
-			if(close_children(true))
-			{
-				close_children();
-			}
-		}
+		else TerminateProcess(pi.hProcess, 0);
 		if(graceful_exit)
 			*graceful_exit = false;
 	};
@@ -258,8 +240,15 @@ std::string util::run_piped_process
 							{
 								auto text {line.substr(0, pos + 1)};
 								if(text != "[download]" && text[1] != '#')
+								{
+									if(text.size() > 3 && text[1] == 'D' && text[2] == 'L' && text[3] == ':')
+									{
+										cbprog(-1, -1, line, -1, -1);
+										continue;
+									}
 									if(*working)
 										cbappend(text, true);
+								}
 								if(text == "[Exec]" && text.find("ytdlp_status") != 1)
 									continue;
 								if(text == "[ExtractAudio]" || text.starts_with("[Fixup") || text == "[Merger]")
@@ -813,4 +802,36 @@ fs::path util::to_relative_path(const fs::path &abs)
 	else if(path_string == ".")
 		return ".\\";
 	return ".\\" / path;
+}
+
+
+fs::path util::appdir()
+{
+	std::wstring modpath(4096, '\0');
+	modpath.resize(GetModuleFileNameW(0, &modpath.front(), modpath.size()));
+	modpath.erase(modpath.rfind('\\'));
+	return modpath;
+}
+
+
+bool util::is_file_in_sys_path(const std::wstring &fname)
+{
+	std::wstringstream ss {util::get_sys_var(L"PATH")};
+	std::wstring path;
+	while(std::getline(ss, path, L';'))
+	{
+		std::error_code ec;
+		if(fs::exists(fs::path {path} / fname, ec))
+			return true;
+	}
+	return false;
+}
+
+
+std::wstring util::get_sys_var(const std::wstring &name)
+{
+	std::wstring var (32767, ' ');
+	var.resize(GetEnvironmentVariable(name.data(), &var.front(), var.size()));
+	var.shrink_to_fit();
+	return var;
 }

@@ -43,7 +43,7 @@ private:
 	fs::path self_path, appdir;
 	std::thread::id main_thread_id;
 	std::string inet_error, url_latest_ffmpeg, url_latest_ytdlp, url_latest_ytdlp_relnotes;
-	std::wstring drop_cliptext_temp, lbq_url_to_select;
+	std::wstring drop_cliptext_temp, lbq_url_to_select, lbq_erase_url_to_select;
 	std::atomic_int active_info_threads {0}, total_info_threads {0};
 	std::wstringstream multiple_url_text;
 	long minw {0}, minh {0}; // min frame size
@@ -56,12 +56,13 @@ private:
 		thr_qitem_data, thr_queue_remove;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.17.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 5)};
+	const std::string ver_tag {"v2.18.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 5)};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
 	nana::timer tmsg, tqueue, t_load_qitem_data;
 	std::string tmsg_title, tmsg_text;
 	nana::window tmsg_parent;
+	nana::internationalization i18n;
 
 	struct { nana::menu *m {nullptr}; std::size_t pos {0}; } vidsel_item;
 
@@ -90,18 +91,17 @@ private:
 
 		bool is_ytlink {false}, use_strfmt {false}, received_procmsg {false}, info_thread_active {false}, is_gen_playlist {false},
 			is_ytplaylist {false}, is_ytchan {false}, is_bcplaylist {false}, is_bclink {false}, is_bcchan {false}, is_yttab {false},
-			is_scplaylist {false}, cbtime {false}, cbthumb {false}, cbsubs {false}, cbkeyframes {false}, cbmp3 {false}, cbargs {false}, started {false};
+			is_scplaylist {false}, cbtime {false}, cbthumb {false}, cbsubs {false}, cbkeyframes {false}, cbmp3 {false}, cbargs {false};
 
-		std::atomic_bool working {false}, graceful_exit {false}, working_info {true};
+		std::atomic_bool working {false}, graceful_exit {false}, working_info {true}, started {false};
 		fs::path outpath, outfile, merger_path, download_path, printed_path;
 		nlohmann::json vidinfo, playlist_info;
 		std::vector<bool> playlist_selection;
 		std::vector<std::pair<std::wstring, std::wstring>> sections;
 		std::wstring url, strfmt, fmt1, fmt2, playsel_string, cmdinfo, playlist_vid_cmdinfo;
-		std::string media_title, argset, rate, progtext;
+		std::string media_title, argset, rate, progtext, sub_langs, sub_format;
 		std::thread dl_thread, info_thread;
 		DWORD dl_thread_id {0}, info_thread_id {0};
-		//int index {0};
 		unsigned idx_error {0}, ratelim_unit {0}, com_chap {0}, prog_amount {1000}, progval {0}, progval_shadow {0};
 		nana::timer timer_proc;
 
@@ -130,7 +130,12 @@ private:
 		gui_bottom &at(int idx);
 		gui_bottom &at(int idx) const;
 		auto url_at(int idx);
-		gui_bottom &current() { return at(gui->qurl); }
+		gui_bottom &current()
+		{
+			if(bottoms.size() == 1)
+				return *bottoms.at(L"");
+			return at(gui->qurl); 
+		}
 		auto begin() noexcept { return bottoms.begin(); }
 		const auto begin() const noexcept { return bottoms.begin(); }
 		auto rbegin() noexcept { return bottoms.rbegin(); }
@@ -270,6 +275,7 @@ private:
 	void fm_sections();
 	void fm_playlist();
 	void fm_formats();
+	void fm_subs();
 	void fm_suspend();
 	void fm_colors(themed_form &parent);
 	void fm_loading(bool saving = false);

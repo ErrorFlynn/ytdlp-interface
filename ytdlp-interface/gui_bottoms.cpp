@@ -86,7 +86,6 @@ GUI::gui_bottom *GUI::gui_bottoms::back() const
 
 void GUI::gui_bottoms::show(std::wstring key)
 {
-	
 	auto &bot {*bottoms.at(key)};
 	gui->prog.caption(bot.progtext);
 	gui->prog.amount(bot.prog_amount);

@@ -439,7 +439,7 @@ nana::listbox::item_proxy Listbox::at(const index_pair &abs_pos)
 }
 
 
-void widgets::Listbox::set_line_text(std::wstring url, qline_t text)
+void widgets::Listbox::set_line_text(std::wstring url, qline_t text, bool post)
 {
 	if(std::this_thread::get_id() == main_thread_id)
 	{
@@ -455,7 +455,8 @@ void widgets::Listbox::set_line_text(std::wstring url, qline_t text)
 	{
 		auto purl {new std::wstring {url}};
 		auto ptext {new qline_t {text}};
-		PostMessage(hwnd_parent, WM_SET_QLINE_TEXT, reinterpret_cast<WPARAM>(purl), reinterpret_cast<LPARAM>(ptext));
+		if(post) PostMessage(hwnd_parent, WM_SET_QLINE_TEXT, reinterpret_cast<WPARAM>(purl), reinterpret_cast<LPARAM>(ptext));
+		else SendMessage(hwnd_parent, WM_SET_QLINE_TEXT, reinterpret_cast<WPARAM>(purl), reinterpret_cast<LPARAM>(ptext));
 	}
 }
 
@@ -1387,7 +1388,7 @@ sblock_listbox::sblock_listbox(nana::window parent, bool high_contrast) : listbo
 	checkable(true);
 	enable_single(true, false);
 	typeface(nana::paint::font_info {"Calibri", 12});
-	scheme().item_height_ex = util::scale(13);
+	scheme().item_height_ex = util::scale(15);
 	scheme().text_margin = util::scale(10) + (nana::api::screen_dpi(true) > 96) * 4;
 	append_header("", util::scale(286));
 	show_header(false);

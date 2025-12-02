@@ -1,6 +1,7 @@
 #include "types.hpp"
 #include "icons.hpp"
 #include "util.hpp"
+#include "gui.hpp"
 
 
 std::string version_t::string()
@@ -264,7 +265,7 @@ namespace nana
 }
 
 
-void theme_t::to_json(nlohmann::json &j)
+void theme_t::to_json(nlohmann::json &j) const
 {
 	j["nimbus"] = nimbus;
 	j["fmbg_raw"] = fmbg_raw;
@@ -415,12 +416,13 @@ void settings_t::to_jpreset(nlohmann::json &j) const
 	j["cb_save_errors"] = cb_save_errors;
 	j["cb_clear_done"] = cb_clear_done;
 	j["cb_add_on_focus"] = cb_add_on_focus;
-	j["cb_android"] = cb_android;
 	j["com_chap"] = com_chap;
 	j["com_cookies"] = com_cookies;
 	j["max_data_threads"] = max_data_threads;
 	j["cookie_options"] = to_utf8(cookie_options);
 	j["cb_display_custom_filenames"] = cb_display_custom_filenames;
+	j["cb_aria"] = cb_aria;
+	j["aria_options"] = aria_options;
 }
 
 
@@ -448,8 +450,9 @@ void settings_t::from_jpreset(const nlohmann::json &j)
 	max_concurrent_downloads = j["max_concurrent_downloads"];
 	cb_lengthyproc = j["cb_lengthyproc"];
 	max_proc_dur = std::chrono::milliseconds {j["max_proc_dur"].get<int>()};
-	for(auto &el : j["outpaths"])
-		outpaths.insert(to_wstring(el.get<std::string>()));
+	if(j.contains("outpaths"))
+		for(auto &el : j["outpaths"])
+			outpaths.insert(to_wstring(el.get<std::string>()));
 	common_dl_options = j["common_dl_options"];
 	cb_autostart = j["cb_autostart"];
 	cb_queue_autostart = j["cb_queue_autostart"];
@@ -478,11 +481,27 @@ void settings_t::from_jpreset(const nlohmann::json &j)
 	cb_save_errors = j["cb_save_errors"];
 	cb_clear_done = j["cb_clear_done"];
 	cb_add_on_focus = j["cb_add_on_focus"];
-	cb_android = j["cb_android"];
 	com_chap = j["com_chap"];
 	com_cookies = j["com_cookies"];
 	max_data_threads = j["max_data_threads"];
 	cookie_options = j["cookie_options"].get<std::string>();
+	/*if(j.contains("cb_aria")); // inexplicably fails (returns true when key "cb_aria" doesn't exist)
+	{
+		cb_aria = j["cb_aria"];
+		aria_options = j["aria_options"].get<std::string>();
+	}*/
+	try
+	{
+		cb_aria = j.at("cb_aria");
+		aria_options = j.at("aria_options").get<std::string>();
+	}
+	catch(const nlohmann::json::out_of_range) {}
+	try
+	{
+		cb_cookies = j.at("cb_cookies");
+		cookies_path = j.at("cookies_path").get<std::string>();
+	}
+	catch(const nlohmann::json::out_of_range) {}
 	if(jblock.contains("cb_display_custom_filenames"))
 		cb_display_custom_filenames = j["cb_display_custom_filenames"];
 }
@@ -534,12 +553,15 @@ void settings_t::from_preset(const settings_t &p)
 	cb_save_errors = p.cb_save_errors;
 	cb_clear_done = p.cb_clear_done;
 	cb_add_on_focus = p.cb_add_on_focus;
-	cb_android = p.cb_android;
 	com_chap = p.com_chap;
 	com_cookies = p.com_cookies;
 	max_data_threads = p.max_data_threads;
 	cookie_options = p.cookie_options;
 	cb_display_custom_filenames = p.cb_display_custom_filenames;
+	cb_aria = p.cb_aria;
+	aria_options = p.aria_options;
+	cb_cookies = p.cb_cookies;
+	cookies_path = p.cookies_path;
 }
 
 
@@ -590,30 +612,367 @@ bool settings_t::equals_preset(const settings_t &p)
 		cb_save_errors == p.cb_save_errors &&
 		cb_clear_done == p.cb_clear_done &&
 		cb_add_on_focus == p.cb_add_on_focus &&
-		cb_android == p.cb_android &&
 		com_chap == p.com_chap &&
 		com_cookies == p.com_cookies &&
 		max_data_threads == p.max_data_threads &&
 		cb_display_custom_filenames == p.cb_display_custom_filenames &&
-		cookie_options == p.cookie_options;
+		cb_aria == p.cb_aria &&
+		aria_options == p.aria_options &&
+		cookie_options == p.cookie_options &&
+		cb_cookies == p.cb_cookies &&
+		cookies_path == p.cookies_path;
 }
 
 
-/*void argset_t::set(std::string_view text)
+void settings_t::to_json(nlohmann::json &j) const
 {
-	if(text.starts_with('['))
+	using nana::to_utf8;
+
+	j["cb_custom_dark_theme"] = cb_custom_dark_theme;
+	j["cb_custom_light_theme"] = cb_custom_light_theme;
+	theme_dark.to_json(j["theme"]["dark"]);
+	theme_light.to_json(j["theme"]["light"]);
+
+	auto &jitems {j["unfinished_queue_items"] = nlohmann::json::array()};
+
+	for(const auto &el : unfinished_queue_items)
 	{
-		auto pos {text.find(']')};
-		if(pos != -1)
+		if(el.first.empty())
+			for(const auto &url : el.second)
+				jitems.push_back(url);
+		else if(!el.second.empty())
 		{
-			label_ = text.substr(0, ++pos);
-			auto pos2 {text.find_first_not_of(" \t", pos)};
-			if(pos2 != -1)
+			jitems.push_back(nlohmann::json::object());
+			auto &jobj {jitems.back()};
+			jobj["name"] = el.first;
+			auto &jcat {jobj["items"] = nlohmann::json::array()};
+			for(const auto &url : el.second)
+				jcat.push_back(url);
+		}
+	}
+
+	auto &jpresets {j["presets"] = nlohmann::json::array()};
+	for(const auto &el : GUI::conf_presets)
+	{
+		jpresets.push_back(nlohmann::json::object());
+		auto &jpreset {jpresets.back()};
+		jpreset["name"] = el.first;
+		el.second.to_jpreset(jpreset["data"]);
+	}
+
+	j["com_cookies"] = com_cookies;
+	j["ytdlp_path"] = ytdlp_path;
+	j["outpath"] = outpath;
+	j["fmt1"] = to_utf8(fmt1);
+	j["fmt2"] = to_utf8(fmt2);
+	j["ratelim"] = ratelim;
+	j["com_chap"] = com_chap;
+	j["ratelim_unit"] = ratelim_unit;
+	j["cbsubs"] = cbsubs;
+	j["cbthumb"] = cbthumb;
+	j["cbtime"] = cbtime;
+	j["cbkeyframes"] = cbkeyframes;
+	j["cbmp3"] = cbmp3;
+	j["pref_res"] = pref_res;
+	j["pref_video"] = pref_video;
+	j["pref_audio"] = pref_audio;
+	j["pref_fps"] = pref_fps;
+	j["cbtheme"] = cbtheme;
+	j["contrast"] = contrast;
+	j["cbargs"] = cbargs;
+	j["kwhilite"] = kwhilite;
+	j["argsets"] = argsets;
+	j["output_template"] = to_utf8(output_template);
+	j["max_concurrent_downloads"] = max_concurrent_downloads;
+	j["cb_lengthyproc"] = cb_lengthyproc;
+	j["max_proc_dur"] = max_proc_dur.count();
+	j["common_dl_options"] = common_dl_options;
+	j["cb_autostart"] = cb_autostart;
+	j["cb_queue_autostart"] = cb_queue_autostart;
+	j["gpopt_hidden"] = gpopt_hidden;
+	j["open_dialog_origin"] = open_dialog_origin;
+	j["playlist_indexing"] = to_utf8(playlist_indexing);
+	j["cb_zeropadding"] = cb_zeropadding;
+	j["cb_playlist_folder"] = cb_playlist_folder;
+	j["window"]["x"] = winrect.x;
+	j["window"]["y"] = winrect.y;
+	j["window"]["w"] = winrect.width;
+	j["window"]["h"] = winrect.height;
+	j["window"]["zoomed"] = zoomed;
+	j["window"]["dpi"] = nana::api::screen_dpi(true);
+	for(auto &path : outpaths)
+		j["outpaths"].push_back(to_utf8(path));
+	j["get_releases_at_startup"] = get_releases_at_startup;
+	j["queue_columns"]["format"] = col_format;
+	j["queue_columns"]["format_note"] = col_format_note;
+	j["queue_columns"]["ext"] = col_ext;
+	j["queue_columns"]["fsize"] = col_fsize;
+	j["queue_columns"]["website_icon"] = col_site_icon;
+	j["queue_columns"]["website_text"] = col_site_text;
+	j["output_template_bandcamp"] = to_utf8(output_template_bandcamp);
+	j["json_hide_null"] = json_hide_null;
+	j["ytdlp_nightly"] = ytdlp_nightly;
+	j["audio_multistreams"] = audio_multistreams;
+	j["cbsnap"] = cbsnap;
+	j["limit_output_buffer"] = limit_output_buffer;
+	j["output_buffer_size"] = output_buffer_size;
+	j["update_self_only"] = update_self_only;
+	j["pref_vcodec"] = pref_vcodec;
+	j["pref_acodec"] = pref_acodec;
+	j["argset"] = argset;
+	j["cb_premium"] = cb_premium;
+	j["cbminw"] = cbminw;
+	j["cb_save_errors"] = cb_save_errors;
+	j["cb_ffplay"] = cb_ffplay;
+	j["ffmpeg_path"] = ffmpeg_path;
+	j["cb_clear_done"] = cb_clear_done;
+	j["cb_formats_fsize_bytes"] = cb_formats_fsize_bytes;
+	j["cb_add_on_focus"] = cb_add_on_focus;
+	j["max_data_threads"] = max_data_threads;
+	j["cookie_options"] = cookie_options;
+	j["cb_aria"] = cb_aria;
+	j["aria_options"] = aria_options;
+	j["sub_format"] = sub_format;
+	j["sub_langs"] = sub_langs;
+
+	for(auto i : sblock_mark)
+		j["sblock"]["mark"].push_back(i);
+	for(auto i : sblock_remove)
+		j["sblock"]["remove"].push_back(i);
+
+	j["sblock"]["cb_mark"] = cb_sblock_mark;
+	j["sblock"]["cb_remove"] = cb_sblock_remove;
+	j["proxy"]["enabled"] = cb_proxy;
+	j["proxy"]["URL"] = to_utf8(proxy);
+	j["cb_display_custom_filenames"] = cb_display_custom_filenames;
+	j["cb_cookies"] = cb_cookies;
+	j["cookies_path"] = cookies_path;
+}
+
+
+void settings_t::from_json(const nlohmann::json &j)
+{
+	using nana::to_wstring;
+
+	ytdlp_path = j["ytdlp_path"].get<std::string>();
+	if(!ytdlp_path.empty())
+		ytdlp_path = util::to_relative_path(ytdlp_path);
+	if(ytdlp_path.empty() || !fs::exists(ytdlp_path))
+	{
+		auto appdir {util::appdir()};
+		if(fs::exists(appdir / "ytdl-patched-red.exe"))
+			ytdlp_path = ".\\ytdl-patched-red.exe";
+		else if(fs::exists(appdir / ytdlp_fname))
+			ytdlp_path = ".\\" + ytdlp_fname;
+	}
+	outpath = util::to_relative_path(j["outpath"].get<std::string>());
+	fmt1 = to_wstring(j["fmt1"].get<std::string>());
+	fmt2 = to_wstring(j["fmt2"].get<std::string>());
+	ratelim = j["ratelim"];
+	ratelim_unit = j["ratelim_unit"];
+	if(j.contains("cbkeyframes")) // v1.1
+	{
+		cbsubs = j["cbsubs"];
+		cbthumb = j["cbthumb"];
+		cbtime = j["cbtime"];
+		cbkeyframes = j["cbkeyframes"];
+		cbmp3 = j["cbmp3"];
+	}
+	if(j.contains("pref_res")) // v1.2
+	{
+		if(!j.contains("json_hide_null")) // v2.2 added two options at the top
+			pref_res = j["pref_res"] + 2;
+		else pref_res = j["pref_res"];
+		pref_video = j["pref_video"];
+		pref_audio = j["pref_audio"];
+		pref_fps = j["pref_fps"];
+	}
+	if(j.contains("cbtheme")) // v1.3
+		cbtheme = j["cbtheme"];
+	if(j.contains("contrast")) // v1.4
+	{
+		contrast = j["contrast"];
+		cbargs = j["cbargs"];
+		if(j.contains("args"))
+		{
+			argsets.push_back(j["args"].get<std::string>());
+		}
+	}
+	if(j.contains("kwhilite")) // v1.5
+	{
+		kwhilite = j["kwhilite"];
+		for(auto &el : j["argsets"])
+			argsets.push_back(el.get<std::string>());
+	}
+	if(j.contains("output_template")) // v1.6
+	{
+		output_template = to_wstring(j["output_template"].get<std::string>());
+		max_concurrent_downloads = j["max_concurrent_downloads"];
+		cb_lengthyproc = j["cb_lengthyproc"];
+		max_proc_dur = std::chrono::milliseconds {j["max_proc_dur"].get<int>()};
+		if(!j["unfinished_queue_items"].empty())
+		{
+			auto &cat0 {unfinished_queue_items.emplace_back("", std::vector<std::string>{}).second};
+			for(auto &el : j["unfinished_queue_items"])
 			{
-				argset_ = text.substr(pos2);
+				if(el.is_string())
+					cat0.push_back(el);
+				else if(el.is_object())
+				{
+					auto &cat {unfinished_queue_items.emplace_back(el["name"], std::vector<std::string>{}).second};
+					for(auto &url : el["items"])
+						cat.push_back(url);
+				}
 			}
 		}
-		else argset_ = text;
+		if(j.contains("outpaths"))
+			for(auto &el : j["outpaths"])
+				outpaths.insert(to_wstring(el.get<std::string>()));
+		common_dl_options = j["common_dl_options"];
+		cb_autostart = j["cb_autostart"];
 	}
-	else argset_ = text;
-}*/
+	else
+	{
+		output_template = output_template_default;
+		outpaths.insert(outpath);
+	}
+	if(j.contains("cb_queue_autostart")) // v1.6.1
+	{
+		cb_queue_autostart = j["cb_queue_autostart"];
+	}
+	if(j.contains("open_dialog_origin")) // v1.7
+	{
+		gpopt_hidden = j["gpopt_hidden"];
+		open_dialog_origin = j["open_dialog_origin"];
+		playlist_indexing = to_wstring(j["playlist_indexing"].get<std::string>());
+	}
+	if(j.contains("cb_zeropadding")) // v1.8
+	{
+		cb_zeropadding = j["cb_zeropadding"];
+		cb_playlist_folder = j["cb_playlist_folder"];
+		winrect.x = j["window"]["x"];
+		winrect.y = j["window"]["y"];
+		winrect.width = j["window"]["w"];
+		winrect.height = j["window"]["h"];
+		zoomed = j["window"]["zoomed"];
+		if(j["window"].contains("dpi"))
+			dpi = j["window"]["dpi"];
+		else dpi = nana::api::screen_dpi(true);
+	}
+	if(j.contains("get_releases_at_startup")) // v2.0
+	{
+		get_releases_at_startup = j["get_releases_at_startup"];
+		col_format = j["queue_columns"]["format"];
+		col_format_note = j["queue_columns"]["format_note"];
+		col_ext = j["queue_columns"]["ext"];
+		col_fsize = j["queue_columns"]["fsize"];
+	}
+	if(j.contains("output_template_bandcamp")) // v2.1
+	{
+		output_template_bandcamp = to_wstring(j["output_template_bandcamp"].get<std::string>());
+	}
+	if(j.contains("json_hide_null")) // v2.2
+	{
+		json_hide_null = j["json_hide_null"];
+	}
+	if(j.contains("ytdlp_nightly")) // v2.3
+	{
+		col_site_icon = j["queue_columns"]["website_icon"];
+		col_site_text = j["queue_columns"]["website_text"];
+		ytdlp_nightly = j["ytdlp_nightly"];
+		audio_multistreams = j["audio_multistreams"];
+	}
+	if(j.contains("sblock")) // v2.4
+	{
+		const auto &jblock {j["sblock"]};
+		if(jblock.contains("mark"))
+			for(auto &el : jblock["mark"])
+				sblock_mark.push_back(el.get<int>());
+		if(jblock.contains("remove"))
+			for(auto &el : jblock["remove"])
+				sblock_remove.push_back(el.get<int>());
+		cb_sblock_mark = j["sblock"]["cb_mark"];
+		cb_sblock_remove = j["sblock"]["cb_remove"];
+		cb_proxy = j["proxy"]["enabled"];
+		proxy = to_wstring(j["proxy"]["URL"].get<std::string>());
+	}
+	if(j.contains("cbsnap")) // v2.5
+	{
+		cbsnap = j["cbsnap"];
+	}
+	if(j.contains("limit_output_buffer")) // v2.6
+	{
+		limit_output_buffer = j["limit_output_buffer"];
+		output_buffer_size = j["output_buffer_size"];
+	}
+	if(j.contains("update_self_only")) // v2.7
+	{
+		update_self_only = j["update_self_only"];
+		pref_vcodec = j["pref_vcodec"];
+		pref_acodec = j["pref_acodec"];
+		argset = j["argset"];
+	}
+	if(j.contains("cb_premium")) // v2.8
+	{
+		cb_premium = j["cb_premium"];
+		cbminw = j["cbminw"];
+		cb_save_errors = j["cb_save_errors"];
+		cb_ffplay = j["cb_ffplay"];
+	}
+	if(j.contains("ffmpeg_path")) // v2.9
+	{
+		ffmpeg_path = j["ffmpeg_path"].get<std::string>();
+		if(!ffmpeg_path.empty())
+			ffmpeg_path = util::to_relative_path(ffmpeg_path);
+	}
+	if(j.contains("cb_clear_done")) // v2.11
+	{
+		cb_clear_done = j["cb_clear_done"];
+		cb_formats_fsize_bytes = j["cb_formats_fsize_bytes"];
+		cb_add_on_focus = j["cb_add_on_focus"];
+	}
+	if(j.contains("theme")) // v2.13
+	{
+		cb_custom_dark_theme = j["cb_custom_dark_theme"];
+		cb_custom_light_theme = j["cb_custom_light_theme"];
+		theme_dark.from_json(j["theme"]["dark"]);
+		theme_dark.contrast(contrast, true);
+		theme_light.from_json(j["theme"]["light"]);
+		theme_light.contrast(contrast, false);
+	}
+	if(j.contains("com_chap")) // v2.13.3
+	{
+		com_chap = j["com_chap"];
+	}
+	if(j.contains("com_cookies")) // v2.14
+	{
+		com_cookies = j["com_cookies"];
+	}
+	if(j.contains("max_data_threads")) // v2.15
+	{
+		max_data_threads = j["max_data_threads"];
+		cookie_options = j["cookie_options"].get<std::string>();
+	}
+	if(j.contains("presets")) // v2.16
+	{
+		for(auto &jpreset : j["presets"])
+		{
+			settings_t tempset;
+			tempset.from_jpreset(jpreset["data"]);
+			GUI::conf_presets[jpreset["name"]] = std::move(tempset);
+		}
+	}
+	if(j.contains("cb_display_custom_filenames")) // v2.17
+	{
+		cb_display_custom_filenames = j["cb_display_custom_filenames"];
+	}
+	if(j.contains("cb_aria")) // v2.18
+	{
+		cb_aria = j["cb_aria"];
+		aria_options = j["aria_options"].get<std::string>();
+		sub_format = j["sub_format"].get<std::string>();
+		sub_langs = j["sub_langs"].get<std::string>();
+		cb_cookies = j["cb_cookies"];
+		cookies_path = j["cookies_path"].get<std::string>();
+	}
+}

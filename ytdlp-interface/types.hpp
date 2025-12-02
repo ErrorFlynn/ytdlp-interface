@@ -89,19 +89,19 @@ struct theme_t
 	theme_t(bool dark = false) { make_default(dark); }
 	void make_default(bool dark = false);
 	void contrast(double factor, bool dark);
-	void to_json(nlohmann::json &j);
+	void to_json(nlohmann::json &j) const;
 	void from_json(const nlohmann::json &j);
 };
 
 
 struct settings_t
 {
-	std::filesystem::path ytdlp_path, ffmpeg_path, outpath;
+	std::filesystem::path ytdlp_path, ffmpeg_path, outpath, cookies_path;
 	std::wstring output_template_default {L"%(title)s.%(ext)s"}, playlist_indexing_default {L"%(playlist_index)d - "},
 		output_template_default_bandcamp {L"%(artist)s - %(album)s - %(track_number)02d - %(track)s.%(ext)s"};
 	std::wstring fmt1, fmt2, output_template {output_template_default}, playlist_indexing {playlist_indexing_default},
 		output_template_bandcamp {output_template_default_bandcamp}, proxy;
-	std::string argset, cookie_options;
+	std::string argset, cookie_options, aria_options {"-x 6"}, sub_langs, sub_format;
 	std::vector<std::string> argsets;
 	std::vector<std::pair<std::string, std::vector<std::string>>> unfinished_queue_items;
 	std::unordered_set<std::wstring> outpaths;
@@ -119,7 +119,7 @@ struct settings_t
 		cb_sblock_mark {false}, cb_sblock_remove {false}, cb_proxy {false}, cbsnap {true}, limit_output_buffer {true},
 		update_self_only {true}, cb_premium {true}, cbminw {false}, cb_save_errors {false}, cb_ffplay {false}, cb_clear_done {false},
 		cb_formats_fsize_bytes {false}, cb_add_on_focus {false}, cb_custom_dark_theme {false}, cb_custom_light_theme {false},
-		cb_android {false}, cb_display_custom_filenames {false};
+		cb_display_custom_filenames {false}, cb_aria {false}, cb_sub_selection {false}, cb_cookies {false};
 	nana::rectangle winrect;
 	int dpi {96};
 	std::vector<int> sblock_mark, sblock_remove;
@@ -129,4 +129,6 @@ struct settings_t
 	void from_jpreset(const nlohmann::json &j);
 	void from_preset(const settings_t &p);
 	bool equals_preset(const settings_t &p);
+	void to_json(nlohmann::json &j) const;
+	void from_json(const nlohmann::json &j);
 };

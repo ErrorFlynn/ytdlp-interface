@@ -80,13 +80,15 @@ void GUI::make_form()
 			{
 				if(text.size() > 300)
 					text.erase(0, text.size() - 300);
-				qurl = text;
-				l_url.update_caption();
+				//qurl = text;
+				//l_url.update_caption();
+				l_url.caption(text);
 			}
 			else
 			{
-				qurl = text + L" (queue item #" + to_wstring(item.text(0)) + L")";
-				l_url.update_caption();
+				//qurl = text + L" (queue item #" + to_wstring(item.text(0)) + L")";
+				//l_url.update_caption();
+				l_url.caption(text + L" (queue item #" + to_wstring(item.text(0)) + L")");
 			}
 		}
 		if(theme::is_dark())
@@ -333,27 +335,27 @@ void GUI::make_form_bottom()
 	gpopt["btnlabel"] << btnlabel;
 	gpopt["btnerase"] << btnerase;
 
-	const auto dpi {API::screen_dpi(true)};
-	if(dpi >= 240)
-	{
-		btnerase.image(arr_erase48_png, sizeof arr_erase48_png);
-		btnerase.image_disabled(arr_erase48_disabled_png, sizeof arr_erase48_disabled_png);
-	}
-	else if(dpi >= 192)
-	{
-		btnerase.image(arr_erase32_png, sizeof arr_erase32_png);
-		btnerase.image_disabled(arr_erase32_disabled_png, sizeof arr_erase32_disabled_png);
-	}
-	else if(dpi > 96)
-	{
-		btnerase.image(arr_erase22_ico, sizeof arr_erase22_ico);
-		btnerase.image_disabled(arr_erase22_disabled_ico, sizeof arr_erase22_disabled_ico);
-	}
-	else
-	{
-		btnerase.image(arr_erase16_ico, sizeof arr_erase16_ico);
-		btnerase.image_disabled(arr_erase16_disabled_ico, sizeof arr_erase16_disabled_ico);
-	}
+		const auto dpi {API::screen_dpi(true)};
+		if(dpi >= 240)
+		{
+			btnerase.image(arr_erase48_png, sizeof arr_erase48_png);
+			btnerase.image_disabled(arr_erase48_disabled_png, sizeof arr_erase48_disabled_png);
+		}
+		else if(dpi >= 192)
+		{
+			btnerase.image(arr_erase32_png, sizeof arr_erase32_png);
+			btnerase.image_disabled(arr_erase32_disabled_png, sizeof arr_erase32_disabled_png);
+		}
+		else if(dpi > 96)
+		{
+			btnerase.image(arr_erase22_ico, sizeof arr_erase22_ico);
+			btnerase.image_disabled(arr_erase22_disabled_ico, sizeof arr_erase22_disabled_ico);
+		}
+		else
+		{
+			btnerase.image(arr_erase16_ico, sizeof arr_erase16_ico);
+			btnerase.image_disabled(arr_erase16_disabled_ico, sizeof arr_erase16_disabled_ico);
+		}
 
 	tbrate.multi_lines(false);
 
@@ -909,6 +911,24 @@ void GUI::make_message_handlers()
 				}
 			}
 		}
+		else if(wparam == 'C')
+		{
+			if(GetAsyncKeyState(VK_CONTROL) & 0xff00)
+			{
+				if(queue_panel.visible() && api::focus_window() != com_args && api::focus_window() != tbrate)
+				{
+					std::wstring text;
+					const auto sel {lbq.selected()};
+					for(const auto &ipair : sel)
+					{
+						if(!text.empty())
+							text += L'\n';
+						text += lbq.at(ipair).value<lbqval_t>().url;
+					}
+					util::set_clipboard_text(hwnd, text);
+				}
+			}
+		}
 		else if(wparam == VK_NUMPAD0)
 		{
 			if(GetAsyncKeyState(VK_CONTROL) & 0xff00)
@@ -951,22 +971,25 @@ void GUI::make_message_handlers()
 					fm_formats();
 			}
 		}
-		else if(wparam == 'A' && api::focus_window() != com_args && api::focus_window() == tbrate)
+		else if(wparam == 'A' && GetAsyncKeyState(VK_CONTROL) & 0xff00)
 		{
-			if(GetAsyncKeyState(VK_CONTROL) & 0xff00 && queue_panel.visible() && !lbq.first_visible().empty())
+			if(api::focus_window() != com_args && api::focus_window() != tbrate)
 			{
-				if(api::focus_window() == lbq)
-					outbox.focus();
-				size_t cat {0};
-				auto sel {lbq.selected()};
-				if(!sel.empty())
-					cat = sel.front().cat;
-				auto hsel {lbq.events().selected.connect_front([](const nana::arg_listbox &arg) {arg.stop_propagation(); })};
-				lbq.auto_draw(false);
-				for(auto item : lbq.at(cat))
-					item.select(true);
-				lbq.auto_draw(true);
-				lbq.events().selected.remove(hsel);
+				if(queue_panel.visible() && !lbq.first_visible().empty())
+				{
+					if(api::focus_window() == lbq)
+						outbox.focus();
+					size_t cat {0};
+					auto sel {lbq.selected()};
+					if(!sel.empty())
+						cat = sel.front().cat;
+					auto hsel {lbq.events().selected.connect_front([](const nana::arg_listbox &arg) {arg.stop_propagation(); })};
+					lbq.auto_draw(false);
+					for(auto item : lbq.at(cat))
+						item.select(true);
+					lbq.auto_draw(true);
+					lbq.events().selected.remove(hsel);
+				}
 			}
 		}
 		else if(wparam == VK_F2)
