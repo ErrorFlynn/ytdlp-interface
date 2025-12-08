@@ -814,6 +814,14 @@ fs::path util::appdir()
 }
 
 
+fs::path util::app_path()
+{
+	std::wstring modpath(4096, '\0');
+	modpath.resize(GetModuleFileNameW(0, &modpath.front(), modpath.size()));
+	return modpath;
+}
+
+
 bool util::is_file_in_sys_path(const std::wstring &fname)
 {
 	std::wstringstream ss {util::get_sys_var(L"PATH")};

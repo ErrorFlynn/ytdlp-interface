@@ -68,6 +68,7 @@ namespace util
 	std::wstring get_sys_var(const std::wstring &name);
 	bool is_file_in_sys_path(const std::wstring &fname);
 	fs::path appdir();
+	fs::path app_path();
 }
 
 

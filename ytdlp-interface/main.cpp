@@ -11,12 +11,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 	freopen("conout$", "w", stdout);
 	SetConsoleOutputCP(CP_UTF8);*/
 
-
 	using namespace nana;
 	std::setlocale(LC_ALL, "en_US.UTF-8");
 	int argc;
 	LPWSTR *argv {CommandLineToArgvW(GetCommandLineW(), &argc)};
-	fs::path modpath {argv[0]}, appdir {modpath.parent_path()};
+	fs::path modpath {util::app_path()}, appdir {modpath.parent_path()};
 	fs::current_path(appdir);
 	std::error_code ec;
 	if(fs::exists(appdir / "7zxa.dll"))

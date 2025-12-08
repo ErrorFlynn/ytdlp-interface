@@ -1984,7 +1984,7 @@ void GUI::updater_update_self(themed_form &parent)
 				if(win7)
 				{
 					if(arc_sizes.contains("ytdlp-interface_win7.7z"))
-						arc_size = arc_size["ytdlp-interface_win7.7z"];
+						arc_size = arc_sizes["ytdlp-interface_win7.7z"];
 					else arc_size = j_assets[2]["size"];
 					if(arc_urls.contains("ytdlp-interface_win7.7z"))
 						arc_url = arc_urls["ytdlp-interface_win7.7z"];
@@ -1993,7 +1993,7 @@ void GUI::updater_update_self(themed_form &parent)
 				else
 				{
 					if(arc_sizes.contains("ytdlp-interface.7z"))
-						arc_size = arc_size["ytdlp-interface.7z"];
+						arc_size = arc_sizes["ytdlp-interface.7z"];
 					else arc_size = j_assets[0]["size"];
 					if(arc_urls.contains("ytdlp-interface.7z"))
 						arc_url = arc_urls["ytdlp-interface.7z"];
@@ -2005,7 +2005,7 @@ void GUI::updater_update_self(themed_form &parent)
 				if(win7)
 				{
 					if(arc_sizes.contains("ytdlp-interface_x86_win7.7z"))
-						arc_size = arc_size["ytdlp-interface_x86_win7.7z"];
+						arc_size = arc_sizes["ytdlp-interface_x86_win7.7z"];
 					else arc_size = j_assets[3]["size"];
 					if(arc_urls.contains("ytdlp-interface_x86_win7.7z"))
 						arc_url = arc_urls["ytdlp-interface_x86_win7.7z"];
@@ -2014,7 +2014,7 @@ void GUI::updater_update_self(themed_form &parent)
 				else
 				{
 					if(arc_sizes.contains("ytdlp-interface_x86.7z"))
-						arc_size = arc_size["ytdlp-interface_x86.7z"];
+						arc_size = arc_sizes["ytdlp-interface_x86.7z"];
 					else arc_size = j_assets[1]["size"];
 					if(arc_urls.contains("ytdlp-interface_x86.7z"))
 						arc_url = arc_urls["ytdlp-interface_x86.7z"];

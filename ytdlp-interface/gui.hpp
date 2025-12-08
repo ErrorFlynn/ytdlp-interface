@@ -56,7 +56,7 @@ private:
 		thr_qitem_data, thr_queue_remove;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.18.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 5)};
+	const std::string ver_tag {"v2.18.1"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 5)*/};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
 	nana::timer tmsg, tqueue, t_load_qitem_data;
