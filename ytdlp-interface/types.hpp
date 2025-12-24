@@ -4,6 +4,8 @@
 #include <unordered_set>
 #include <nana/gui.hpp>
 #include <iostream>
+#include <thread>
+#include <mutex>
 #include "json.hpp"
 
 #define WM_SET_QLINE_TEXT (WM_APP + 0x0001)

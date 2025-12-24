@@ -165,6 +165,7 @@ GUI::gui_bottom::gui_bottom(GUI &gui)
 
 	if(prevbot)
 	{
+		com_chap = prevbot->com_chap;
 		cbsubs = prevbot->cbsubs;
 		cbthumb = prevbot->cbthumb;
 		cbtime = prevbot->cbtime;
@@ -175,6 +176,7 @@ GUI::gui_bottom::gui_bottom(GUI &gui)
 	}
 	else
 	{
+		com_chap = conf.com_chap;
 		cbsubs = conf.cbsubs;
 		cbthumb = conf.cbthumb;
 		cbtime = conf.cbtime;
@@ -183,8 +185,6 @@ GUI::gui_bottom::gui_bottom(GUI &gui)
 		cbargs = conf.cbargs;
 		argset = conf.argset;
 	}
-
-	//gui.queue_panel.focus();
 }
 
 

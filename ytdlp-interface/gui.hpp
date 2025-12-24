@@ -32,6 +32,7 @@ public:
 
 	static settings_t conf;
 	static std::unordered_map<std::string, settings_t> conf_presets;
+	static nana::internationalization lang;
 	fs::path confpath, infopath;
 	std::function<bool()> fn_write_conf;
 	nlohmann::json unfinished_qitems_data;
@@ -56,13 +57,12 @@ private:
 		thr_qitem_data, thr_queue_remove;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.18.1"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 5)*/};
+	const std::string ver_tag {"v2.18.2"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 5)*/};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
-	nana::timer tmsg, tqueue, t_load_qitem_data;
+	nana::timer tmsg, tqueue, t_load_qitem_data, t_url_flash;
 	std::string tmsg_title, tmsg_text;
 	nana::window tmsg_parent;
-	nana::internationalization i18n;
 
 	struct { nana::menu *m {nullptr}; std::size_t pos {0}; } vidsel_item;
 
@@ -166,6 +166,7 @@ private:
 		std::thread::id main_thread_id;
 		bool working {false};
 		GUI *pgui {nullptr};
+		nana::timer t_selcopy_flash, t_cmdcopy_flash;
 
 	public:
 
@@ -371,8 +372,6 @@ private:
 			}
 			if(unfinished_qitems_data.empty())
 				lbq.auto_draw(true);
-			if(!conf.url_passed_as_arg.empty())
-				add_url(conf.url_passed_as_arg, false, false);
 			adjust_lbq_headers();
 
 			if(conf.cb_queue_autostart)

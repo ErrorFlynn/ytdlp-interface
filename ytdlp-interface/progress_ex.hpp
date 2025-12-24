@@ -3,6 +3,7 @@
 #include <nana/gui/drawing.hpp>
 #include <nana/gui/widgets/progress.hpp>
 #include <array>
+#include <thread>
 #include <nana/gui.hpp>
 #include <Windows.h>
 

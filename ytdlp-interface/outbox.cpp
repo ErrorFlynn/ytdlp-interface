@@ -3,23 +3,118 @@
 
 void GUI::Outbox::create(GUI *parent, bool visible)
 {
+	using namespace nana;
+	using ::widgets::theme;
+
 	main_thread_id = std::this_thread::get_id();
 	pgui = parent;
 	Textbox::create(*parent, visible);
 	editable(false);
+	enable_caret();
 	line_wrapped(true);
 	set_undo_queue_length(0);
 	enable_border_focused(false);
 	highlight(pgui->conf.kwhilite);
 	scheme().mouse_wheel.lines = 3;
-	typeface(nana::paint::font_info {"Arial", 10});
-	nana::API::effects_edge_nimbus(*this, nana::effects::edge_nimbus::none);
+	typeface(paint::font_info {"Arial", 10});
+	api::effects_edge_nimbus(*this, effects::edge_nimbus::none);
+
+	t_selcopy_flash.interval(std::chrono::milliseconds {20});
+	t_selcopy_flash.elapse([this]
+	{
+		static color orig_bg;
+		static double steps {1000};
+		static int iterations {0};
+		static bool increasing, active {false};
+		if(!active)
+			orig_bg = scheme().selection;
+		active = true;
+		scheme().selection = orig_bg.blend(theme::fmbg, 1.0 - steps / 1000);
+		api::refresh_window(*this);
+		if(increasing)
+			steps += 100;
+		else steps -= 350;
+		if(steps >= 1000)
+		{
+			steps = 1000;
+			iterations++;
+			increasing = false;
+		}
+		if(steps <= 0)
+		{
+			steps = 0;
+			increasing = true;
+		}
+		if(iterations == 1)
+		{
+			steps = 1000;
+			iterations = 0;
+			increasing = false;
+			scheme().selection = orig_bg;
+			api::refresh_window(*this);
+			t_selcopy_flash.stop();
+			active = false;
+		}
+	});
+
+	t_cmdcopy_flash.interval(std::chrono::milliseconds {20});
+	t_cmdcopy_flash.elapse([this]
+	{
+		using namespace nana;
+		static color orig_bg;
+		static double steps {1000};
+		static int iterations {0};
+		static bool increasing, active {false};
+		if(!active)
+			orig_bg = scheme().selection;
+		active = true;
+		auto ca {colored_area_access()};
+		auto p {ca->get(0)};
+		p->count = 1;
+		p->fgcolor = (conf.kwhilite ? (theme::is_dark() ? theme::path_link_fg : color {"#569"}) : theme::tbfg).blend(theme::fmbg, 1.0 - steps / 1000);
+		api::refresh_window(*this);
+		if(increasing)
+			steps += 100;
+		else steps -= 300;
+		if(steps >= 1000)
+		{
+			steps = 1000;
+			iterations++;
+			increasing = false;
+		}
+		if(steps <= 0)
+		{
+			steps = 0;
+			increasing = true;
+		}
+		if(iterations == 1)
+		{
+			steps = 1000;
+			iterations = 0;
+			increasing = false;
+			scheme().selection = orig_bg;
+			api::refresh_window(*this);
+			t_cmdcopy_flash.stop();
+			active = false;
+		}
+	});
 
 	events().dbl_click([&](const nana::arg_mouse &arg)
 	{
 		if(arg.is_left_button())
 		{
 			pgui->show_queue();
+		}
+	});
+
+	events().key_char([&](const nana::arg_keyboard &arg)
+	{
+		using namespace nana;
+
+		if(arg.key == nana::keyboard::copy)
+		{
+			if(!t_selcopy_flash.started())
+				t_selcopy_flash.start();
 		}
 	});
 
@@ -33,50 +128,21 @@ void GUI::Outbox::create(GUI *parent, bool visible)
 		if(arg.button == mouse::right_button)
 		{
 			::widgets::Menu m;
-			m.item_pixels(24);
+			m.item_pixels(24);			
 
-			m.append("Copy to clipboard", [&](menu::item_proxy)
+			m.append("Copy selection", [&](menu::item_proxy)
 			{
-				util::set_clipboard_text(pgui->hwnd, to_wstring(text));
-
-				if(!thr.joinable()) thr = std::thread([this]
-				{
-					working = true;
-					auto bgclr {bgcolor()};
-					auto blendclr {theme::is_dark() ? colors::dark_orange : colors::orange};
-					std::vector<color> blended_colors;
-					for(auto n {.1}; n > 0; n -= .01)
-						blended_colors.push_back(bgcolor().blend(blendclr, n));
-					int n {0};
-					if(theme::is_dark())
-					{
-						for(auto i {blended_colors.size() / 2}; i < blended_colors.size(); i++)
-						{
-							bgcolor(blended_colors[i]);
-							Sleep(90 - n);
-							n += 18;
-						}
-					}
-					else for(const auto &clr : blended_colors)
-					{
-						bgcolor(clr);
-						Sleep(90 - n);
-						n += 9;
-					}
-					bgcolor(bgclr);
-					if(working)
-					{
-						working = false;
-						if(thr.joinable())
-							thr.detach();
-					}
-				});
-			}).enabled(arg.window_handle == handle());
+				if(!t_selcopy_flash.started())
+					t_selcopy_flash.start();
+				copy();
+			}).enabled(selected());
 
 			if(commands.contains(current_))
 			{
-				m.append("Copy command only", [this](menu::item_proxy)
+				m.append("Copy command line", [this](menu::item_proxy)
 				{
+					if(!t_cmdcopy_flash.started())
+						t_cmdcopy_flash.start();
 					util::set_clipboard_text(pgui->hwnd, to_wstring(commands[current_]));
 				}).enabled(arg.window_handle == handle());
 
@@ -171,6 +237,7 @@ void GUI::Outbox::show(std::wstring url)
 				}
 				nana::API::refresh_window(*this);
 			}
+			select(false);
 		}
 		widget::show();
 		pgui->overlay.hide();

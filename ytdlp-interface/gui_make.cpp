@@ -915,8 +915,9 @@ void GUI::make_message_handlers()
 		{
 			if(GetAsyncKeyState(VK_CONTROL) & 0xff00)
 			{
-				if(queue_panel.visible() && api::focus_window() != com_args && api::focus_window() != tbrate)
+				if(queue_panel.visible() && api::focus_window() != com_args && api::focus_window() != tbrate && !qurl.empty())
 				{
+					l_url.update_caption();
 					std::wstring text;
 					const auto sel {lbq.selected()};
 					for(const auto &ipair : sel)
@@ -926,6 +927,8 @@ void GUI::make_message_handlers()
 						text += lbq.at(ipair).value<lbqval_t>().url;
 					}
 					util::set_clipboard_text(hwnd, text);
+					if(!t_url_flash.started())
+						t_url_flash.start();
 				}
 			}
 		}

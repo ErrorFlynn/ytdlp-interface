@@ -10,6 +10,7 @@
 
 settings_t GUI::conf;
 std::unordered_map<std::string, settings_t> GUI::conf_presets;
+nana::internationalization GUI::lang;
 
 
 GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::_1)}
@@ -120,6 +121,36 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 	});
 	tqueue.start();
 
+	t_url_flash.interval(std::chrono::milliseconds {10});
+	t_url_flash.elapse([this]
+	{
+		static double steps {1000};
+		static int iterations {0};
+		static bool increasing {false};
+		l_url.fgcolor(::widgets::theme::path_link_fg.blend(::widgets::theme::fmbg, 1.0 - steps / 1000));
+		if(increasing)
+			steps += 100;
+		else steps -= 150;
+		if(steps == 1000)
+		{
+			iterations++;
+			increasing = false;
+		}
+		if(steps <= 0)
+		{
+			steps = 0;
+			increasing = true;
+		}
+		if(iterations == 2)
+		{
+			steps = 0;
+			iterations = 0;
+			increasing = true;
+			l_url.fgcolor(::widgets::theme::path_link_fg);
+			t_url_flash.stop();
+		}
+	});
+
 	t_load_qitem_data.interval(std::chrono::milliseconds {0});
 	t_load_qitem_data.elapse([this]
 	{
@@ -127,6 +158,9 @@ GUI::GUI() : themed_form {std::bind(&GUI::apply_theme, this, std::placeholders::
 		if(fs::exists(infopath))
 			fm_loading();
 		else init_qitems();
+
+		if(!conf.url_passed_as_arg.empty())
+			add_url(conf.url_passed_as_arg, false, false);
 	});
 	t_load_qitem_data.start();
 
@@ -1775,6 +1809,7 @@ void GUI::show_output()
 	queue_panel.hide();
 	outbox.show(curbot.url);
 	outbox.highlight(conf.kwhilite);
+	outbox.enable_caret();
 	SendMessage(hwnd, WM_SETREDRAW, TRUE, 0);
 }
 
