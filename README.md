@@ -5,13 +5,13 @@ To use, unpack the archive in a new folder at a location of your choice, and run
 
 ## Download links for the latest version
 
-64 bit: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v2.18.2/ytdlp-interface.7z
+64 bit: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v2.19.0/ytdlp-interface.7z
 
-32 bit: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v2.18.2/ytdlp-interface_x86.7z
+32 bit: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v2.19.0/ytdlp-interface_x86.7z
 
-Windows 7 64 bit: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v2.18.2/ytdlp-interface_win7.7z
+Windows 7 64 bit: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v2.19.0/ytdlp-interface_win7.7z
 
-Windows 7 32 bit: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v2.18.2/ytdlp-interface_x86_win7.7z
+Windows 7 32 bit: https://github.com/ErrorFlynn/ytdlp-interface/releases/download/v2.19.0/ytdlp-interface_x86_win7.7z
 
 
 ---
