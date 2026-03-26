@@ -69,6 +69,13 @@ semver_t::semver_t(std::string ver_tag)
 }
 
 
+std::string semver_t::string() const noexcept
+{
+	using namespace std;
+	return to_string(major) + '.' + to_string(minor) + '.' + to_string(patch);
+}
+
+
 bool semver_t::operator > (const semver_t &o)
 {
 	return major > o.major || major == o.major && minor > o.minor || major == o.major && minor == o.minor && patch > o.patch;
@@ -84,6 +91,12 @@ bool semver_t::operator < (const semver_t &o)
 bool semver_t::operator == (const semver_t &o)
 {
 	return major == o.major && minor == o.minor && patch == o.patch;
+}
+
+
+bool semver_t::operator!=(const semver_t &o)
+{
+	return major != o.major || minor != o.minor || patch != o.patch;
 }
 
 

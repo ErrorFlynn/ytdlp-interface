@@ -54,6 +54,9 @@ struct semver_t
 	bool operator > (const semver_t &o);
 	bool operator < (const semver_t &o);
 	bool operator == (const semver_t &o);
+	bool operator != (const semver_t &o);
+
+	std::string string() const noexcept;
 };
 
 
@@ -119,7 +122,7 @@ struct settings_t
 		zoomed {false}, get_releases_at_startup {false}, col_format {false}, col_format_note {true}, col_ext {true}, col_fsize {false},
 		json_hide_null {false}, col_site_icon {true}, col_site_text {false}, ytdlp_nightly {true}, audio_multistreams {false},
 		cb_sblock_mark {false}, cb_sblock_remove {false}, cb_proxy {false}, cbsnap {true}, limit_output_buffer {true},
-		update_self_only {true}, cb_premium {true}, cbminw {false}, cb_save_errors {false}, cb_ffplay {false}, cb_clear_done {false},
+		update_self_only {false}, cb_premium {true}, cbminw {false}, cb_save_errors {false}, cb_ffplay {false}, cb_clear_done {false},
 		cb_formats_fsize_bytes {false}, cb_add_on_focus {false}, cb_custom_dark_theme {false}, cb_custom_light_theme {false},
 		cb_display_custom_filenames {false}, cb_aria {false}, cb_sub_selection {false}, cb_cookies {false};
 	nana::rectangle winrect;

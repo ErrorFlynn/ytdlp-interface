@@ -43,21 +43,21 @@ private:
 	nlohmann::json releases;
 	fs::path self_path, appdir;
 	std::thread::id main_thread_id;
-	std::string inet_error, url_latest_ffmpeg, url_latest_ytdlp, url_latest_ytdlp_relnotes;
+	std::string inet_error, url_latest_ffmpeg, url_latest_ytdlp, url_latest_deno, url_latest_ytdlp_relnotes, url_latest_deno_relnotes;
 	std::wstring drop_cliptext_temp, lbq_url_to_select, lbq_erase_url_to_select;
 	std::atomic_int active_info_threads {0}, total_info_threads {0};
 	std::wstringstream multiple_url_text;
 	long minw {0}, minh {0}; // min frame size
-	unsigned size_latest_ffmpeg {0}, size_latest_ytdlp {0}, number_of_processors {4};
+	unsigned size_latest_ffmpeg {0}, size_latest_ytdlp {0}, size_latest_deno {0}, number_of_processors {4};
 	bool menu_working {false}, thumbthr_working {false}, use_ffmpeg_location {false},
 		autostart_next_item {true}, lbq_can_drag {false}, no_draw_freeze {true}, save_queue {false},
 		pwr_can_shutdown {false}, pwr_shutdown {false}, pwr_hibernate {false}, pwr_sleep {false}, start_suspend_fm {false}, 
 		close_when_finished {false}, bot_showing {false};
 	std::thread thr_updater, thr_releases, thr_versions, thr_ver_ffmpeg, thr_thumb, thr_menu_start_stop, thr_releases_ffmpeg, thr_releases_ytdlp,
-		thr_qitem_data, thr_queue_remove;
+		thr_qitem_data, thr_queue_remove, thr_ver_deno, thr_releases_deno, thr_updater_deno;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.18.2"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 5)*/};
+	const std::string ver_tag {"v2.19.0"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 5)*/};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
 	nana::timer tmsg, tqueue, t_load_qitem_data, t_url_flash;
@@ -80,7 +80,7 @@ private:
 
 	
 	version_t ver_ffmpeg, ver_ffmpeg_latest, ver_ytdlp, ver_ytdlp_latest;
-	semver_t cur_ver {ver_tag};
+	semver_t cur_ver {ver_tag}, ver_deno, ver_deno_latest;
 
 	class gui_bottom
 	{
@@ -114,6 +114,7 @@ private:
 		bool browse_for_filename();
 		void from_json(const nlohmann::json &j);
 		void to_json(nlohmann::json &j);
+		bool is_playlist() const noexcept { return is_gen_playlist || is_ytplaylist || is_bcplaylist || is_scplaylist; }
 	};
 
 	class gui_bottoms
@@ -248,15 +249,15 @@ private:
 /*************/
 
 	widgets::conf_page updater;	
-	widgets::Label l_ver, l_ver_ytdlp, l_ver_ffmpeg, l_channel, l_ytdlp, l_ffmpeg;
+	widgets::Label l_ver, l_ver_ytdlp, l_ver_ffmpeg, l_ver_deno, l_channel, l_ytdlp, l_ffmpeg, l_deno;
 	widgets::path_label l_ytdlp_path, l_ffmpeg_path;
-	widgets::Text l_vertext, l_ytdlp_text, l_ffmpeg_text;
-	widgets::Button btn_changes, btn_update, btn_update_ytdlp, btn_update_ffmpeg;
+	widgets::Text l_vertext, l_ytdlp_text, l_ffmpeg_text, l_deno_text;
+	widgets::Button btn_changes, btn_update, btn_update_ytdlp, btn_update_ffmpeg, btn_update_deno;
 	widgets::cbox cb_startup, cb_selfonly, cb_chan_stable, cb_chan_nightly, cb_ffplay;
 	nana::radio_group rgp_chan;
-	widgets::Progress prog_updater, prog_updater_misc;
-	widgets::Separator sep1, sep2;
-	nana::timer updater_t0, updater_t1, updater_t2;
+	widgets::Progress prog_updater, prog_updater_misc, prog_updater_deno;
+	widgets::Separator sep1, sep2, sep3;
+	nana::timer updater_t0, updater_t1, updater_t2, updater_t3;
 	bool updater_working {false};
 
 	widgets::Title fm_alert_title;
@@ -266,7 +267,9 @@ private:
 	void updater_display_version();
 	void updater_display_version_ffmpeg();
 	void updater_display_version_ytdlp();
+	void updater_display_version_deno();
 	void updater_update_self(themed_form &parent);
+	void updater_update_deno(themed_form &parent);
 	void updater_update_misc(bool ytdlp, fs::path target = "");
 	bool updater_check_paths(bool ffmpeg_only);
 	void fm_settings();
@@ -297,8 +300,10 @@ private:
 	void get_releases(nana::window parent_for_msgbox);
 	void get_latest_ffmpeg(nana::window parent_for_msgbox);
 	void get_latest_ytdlp(nana::window parent_for_msgbox);
+	void get_latest_deno(nana::window parent_for_msgbox);
 	void get_versions();
 	void get_version_ytdlp();
+	void get_version_deno();
 	void get_version_ffmpeg(bool auto_detach = true);
 	bool is_ytlink(std::wstring url);
 	bool is_ytchan(std::wstring url);

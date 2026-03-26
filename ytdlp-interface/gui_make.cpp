@@ -191,6 +191,8 @@ void GUI::make_form()
 			thr_versions.detach();
 		if(thr_ver_ffmpeg.joinable())
 			thr_ver_ffmpeg.detach();
+		if(thr_ver_deno.joinable())
+			thr_ver_deno.detach();
 		if(i_taskbar)
 			i_taskbar.Release();
 
@@ -846,7 +848,7 @@ void GUI::make_message_handlers()
 				if(bottoms.at(url).started)
 					item.text(3, "processing");
 				else return true;
-				if(conf.cb_lengthyproc && bottoms.contains(url))
+				if(conf.cb_lengthyproc && bottoms.contains(url) && !bottoms.at(url).is_playlist())
 				{
 					auto &bottom {bottoms.at(url)};
 					if(!bottom.received_procmsg)

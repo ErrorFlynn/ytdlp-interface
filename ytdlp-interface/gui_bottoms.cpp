@@ -149,8 +149,9 @@ GUI::gui_bottom &GUI::gui_bottoms::add(std::wstring url)
 		pbot->is_bclink = url.find(L"bandcamp.com") != -1;
 		pbot->is_bcchan = url.find(L".bandcamp.com/music") != -1 || url.rfind(L".bandcamp.com") == url.size() - 13
 			|| url.rfind(L".bandcamp.com/") == url.size() - 14;
-		if(url.find(L"rutube.ru/metainfo/tv/") != -1 || url.find(L"vkvideo.ru/playlist/") != -1 )
-			pbot->is_gen_playlist = true;
+		if(url.contains(L"rutube.ru/metainfo/tv/") || url.contains(L"vkvideo.ru/playlist/") || 
+			(url.starts_with(L"https://www.bilibili.com/") && url.contains(L"/play/")))
+				pbot->is_gen_playlist = true;
 		return *pbot;
 	}
 	return *it->second;

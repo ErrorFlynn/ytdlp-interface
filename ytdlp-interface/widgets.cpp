@@ -1362,11 +1362,11 @@ void conf_tree::select(std::string field_name)
 
 void conf_page::create(nana::window parent)
 {
-	nana::panel<true>::create(parent);
-	plc = std::make_unique<nana::place>(*this);
+	panel_ex::create(parent);
+	//plc = std::make_unique<nana::place>(*this);
 	refresh_theme();
 	events().expose([this] { refresh_theme(); });
-	events().resized([this] { plc->collocate(); });
+	//events().resized([this] { plc->collocate(); });
 }
 
 
@@ -1628,4 +1628,82 @@ void widgets::Title::create(nana::window parent, std::string_view text)
 void widgets::Title::refresh_theme()
 {
 	fgcolor(theme::title_fg);
+}
+
+void widgets::panel_ex::create(nana::window parent)
+{
+	using namespace nana;
+	panel<true>::create(parent);
+	viewport.create(actual_handle());
+	last_widget.create(viewport, false);
+	scroll_v.create(actual_handle());
+	scroll_h.create(actual_handle());
+
+	if(plc) delete plc.release();
+	plc = std::make_unique<place>(actual_handle());
+	plc->div("vert <<viewport><scroll_v margin=[0,0,0,20px] weight=35px>> <scroll_h weight=15px>");
+	plc->field_display("scroll_h", false);
+	plc->field_display("scroll_v", false);
+	(*plc)["viewport"] << viewport;
+	(*plc)["scroll_v"] << scroll_v;
+	(*plc)["scroll_h"] << scroll_h;
+
+	if(plc_view) delete plc_view.release();
+	plc_view = std::make_unique<place>(viewport);
+	plc_view->div("<last weight=0>");
+	(*plc_view)["last"] << last_widget;
+
+	ffi.plc = plc_view.get();
+
+	events().resized([this]
+	{
+		if(scrollable())
+		{
+			const auto content_height {static_cast<unsigned>(last_widget.pos().y)};
+			if(!plc->field_visible("scroll_v"))
+			{
+				plc->field_display("scroll_v", true);
+				plc->collocate();
+				scroll_v.value(0);
+			}
+			scroll_v.range(size().height);
+			scroll_v.amount(content_height);
+			viewport.move(0, -static_cast<int>(scroll_v.value()));
+			viewport.size({viewport.size().width, content_height});
+		}
+		else if(plc->field_visible("scroll_v"))
+		{
+			plc->field_display("scroll_v", false);
+			plc->collocate();
+		}
+	});
+
+	events().mouse_wheel([this](const arg_wheel &arg)
+	{
+		if(scrollable() && arg.which == arg_wheel::wheel::vertical)
+		{
+			scroll_v.make_step(!arg.upwards, 35);
+		}
+	});
+
+	scroll_v.events().value_changed([this]
+	{
+		if(api::focus_window() != viewport)
+			viewport.focus(); // avoids a display issue due to the problematic way edge_nimbus effect is drawn (drawer.cpp - edge_nimbus_renderer::render)
+		viewport.move(0, -static_cast<int>(scroll_v.value()));
+	});
+}
+
+void widgets::panel_ex::div(std::string div_text)
+{
+	plc_view->div(div_text + "<last weight=0>");
+}
+
+nana::place::field_reference panel_ex::fake_field_interface::operator<<(nana::window wd)
+{
+	nana::api::get_widget(wd)->events().mouse_wheel([this](const nana::arg_wheel &arg)
+	{
+		panel->events().mouse_wheel.emit(arg, panel->actual_handle());
+	});
+	return plc->field(field_name.data()).operator<<(wd);
 }

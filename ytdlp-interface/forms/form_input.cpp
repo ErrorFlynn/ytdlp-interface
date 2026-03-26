@@ -22,6 +22,7 @@ std::pair<bool, std::string> GUI::input_box(nana::window owner, std::string capt
 	l_prompt.text_align(align::center, align_v::center);
 
 	::widgets::Textbox tb {fm};
+	tb.caption(init_text);
 	tb.multi_lines(false);
 	tb.padding(0, 5, 0, 5);
 	tb.events().key_press([&](const arg_keyboard &arg)

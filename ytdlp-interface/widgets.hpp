@@ -13,6 +13,7 @@
 #include <nana/gui/widgets/menu.hpp>
 #include <nana/gui/widgets/spinbox.hpp>
 #include <nana/gui/widgets/treebox.hpp>
+#include <nana/gui/widgets/scroll.hpp>
 #include <nana/paint/text_renderer.hpp>
 
 #include <variant>
@@ -661,22 +662,6 @@ namespace widgets
 		auto selected_page() const { return selected().value<std::string>(); }
 	};
 
-	class conf_page : public nana::panel<true>
-	{
-		std::unique_ptr<nana::place> plc;
-
-	public:
-
-		conf_page() = default;
-		conf_page(nana::window parent) { create(parent); }
-
-		void create(nana::window parent);
-		void refresh_theme();
-		auto &get_place() { return *plc; }
-		void div(std::string div_text) { plc->div(div_text); }
-		auto &operator[](const char *field_name) { return plc->field(field_name); }
-	};
-
 
 	class sblock_listbox : public nana::listbox
 	{
@@ -721,6 +706,65 @@ namespace widgets
 
 		void create(nana::window parent, std::string_view text = "", bool visible = true);
 		void refresh_theme();
+	};
+
+
+	// currently supporting vertical scrolling only
+	class panel_ex : public nana::panel<true>
+	{
+		panel<true> viewport;
+		nana::scroll<true> scroll_v;
+		nana::scroll<false> scroll_h;
+		nana::label last_widget;
+		std::unique_ptr<nana::place> plc, plc_view;
+
+		struct fake_field_interface
+		{
+			nana::place *plc {nullptr};
+			panel_ex *panel {nullptr};
+			std::string field_name;
+
+			fake_field_interface(panel_ex *panel, nana::place *plc = nullptr) : plc {plc}, panel {panel} {}
+			nana::place::field_reference operator<<(nana::window wd);
+		}
+		ffi {this};
+
+	public:
+
+		panel_ex() = default;
+		panel_ex(nana::window parent) { create(parent); }
+		void create(nana::window parent);
+		void div(std::string div_text);
+		void collocate() { plc->collocate(); plc_view->collocate(); }
+		auto handle() { return viewport.handle(); }
+		operator nana::window() const { return viewport.handle(); }
+		auto actual_handle() const { return nana::panel<true>::handle(); }
+		auto &get_place() const { return *plc_view; }
+		void bgcolor(const nana::color &clr) { nana::panel<true>::bgcolor(clr); viewport.bgcolor(clr); }
+		bool scrollable() const { return size().height < last_widget.pos().y; }
+
+		auto &operator[](const char *field_name)
+		{
+			ffi.field_name = field_name;
+			return ffi;
+		}
+	};
+
+
+	class conf_page : public panel_ex
+	{
+		//std::unique_ptr<nana::place> plc;
+
+	public:
+
+		conf_page() = default;
+		conf_page(nana::window parent) { create(parent); }
+
+		void create(nana::window parent);
+		void refresh_theme();
+		//auto &get_place() { return *plc; }
+		//void div(std::string div_text) { plc->div(div_text); }
+		//auto &operator[](const char *field_name) { return plc->field(field_name); }
 	};
 }
 

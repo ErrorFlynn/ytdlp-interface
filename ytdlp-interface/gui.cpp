@@ -1899,8 +1899,8 @@ void GUI::get_latest_ffmpeg(nana::window parent_for_msgbox)
 	{
 		std::string jtext;
 		if(win7)
-			jtext = util::get_inet_res("https://api.github.com/repos/kusaanko/FFmpeg-Auto-Build/releases", &inet_error);
-		else jtext = util::get_inet_res("https://api.github.com/repos/yt-dlp/FFmpeg-Builds/releases", &inet_error);
+			jtext = util::get_inet_res("https://api.github.com/repos/kusaanko/FFmpeg-Auto-Build/releases/latest", &inet_error);
+		else jtext = util::get_inet_res("https://api.github.com/repos/yt-dlp/FFmpeg-Builds/releases/latest", &inet_error);
 		if(!jtext.empty())
 		{
 			json json_ffmpeg;
@@ -1921,29 +1921,24 @@ void GUI::get_latest_ffmpeg(nana::window parent_for_msgbox)
 					thr_releases_ffmpeg.detach();
 				return;
 			}
-			if(!json_ffmpeg.empty() && json_ffmpeg.is_array() && json_ffmpeg[0].contains("assets"))
+			if(!json_ffmpeg.empty() && json_ffmpeg.contains("assets"))
 			{
 				url_latest_ffmpeg.clear();
-				for(auto &rel : json_ffmpeg)
+				for(auto &el : json_ffmpeg["assets"])
 				{
-					for(auto &el : rel["assets"])
+					std::string url {el["browser_download_url"]};
+					if(win7 && url.contains(X64 ? "/win64_win64_" : "/win32_win32_") || 
+						url.contains(X64 ? "ffmpeg-master-latest-win64-gpl.zip" : "ffmpeg-master-latest-win32-gpl.zip") ||
+						url.contains(X64 ? "win64-gpl.zip" : "win32-gpl.zip"))
 					{
-						std::string url {el["browser_download_url"]};
-						if(win7 && url.find(X64 ? "/win64_win64_" : "/win32_win32_") != -1 || 
-							url.find(X64 ? "ffmpeg-master-latest-win64-gpl.zip" : "ffmpeg-master-latest-win32-gpl.zip") != -1 ||
-							url.find(X64 ? "win64-gpl.zip" : "win32-gpl.zip") != -1)
-						{
-							url_latest_ffmpeg = url;
-							size_latest_ffmpeg = el["size"];
-							std::string date {rel["published_at"]};
-							ver_ffmpeg_latest.year = stoi(date.substr(0, 4));
-							ver_ffmpeg_latest.month = stoi(date.substr(5, 2));
-							ver_ffmpeg_latest.day = stoi(date.substr(8, 2));
-							break;
-						}
-					}
-					if(!url_latest_ffmpeg.empty())
+						url_latest_ffmpeg = url;
+						size_latest_ffmpeg = el["size"];
+						std::string date {json_ffmpeg["published_at"]};
+						ver_ffmpeg_latest.year = stoi(date.substr(0, 4));
+						ver_ffmpeg_latest.month = stoi(date.substr(5, 2));
+						ver_ffmpeg_latest.day = stoi(date.substr(8, 2));
 						break;
+					}
 				}
 			}
 		}
@@ -2021,14 +2016,65 @@ void GUI::get_latest_ytdlp(nana::window parent_for_msgbox)
 }
 
 
+void GUI::get_latest_deno(nana::window parent_for_msgbox)
+{
+	thr_releases_deno = std::thread {[parent_for_msgbox, this]
+	{
+		using json = nlohmann::json;
+		auto jtext {util::get_inet_res("https://api.github.com/repos/denoland/deno/releases/latest", &inet_error)};
+		if(!jtext.empty())
+		{
+			json jrel;
+			try { jrel = json::parse(jtext); }
+			catch(nlohmann::detail::exception e)
+			{
+				tmsg_parent = parent_for_msgbox;
+				tmsg_title = "ytdlp-interface JSON error";
+				std::string str;
+				if(jtext.size() > 600)
+					str = " (showing the first 600 characters)";
+				tmsg_text = "Got an unexpected response when checking GitHub for a new Deno version" + str + ":\n\n" + jtext.substr(0, 600) +
+					"\n\nError from the JSON parser:\n\n" + e.what();
+				if(thr_releases_deno.joinable())
+					thr_releases_deno.detach();
+				return;
+			}
+			if(!jrel.empty() && jrel.contains("assets"))
+			{
+				url_latest_deno.clear();				
+				for(auto &el : jrel["assets"])
+				{
+					std::string url {el["browser_download_url"]};
+					if(url.contains("deno-x86_64-pc-windows-msvc.zip"))
+					{
+						url_latest_deno = url;
+						size_latest_deno = el["size"];
+						url_latest_deno_relnotes = jrel["html_url"];
+						if(jrel.contains("tag_name") && jrel["tag_name"].is_string())
+							ver_deno_latest = semver_t {jrel["tag_name"].get<std::string>()};
+						break;
+					}
+				}
+			}
+		}
+		if(thr_releases_deno.joinable())
+			thr_releases_deno.detach();
+	}};
+}
+
+
 void GUI::get_versions()
 {
 	thr_versions = std::thread {[this]
 	{
 		get_version_ffmpeg(false);
 		get_version_ytdlp();
+		if(X64 && !win7)
+			get_version_deno();
 		if(thr_ver_ffmpeg.joinable())
 			thr_ver_ffmpeg.join();
+		if(thr_ver_deno.joinable())
+			thr_ver_deno.join();
 		if(thr_versions.joinable())
 			thr_versions.detach();
 	}};
@@ -2053,6 +2099,28 @@ void GUI::get_version_ytdlp()
 			}
 		}
 		else conf.ytdlp_path.clear();
+	}
+}
+
+
+void GUI::get_version_deno()
+{
+	fs::path deno_path;
+	if(!conf.ytdlp_path.empty())
+		deno_path = conf.ytdlp_path.parent_path() / "deno.exe";
+	if(deno_path.empty() || !fs::exists(deno_path))
+		deno_path = appdir / "deno.exe";
+	if(fs::exists(deno_path) && !thr_ver_deno.joinable())
+	{
+		thr_ver_deno = std::thread {[=, this]
+		{
+			auto ver {util::run_piped_process(L'\"' + deno_path.wstring() + L"\" --version")};
+			if(ver.starts_with("deno "))
+			{
+				auto rawver {ver.substr(5, ver.find(' ', 5) - 5)};
+				ver_deno = semver_t {rawver};
+			}
+		}};
 	}
 }
 

@@ -596,6 +596,11 @@ std::string util::extract_7z(fs::path arc_path, fs::path out_path, unsigned ffmp
 		{
 			extractor.extractMatching(arc_path, L"ytdlp-interface.exe", out_path);
 		}
+		else if(arc_path.string().contains("deno-"))
+		{
+			BitExtractor ex {lib, BitFormat::Zip};
+			ex.extract(arc_path, out_path);
+		}
 		else extractor.extract(arc_path, out_path);
 		return "";
 	}

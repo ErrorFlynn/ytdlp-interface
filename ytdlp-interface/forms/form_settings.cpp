@@ -21,8 +21,8 @@ void GUI::fm_settings()
 	static std::string start_page {"ytdlp"};
 	unsigned initial_maxdl {conf.max_concurrent_downloads};
 
-	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize>{}};
-	fm.center(820, 650);
+	themed_form fm {nullptr, *this, {}, appear::decorate<appear::minimize, appear::sizable>{}};
+	fm.center(820, 656);
 	fm.caption(title + " - settings");
 	fm.bgcolor(theme::fmbg);
 	fm.snap(conf.cbsnap);
@@ -81,13 +81,13 @@ void GUI::fm_settings()
 	tree.add("About", "about");
 
 	fm["tree"] << tree;
-	fm["ytdlp"] << ytdlp;
-	fm["sblock"] << sblock;
-	fm["queuing"] << queuing;
-	fm["gui"] << gui;
-	fm["updater"] << updater;
-	fm["presets"] << presets;
-	fm["about"] << about;
+	fm["ytdlp"] << ytdlp.actual_handle();
+	fm["sblock"] << sblock.actual_handle();
+	fm["queuing"] << queuing.actual_handle();
+	fm["gui"] << gui.actual_handle();
+	fm["updater"] << updater.actual_handle();
+	fm["presets"] << presets.actual_handle();
+	fm["about"] << about.actual_handle();
 
 	about.div(R"(vert
 		<pnl_header weight=35> <weight=10> <l_about_ver weight=50> <weight=15>
@@ -125,7 +125,7 @@ void GUI::fm_settings()
 		l_view {about, "Switch view (queue/output)"}, l_fname {about, "Set file name of queue item"}, l_copy {about, "Copy selected URL(s)"}, 
 		l_delitem {about, "Delete queue item(s)"}, l_close {about, "Close window"}, l_winpos {about, "Reset window size and position"};
 
-	about["title"] << title;
+	//about["title"] << title;
 	about["pnl_header"] << pnl_header;
 	about["l_about_ver"] << l_about_ver;
 	about["about_sep1"] << about_sep1;
@@ -1252,6 +1252,8 @@ void GUI::fm_settings()
 		updater_working = false;
 		if(thr_updater.joinable())
 			thr_updater.join();
+		if(thr_updater_deno.joinable())
+			thr_updater_deno.join();
 		if(thr_releases.joinable())
 			thr_releases.detach();
 		if(thr_releases_ffmpeg.joinable())
@@ -1319,11 +1321,9 @@ void GUI::fm_settings()
 	{
 		apply_theme(dark);
 		fm.bgcolor(theme::fmbg);
-		ytdlp.bgcolor(theme::fmbg);
-		queuing.bgcolor(theme::fmbg);
-		gui.bgcolor(theme::fmbg);
 		l_sblock.caption(std::regex_replace(sblock_text, std::regex {"\\b(0x)"}, theme::is_dark() ? link_dark : link_light));
 		l_about_ver.caption(std::regex_replace(vertext, std::regex {"\\b(0x)"}, theme::is_dark() ? link_dark : link_light));
+		updater_display_version_deno();
 		updater_display_version_ytdlp();
 		updater_display_version_ffmpeg();
 		gui.get_place().field_display(dark ? "cb_custom_dark_theme" : "cb_custom_light_theme", true);
@@ -1426,8 +1426,13 @@ void GUI::make_updater_page(themed_form &parent)
 		<weight=30 <l_ver_ffmpeg weight=170> <weight=10> <l_ffmpeg_text> > <weight=13>
 		<channel weight=25 <l_channel weight=170> <weight=20> <cb_chan_stable weight=75> <weight=10> <cb_chan_nightly weight=85> <> >
 		<channel_spacer weight=17> <weight=25 <weight=14> <cb_ffplay>> <weight=20>
-		<weight=30 <prog_misc> > <weight=25>
+		<weight=30 <prog_misc>> <weight=25>
 		<weight=30 <> <btn_update_ytdlp weight=150> <weight=20> <btn_update_ffmpeg weight=160> <> >
+		<deno_section vert weight=121
+			<weight=25> <sep3 weight=3> <weight=20>
+			<weight=30 <l_ver_deno weight=150> <weight=10> <l_deno_text> > <weight=13>
+			<weight=30 <btn_update_deno weight=140> <weight=20> <prog_deno>>
+		>
 	)");
 
 	if(win7)
@@ -1436,21 +1441,27 @@ void GUI::make_updater_page(themed_form &parent)
 		updater.get_place().field_display("channel_spacer", false);
 	}
 
+	if(win7 || !X64)
+		updater.get_place().field_display("deno_section", false);
+
 	l_ytdlp.create(updater, "Path to yt-dlp:");
 	l_ffmpeg.create(updater, "FFmpeg folder:");
 	l_ytdlp_path.create(updater, &conf.ytdlp_path);
 	l_ffmpeg_path.create(updater, &conf.ffmpeg_path);
 	l_ver.create(updater, "Latest version:");
 	l_ver_ytdlp.create(updater, "Latest yt-dlp version:");
-	l_ver_ffmpeg.create(updater, "Latest ffmpeg version:");
+	l_ver_ffmpeg.create(updater, "Latest FFmpeg version:");
+	l_ver_deno.create(updater, "Latest Deno version:");
 	l_channel.create(updater, "yt-dlp release channel:");
 	l_vertext.create(updater, "checking...");
 	l_ytdlp_text.create(updater, "checking...");
 	l_ffmpeg_text.create(updater, "checking...");
+	l_deno_text.create(updater, "checking...");
 	btn_changes.create(updater, "Release notes");
 	btn_update.create(updater, "Update");
 	btn_update_ytdlp.create(updater, "Update yt-dlp");
 	btn_update_ffmpeg.create(updater, "Update FFmpeg");
+	btn_update_deno.create(updater, "Update Deno");
 	cb_startup.create(updater, "Check at program startup and display any new version in the title bar");
 	cb_selfonly.create(updater, "Only extract ytdlp-interface.exe from the downloaded archive");
 	cb_chan_stable.create(updater, "Stable");
@@ -1458,8 +1469,10 @@ void GUI::make_updater_page(themed_form &parent)
 	cb_ffplay.create(updater, "When updating ffmpeg, also extract \"ffplay.exe\"");
 	prog_updater.create(updater);
 	prog_updater_misc.create(updater);
+	prog_updater_deno.create(updater);
 	sep1.create(updater, "ytdlp-interface");
 	sep2.create(updater, "ffmpeg & yt-dlp");
+	sep3.create(updater, "JavaScript runtime");
 
 	updater["sep1"] << sep1;
 	updater["cb_startup"] << cb_startup;
@@ -1485,6 +1498,11 @@ void GUI::make_updater_page(themed_form &parent)
 	updater["l_ytdlp_path"] << l_ytdlp_path;
 	updater["l_ffmpeg"] << l_ffmpeg;
 	updater["l_ffmpeg_path"] << l_ffmpeg_path;
+	updater["sep3"] << sep3;
+	updater["l_ver_deno"] << l_ver_deno;
+	updater["l_deno_text"] << l_deno_text;
+	updater["btn_update_deno"] << btn_update_deno;
+	updater["prog_deno"] << prog_updater_deno;
 
 	cb_selfonly.check(conf.update_self_only);
 	cb_startup.check(conf.get_releases_at_startup);
@@ -1517,9 +1535,12 @@ void GUI::make_updater_page(themed_form &parent)
 	btn_update_ytdlp.enabled(false);
 	btn_update_ffmpeg.typeface(nana::paint::font_info {"Segoe UI", 12, {800}});
 	btn_update_ffmpeg.enabled(false);
+	btn_update_deno.typeface(nana::paint::font_info {"Segoe UI", 12, {800}});
+	btn_update_deno.enabled(false);
 	l_ver_ytdlp.text_align(nana::align::right, nana::align_v::center);
 	l_ytdlp_text.format(true);
 	l_ffmpeg_text.format(true);
+	l_deno_text.format(true);
 
 	l_ytdlp_path.events().click([&]
 	{
@@ -1772,6 +1793,11 @@ void GUI::make_updater_page(themed_form &parent)
 		}
 	});
 
+	btn_update_deno.events().click([&parent, this]
+	{
+		updater_update_deno(parent);
+	});
+
 	updater_t0.interval(std::chrono::milliseconds {100});
 	updater_t0.elapse([this]
 	{
@@ -1817,6 +1843,29 @@ void GUI::make_updater_page(themed_form &parent)
 			if(!btn_update_ytdlp.enabled())
 				btn_update_ytdlp.tooltip("");
 			updater_t2.stop();
+		}
+	});
+
+	updater_t3.interval(std::chrono::milliseconds {300});
+	updater_t3.elapse([this]
+	{
+		if(!thr_releases_deno.joinable())
+		{
+			if(!url_latest_deno_relnotes.empty())
+			{
+				nana::api::effects_edge_nimbus(l_deno_text, nana::effects::edge_nimbus::over);
+				l_deno_text.tooltip(url_latest_deno_relnotes);
+				l_deno_text.events().click.clear();
+				l_deno_text.events().click([this]
+				{
+					nana::system::open_url(url_latest_deno_relnotes);
+				});
+			}
+			updater_display_version_deno();
+			btn_update_deno.enable(ver_deno_latest != ver_deno);
+			if(!btn_update_deno.enabled())
+				btn_update_deno.tooltip("");
+			updater_t3.stop();
 		}
 	});
 
@@ -1871,7 +1920,48 @@ void GUI::updater_display_version()
 			}
 			vertext = tag_name + " (new version)";
 			btn_update.enabled(true);
-			std::string arc_url {releases[0]["assets"][X64 ? (win7 ? 2 : 0) : (win7 ? 3 : 1)]["browser_download_url"]};
+
+			std::map<std::string, std::string> arc_urls;
+			auto j_assets {releases[0]["assets"]};
+			for(const auto &asset : j_assets)
+			{
+				if(asset.contains("name"))
+				{
+					const auto name {asset["name"].get<std::string>()};
+					arc_urls[name] = asset["browser_download_url"];
+				}
+			}
+			std::string arc_url;
+			if(X64)
+			{
+				if(win7)
+				{
+					if(arc_urls.contains("ytdlp-interface_win7.7z"))
+						arc_url = arc_urls["ytdlp-interface_win7.7z"];
+					else arc_url = j_assets[2]["browser_download_url"];
+				}
+				else
+				{
+					if(arc_urls.contains("ytdlp-interface.7z"))
+						arc_url = arc_urls["ytdlp-interface.7z"];
+					else arc_url = j_assets[0]["browser_download_url"];
+				}
+			}
+			else
+			{
+				if(win7)
+				{
+					if(arc_urls.contains("ytdlp-interface_x86_win7.7z"))
+						arc_url = arc_urls["ytdlp-interface_x86_win7.7z"];
+					else arc_url = j_assets[3]["browser_download_url"];
+				}
+				else
+				{
+					if(arc_urls.contains("ytdlp-interface_x86.7z"))
+						arc_url = arc_urls["ytdlp-interface_x86.7z"];
+					else arc_url = j_assets[1]["browser_download_url"];
+				}
+			}
 			btn_update.tooltip(arc_url);
 		}
 		else vertext = tag_name + " (current)";
@@ -1932,6 +2022,40 @@ void GUI::updater_display_version_ytdlp()
 }
 
 
+void GUI::updater_display_version_deno()
+{
+	if(url_latest_deno.empty())
+	{
+		l_deno_text.error_mode(true);
+		l_deno_text.caption("unable to get from GitHub");
+		if(!inet_error.empty())
+			l_deno_text.tooltip(inet_error);
+	}
+	else
+	{
+		bool not_present {false};
+		if(conf.ytdlp_path.empty())
+		{
+			if(!fs::exists(appdir / "deno.exe"))
+				not_present = true;
+		}
+		else if(!fs::exists(conf.ytdlp_path.parent_path() / "deno.exe"))
+			not_present = true;
+		l_deno_text.error_mode(false);
+		std::string click_for_changelog {url_latest_deno_relnotes.empty() ? "" : "  [click for changelog]"};
+		if(ver_deno_latest != ver_deno)
+		{
+			std::string errclr {widgets::theme::is_dark() ? "<color=0xe09999>" : "<color=0xbb5555>"};
+			l_deno_text.caption(ver_deno_latest.string() + "  (current = " +
+				(not_present ? errclr + "not present</>)" + click_for_changelog : ver_deno.string() + ")" + click_for_changelog));
+			btn_update_deno.enabled(true);
+			btn_update_deno.tooltip(url_latest_deno);
+		}
+		else l_deno_text.caption(ver_deno_latest.string() + "  (current)" + click_for_changelog);
+	}
+}
+
+
 void GUI::updater_update_self(themed_form &parent)
 {
 	queue_save_data();
@@ -1952,7 +2076,7 @@ void GUI::updater_update_self(themed_form &parent)
 			{
 				::widgets::msgbox mbox {parent, "ytdlp-interface update error"};
 				mbox.icon(nana::msgbox::icon_error);
-				(mbox << "The latest release on GitHub doesn't seem to contain a 32-bit build!")();
+				(mbox << "The latest release on GitHub doesn't seem to contain a 32-bit package!")();
 				btn_update.caption("Update");
 				thr_updater.detach();
 				return;
@@ -2026,12 +2150,13 @@ void GUI::updater_update_self(themed_form &parent)
 			}
 			prog_updater.amount(arc_size);
 			prog_updater.value(0);
-			auto cb_progress = [&](unsigned prog_chunk)
+			auto arc_name {arc_url.substr(arc_url.rfind('/') + 1)};
+			auto cb_progress = [&, arc_name](unsigned prog_chunk)
 			{
 				progval += prog_chunk;
 				auto total {util::int_to_filesize(arc_size, false)},
 					pct {std::to_string(progval / (arc_size / 100)) + '%'};
-				prog_updater.caption("downloading archive: " + pct + " of " + total);
+				prog_updater.caption(arc_name + " : " + pct + " of " + total);
 				prog_updater.value(progval);
 			};
 			auto dl_error {util::dl_inet_res(arc_url, arc_path, &updater_working, cb_progress)};
@@ -2085,7 +2210,76 @@ void GUI::updater_update_self(themed_form &parent)
 		updater_working = false;
 		thr_updater.detach();
 	}
-};
+}
+
+
+void GUI::updater_update_deno(themed_form &parent)
+{
+	if(btn_update_deno.caption() != "Cancel")
+	{
+		btn_update_deno.caption("Cancel");
+		thr_updater_deno = std::thread {[this]
+		{
+			updater_working = true;
+			auto arc_path {fs::temp_directory_path() / url_latest_deno.substr(url_latest_deno.rfind('/') + 1)};
+			unsigned progval {0};
+			prog_updater_deno.amount(size_latest_deno);
+			prog_updater_deno.value(0);
+			auto cb_progress = [&](unsigned prog_chunk)
+			{
+				progval += prog_chunk;
+				auto total {util::int_to_filesize(size_latest_deno, false)},
+					pct {std::to_string(progval / (size_latest_deno / 100)) + '%'};
+				prog_updater_deno.caption(arc_path.filename().string() + "  :  " + pct + " of " + total);
+				prog_updater_deno.value(progval);
+			};
+
+			auto download_result {util::dl_inet_res(url_latest_deno, arc_path, &updater_working, cb_progress)};
+
+			if(updater_working)
+			{
+				if(download_result.empty())
+				{
+					const fs::path tempdir {fs::temp_directory_path()};
+					std::error_code ec;
+					prog_updater_deno.caption("Unpacking archive to temporary folder...");
+					if(fs::exists(tempdir / "deno.exe"))
+						fs::remove(tempdir / "deno.exe", ec);
+					auto error {util::extract_7z(arc_path, tempdir)};
+					if(error.empty())
+					{
+						prog_updater_deno.caption("Copying deno.exe to yt-dlp folder...");
+						fs::path denopath;
+						if(conf.ytdlp_path.empty())
+							denopath = appdir / "deno.exe";
+						else denopath = conf.ytdlp_path.parent_path() / "deno.exe";
+						if(fs::exists(denopath))
+							fs::remove(denopath);
+						//fs::rename(tempdir / "deno.exe", denopath, ec);
+						fs::copy_file(tempdir / "deno.exe", denopath, ec);
+						if(!ec)
+						{
+							ver_deno = ver_deno_latest;
+							prog_updater_deno.caption("Deno update complete");
+							l_deno_text.caption(ver_deno_latest.string() + "  (current)  [click to see changelog]");
+							l_deno_text.error_mode(false);
+							btn_update_deno.tooltip("");
+							btn_update_deno.enabled(false);
+						}
+						else prog_updater_deno.caption("File copy error: " + ec.message());
+						fs::remove(tempdir / "deno.exe", ec);
+					}
+					else prog_updater_deno.caption(error);
+					fs::remove(arc_path, ec);
+				}
+				else prog_updater_deno.caption(download_result);
+				updater_working = false;
+				btn_update_deno.caption("Update deno");
+				thr_updater_deno.detach();
+			}
+		}};
+	}
+}
 
 
 void GUI::updater_update_misc(bool ytdlp, fs::path target)
@@ -2236,12 +2430,20 @@ void GUI::updater_init_page(nana::window parent_for_msgbox)
 {
 	l_ffmpeg_text.error_mode(false);
 	l_ffmpeg_text.caption("checking...");
+	l_deno_text.error_mode(false);
+	l_deno_text.caption("checking...");
 	l_vertext.caption("checking...");
 
 	if(prog_updater_misc.value() == prog_updater_misc.amount())
 	{
 		prog_updater_misc.value(0);
 		prog_updater_misc.caption("");
+	}
+
+	if(prog_updater_deno.value() == prog_updater_deno.amount())
+	{
+		prog_updater_deno.value(0);
+		prog_updater_deno.caption("");
 	}
 
 	if(conf.get_releases_at_startup)
@@ -2264,10 +2466,31 @@ void GUI::updater_init_page(nana::window parent_for_msgbox)
 	}
 	else updater_display_version_ffmpeg();
 
+	if(X64 && !win7)
+	{
+		if(url_latest_deno.empty())
+		{
+			get_latest_deno(parent_for_msgbox);
+			updater_t3.start();
+		}
+		else updater_display_version_deno();
+
+		if(!url_latest_deno_relnotes.empty())
+		{
+			nana::api::effects_edge_nimbus(l_deno_text, nana::effects::edge_nimbus::over);
+			l_deno_text.tooltip(url_latest_deno_relnotes);
+			l_deno_text.events().click.clear();
+			l_deno_text.events().click([this]
+			{
+				nana::system::open_url(url_latest_deno_relnotes);
+			});
+		}
+	}
+
 	if(!url_latest_ytdlp_relnotes.empty() && fs::path {url_latest_ytdlp}.filename() == conf.ytdlp_path.filename())
 	{
 		nana::api::effects_edge_nimbus(l_ytdlp_text, nana::effects::edge_nimbus::over);
-		l_ytdlp_text.tooltip("Click to view release notes in web browser.");
+		l_ytdlp_text.tooltip(url_latest_ytdlp_relnotes);
 		l_ytdlp_text.events().click([this]
 		{
 			nana::system::open_url(url_latest_ytdlp_relnotes);
