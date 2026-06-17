@@ -1876,7 +1876,7 @@ void GUI::get_releases(nana::window parent_for_msgbox)
 	thr_releases = std::thread {[parent_for_msgbox, this]
 	{
 		using json = nlohmann::json;
-		auto jtext {util::get_inet_res("https://api.github.com/repos/ErrorFlynn/ytdlp-interface/releases", &inet_error)};
+		auto jtext {util::get_inet_res("https://api.github.com/repos/ErrorFlynn/ytdlp-interface/releases", &inet_error, false, conf.github_token)};
 		if(!jtext.empty())
 		{
 			try { releases = json::parse(jtext); }
@@ -1956,8 +1956,8 @@ void GUI::get_latest_ffmpeg(nana::window parent_for_msgbox)
 	{
 		std::string jtext;
 		if(win7)
-			jtext = util::get_inet_res("https://api.github.com/repos/kusaanko/FFmpeg-Auto-Build/releases/latest", &inet_error);
-		else jtext = util::get_inet_res("https://api.github.com/repos/yt-dlp/FFmpeg-Builds/releases/latest", &inet_error);
+			jtext = util::get_inet_res("https://api.github.com/repos/kusaanko/FFmpeg-Auto-Build/releases/latest", &inet_error, false, conf.github_token);
+		else jtext = util::get_inet_res("https://api.github.com/repos/yt-dlp/FFmpeg-Builds/releases/latest", &inet_error, false, conf.github_token);
 		if(!jtext.empty())
 		{
 			json json_ffmpeg;
@@ -2016,16 +2016,16 @@ void GUI::get_latest_ytdlp(nana::window parent_for_msgbox)
 		if(fname.empty())
 			fname = ytdlp_fname;
 		if(fname == "ytdl-patched-red.exe")
-			jtext = util::get_inet_res("https://api.github.com/repos/ytdl-patched/ytdl-patched/releases/latest", &inet_error);
-		else 
+			jtext = util::get_inet_res("https://api.github.com/repos/ytdl-patched/ytdl-patched/releases/latest", &inet_error, false, conf.github_token);
+		else
 		{
 			if(win7)
-				jtext = util::get_inet_res("https://api.github.com/repos/nicolaasjan/yt-dlp/releases/latest", &inet_error);
+				jtext = util::get_inet_res("https://api.github.com/repos/nicolaasjan/yt-dlp/releases/latest", &inet_error, false, conf.github_token);
 			else
 			{
 				if(conf.ytdlp_nightly)
-					jtext = util::get_inet_res("https://api.github.com/repos/yt-dlp/yt-dlp-nightly-builds/releases/latest", &inet_error);
-				else jtext = util::get_inet_res("https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest", &inet_error);
+					jtext = util::get_inet_res("https://api.github.com/repos/yt-dlp/yt-dlp-nightly-builds/releases/latest", &inet_error, false, conf.github_token);
+				else jtext = util::get_inet_res("https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest", &inet_error, false, conf.github_token);
 			}
 		}
 		if(!jtext.empty() && thr_releases_ytdlp.joinable())
@@ -2078,7 +2078,7 @@ void GUI::get_latest_deno(nana::window parent_for_msgbox)
 	thr_releases_deno = std::thread {[parent_for_msgbox, this]
 	{
 		using json = nlohmann::json;
-		auto jtext {util::get_inet_res("https://api.github.com/repos/denoland/deno/releases/latest", &inet_error)};
+		auto jtext {util::get_inet_res("https://api.github.com/repos/denoland/deno/releases/latest", &inet_error, false, conf.github_token)};
 		if(!jtext.empty())
 		{
 			json jrel;

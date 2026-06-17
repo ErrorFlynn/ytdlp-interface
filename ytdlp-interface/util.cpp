@@ -452,7 +452,7 @@ std::wstring util::get_sys_folder(REFKNOWNFOLDERID rfid)
 }
 
 
-std::string util::get_inet_res(std::string res, std::string *error, bool truncate)
+std::string util::get_inet_res(std::string res, std::string *error, bool truncate, std::string token)
 {
 	std::string ret;
 	if(error) error->clear();
@@ -471,7 +471,13 @@ std::string util::get_inet_res(std::string res, std::string *error, bool truncat
 	auto hinet {InternetOpenA(agent, INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0)};
 	if(hinet)
 	{
-		auto hfile {InternetOpenUrlA(hinet, res.data(), NULL, 0, 0, 0)};
+		std::string auth_header;
+		if(!token.empty() && res.find("github.com") != std::string::npos)
+			auth_header = "Authorization: token " + token + "\r\n";
+
+		auto hfile {InternetOpenUrlA(hinet, res.data(), NULL, 0,
+			auth_header.empty() ? NULL : auth_header.c_str(),
+			auth_header.empty() ? 0 : -1L)};
 		if(hfile)
 		{
 			DWORD read {1};

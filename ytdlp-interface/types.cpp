@@ -760,6 +760,7 @@ void settings_t::to_json(nlohmann::json &j) const
 	j["cb_display_custom_filenames"] = cb_display_custom_filenames;
 	j["cb_cookies"] = cb_cookies;
 	j["cookies_path"] = cookies_path;
+	j["github_token"] = github_token;
 }
 
 
@@ -987,5 +988,9 @@ void settings_t::from_json(const nlohmann::json &j)
 		sub_langs = j["sub_langs"].get<std::string>();
 		cb_cookies = j["cb_cookies"];
 		cookies_path = j["cookies_path"].get<std::string>();
+	}
+	if(j.contains("github_token")) // v2.20
+	{
+		github_token = j["github_token"].get<std::string>();
 	}
 }

@@ -1,0 +1,50 @@
+name: Build ytdlp-interface
+
+on:
+  push:
+    branches: [ feat/github-token-auth ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Extract dependencies
+      shell: pwsh
+      run: |
+        $deps = "ytdlp-interface dependencies.7z"
+        if (Test-Path $deps) {
+          7z x $deps -o. -y
+          Write-Host "Dependencies extracted successfully"
+          Get-ChildItem -Directory | ForEach-Object { Write-Host $_.Name }
+        } else {
+          Write-Error "Dependencies archive not found: $deps"
+          exit 1
+        }
+
+    - name: Add MSVC to PATH
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
+    - name: Build Release x64
+      shell: pwsh
+      run: |
+        cd ytdlp-interface
+        msbuild ytdlp-interface.vcxproj `
+          /p:Configuration=Release `
+          /p:Platform=x64 `
+          /p:PlatformToolset=v143 `
+          /p:WindowsTargetPlatformVersion=10.0 `
+          /m
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ytdlp-interface-x64
+        path: ytdlp-interface/Release/x64/ytdlp-interface.exe
+        if-no-files-found: error

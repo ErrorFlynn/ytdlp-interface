@@ -106,7 +106,7 @@ struct settings_t
 		output_template_default_bandcamp {L"%(artist)s - %(album)s - %(track_number)02d - %(track)s.%(ext)s"};
 	std::wstring fmt1, fmt2, output_template {output_template_default}, playlist_indexing {playlist_indexing_default},
 		output_template_bandcamp {output_template_default_bandcamp}, proxy;
-	std::string argset, cookie_options, aria_options {"-x 6"}, sub_langs, sub_format;
+	std::string argset, cookie_options, aria_options {"-x 6"}, sub_langs, sub_format, github_token;
 	std::vector<std::string> argsets;
 	std::vector<std::pair<std::string, std::vector<std::string>>> unfinished_queue_items;
 	std::unordered_set<std::wstring> outpaths;
