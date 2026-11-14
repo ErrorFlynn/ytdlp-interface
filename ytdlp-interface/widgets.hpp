@@ -572,9 +572,10 @@ namespace widgets
 	{
 		using json = nlohmann::json;
 		using item_proxy = nana::treebox::item_proxy;
-		using page_callback = std::function<void(std::string)>;
+		using page_callback_t = std::function<void(std::string)>;
 
 		nana::place *plc {nullptr};
+		page_callback_t page_cb;
 
 		class ctree_renderer : public nana::treebox::renderer_interface
 		{
@@ -650,16 +651,17 @@ namespace widgets
 
 		conf_tree() : treebox() {}
 
-		conf_tree(nana::window parent, nana::place *place, page_callback callback)
+		conf_tree(nana::window parent, nana::place *place)
 		{
-			create(parent, place, callback);
+			create(parent, place);
 		}
 
-		void create(nana::window parent, nana::place *place, page_callback callback);
+		void create(nana::window parent, nana::place *place);
 		void refresh_theme();
 		void add(std::string item_text, std::string field_name);
 		void select(std::string field_name);
 		auto selected_page() const { return selected().value<std::string>(); }
+		void page_callback(page_callback_t cb) { page_cb = cb; }
 	};
 
 

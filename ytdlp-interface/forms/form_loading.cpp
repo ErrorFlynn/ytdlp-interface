@@ -62,10 +62,11 @@ void GUI::fm_loading(bool saving)
 								bottom.to_json(j);
 								j["columns"]["website"] = item.text(1);
 								j["columns"]["status"] = text;
-								j["columns"]["format"] = item.text(4);
-								j["columns"]["format_note"] = item.text(5);
-								j["columns"]["ext"] = item.text(6);
-								j["columns"]["fsize"] = item.text(7);
+								j["columns"]["eta"] = item.text(4);
+								j["columns"]["format"] = item.text(5);
+								j["columns"]["format_note"] = item.text(6);
+								j["columns"]["ext"] = item.text(7);
+								j["columns"]["fsize"] = item.text(8);
 							}
 						}
 					}

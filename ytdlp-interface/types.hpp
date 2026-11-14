@@ -28,7 +28,7 @@
 #define WM_OUTBOX_APPEND (WM_APP + 0x0012)
 #define WM_PROGEX_VALUE (WM_APP + 0x0013)
 
-using qline_t = std::array<std::string, 7>;
+using qline_t = std::array<std::string, 8>;
 
 
 struct version_t
@@ -106,7 +106,7 @@ struct settings_t
 		output_template_default_bandcamp {L"%(artist)s - %(album)s - %(track_number)02d - %(track)s.%(ext)s"};
 	std::wstring fmt1, fmt2, output_template {output_template_default}, playlist_indexing {playlist_indexing_default},
 		output_template_bandcamp {output_template_default_bandcamp}, proxy;
-	std::string argset, cookie_options, aria_options {"-x 6"}, sub_langs, sub_format;
+	std::string argset, cookie_options, aria_options {"-x 6"}, sub_langs, sub_format, github_token;
 	std::vector<std::string> argsets;
 	std::vector<std::pair<std::string, std::vector<std::string>>> unfinished_queue_items;
 	std::unordered_set<std::wstring> outpaths;
@@ -119,7 +119,7 @@ struct settings_t
 	bool cbsubs {false}, cbthumb {false}, cbtime {true}, cbkeyframes {false}, cbmp3 {false},
 		cbargs {false}, kwhilite {true}, pref_fps {false}, cb_lengthyproc {true}, common_dl_options {true}, cb_autostart {true},
 		cb_queue_autostart {false}, gpopt_hidden {false}, open_dialog_origin {true}, cb_zeropadding {true}, cb_playlist_folder {true},
-		zoomed {false}, get_releases_at_startup {false}, col_format {false}, col_format_note {true}, col_ext {true}, col_fsize {false},
+		zoomed {false}, get_releases_at_startup {false}, col_eta {false}, col_format {false}, col_format_note {true}, col_ext {true}, col_fsize {false},
 		json_hide_null {false}, col_site_icon {true}, col_site_text {false}, ytdlp_nightly {true}, audio_multistreams {false},
 		cb_sblock_mark {false}, cb_sblock_remove {false}, cb_proxy {false}, cbsnap {true}, limit_output_buffer {true},
 		update_self_only {false}, cb_premium {true}, cbminw {false}, cb_save_errors {false}, cb_ffplay {false}, cb_clear_done {false},

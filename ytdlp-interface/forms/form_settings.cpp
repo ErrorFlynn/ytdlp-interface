@@ -45,33 +45,7 @@ void GUI::fm_settings()
 
 	std::function<void(void)> update_conf, update_preset_widgets, update_ytdlp_page;
 
-	auto page_callback = [&] (std::string name)
-	{
-		if(name == "updater")
-		{
-			updater_check_paths(false);
-			if(!cb_chan_stable.checked() && !cb_chan_nightly.checked())
-				updater_init_page(fm);
-			else updater_display_version_ffmpeg();
-			if(conf.ytdlp_path.filename().string() == "ytdl-patched-red.exe")
-			{
-				cb_chan_stable.enabled(false);
-				cb_chan_nightly.enabled(false);
-			}
-			else
-			{
-				cb_chan_stable.enabled(true);
-				cb_chan_nightly.enabled(true);
-			}
-			nana::api::refresh_window(updater);
-		}
-		else if(name == "presets")
-		{
-			if(update_conf) update_conf();
-		}
-	};
-
-	widgets::conf_tree tree {fm, &fm.get_place(), page_callback};
+	widgets::conf_tree tree {fm, &fm.get_place()};
 	tree.add("yt-dlp", "ytdlp");
 	tree.add("SponsorBlock", "sblock");
 	tree.add("Queuing", "queuing");
@@ -537,12 +511,56 @@ void GUI::fm_settings()
 		<weight=25 <cb_formats_fsize_bytes>> <weight=20>
 		<weight=25 <l_opendlg_origin weight=345> <cb_origin_curdir>> <weight=10>
 		<weight=25 <opendlg_spacer weight=345> <cb_origin_progdir>> <weight=20>
+		<gui_sep1 weight=3> <weight=20>
+		<l_token_info weight=90> <weight=20> <tb_token weight=34>
 	)");
 
 	widgets::cbox cb_custom_dark_theme {gui, "Use custom dark color theme"},
 		cb_custom_light_theme {gui, "Use custom light color theme"};
 	widgets::Button btn_edit_theme {gui, "Edit custom theme", true};
 	btn_edit_theme.events().click([&] { fm_colors(fm); });
+	widgets::Separator gui_sep1 {gui, "GitHub access"};
+	widgets::Label l_token_info {gui, ""};
+	l_token_info.text_align(nana::align::left, nana::align_v::top);
+	widgets::Textbox tb_token {gui};
+	tb_token.caption(conf.github_token);
+	tb_token.padding(0, 5, 0, 5);
+	tb_token.line_wrapped(true);
+	tb_token.typeface(nana::paint::font_info {"Tahoma", 10});
+
+	std::string token_info_text {"The program queries GitHub for version information using GitHub's REST API. Unauthenticated queries are limited to 60 requests per hour, "
+		"while authenticated ones are limited to 5000 requests per hour. If you have a GitHub "
+		"<color=0x url=\"https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens\">Personal Access Token</>, "
+		"you can paste it below, and it will be used whenever asking GitHub for version information."};
+	l_token_info.format(true);
+	bool token_info_hilite {false};
+	l_token_info.events().mouse_move([&](const nana::arg_mouse &arg)
+	{
+		if(l_token_info.cursor() == nana::cursor::hand)
+		{
+			if(!token_info_hilite)
+			{
+				token_info_hilite = true;
+				l_token_info.caption(std::regex_replace(token_info_text, std::regex {"\\b(0x)"}, theme::is_dark() ? link_hilited_dark : link_hilited_light));
+				l_token_info.tooltip("https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens");
+			}
+		}
+		else if(token_info_hilite)
+		{
+			token_info_hilite = false;
+			l_token_info.caption(std::regex_replace(token_info_text, std::regex {"\\b(0x)"}, theme::is_dark() ? link_dark : link_light));
+			l_token_info.tooltip("");
+		}
+	});
+	l_token_info.events().mouse_leave([&]
+	{
+		l_token_info.tooltip("");
+		if(token_info_hilite)
+		{
+			token_info_hilite = false;
+			l_token_info.caption(std::regex_replace(token_info_text, std::regex {"\\b(0x)"}, theme::is_dark() ? link_dark : link_light));
+		}
+	});
 
 	gui["cb_custom_dark_theme"] << cb_custom_dark_theme;
 	gui["cb_custom_light_theme"] << cb_custom_light_theme;
@@ -561,9 +579,12 @@ void GUI::fm_settings()
 	gui["cb_origin_progdir"] << cb_origin_progdir;
 	gui["cb_origin_curdir"] << cb_origin_curdir;
 	gui["cb_formats_fsize_bytes"] << cb_formats_fsize_bytes;
+	gui["gui_sep1"] << gui_sep1;
+	gui["l_token_info"] << l_token_info;
+	gui["tb_token"] << tb_token;
 
 	presets.div(R"(vert
-		<l_pinfo weight=90> <weight=18> <sep weight=3> <weight=20>
+		<l_pinfo weight=100px> <weight=18> <sep weight=3> <weight=20>
 		<weight=25 <l_add weight=160> <weight=10> <tb_add> <weight=11> <btn_add weight=80>> <weight=20>
 		<lb_presets> <weight=20>
 		<weight=35 <><btn_save weight=100> <weight=20> <btn_load weight=100> <weight=20> <btn_delete weight=110> <weight=20> <btn_rename weight=110> <>>
@@ -1001,6 +1022,7 @@ void GUI::fm_settings()
 		conf.cb_display_custom_filenames = cb_display_custom_filenames.checked();
 		conf.cb_aria = cb_aria.checked();
 		conf.cb_cookies = cb_cookies.checked();
+		conf.github_token = tb_token.caption();
 
 		conf.sblock_mark.clear();
 		for(auto ip : lbmark.at(0))
@@ -1317,11 +1339,50 @@ void GUI::fm_settings()
 		}
 	});
 
+	tree.page_callback([&](std::string name)
+	{
+		if(name == "updater")
+		{
+			conf.github_token = tb_token.caption();
+			updater_check_paths(false);
+			if(!cb_chan_stable.checked() && !cb_chan_nightly.checked())
+				updater_init_page(fm);
+			else updater_display_version_ffmpeg();
+			if(conf.ytdlp_path.filename().string() == "ytdl-patched-red.exe")
+			{
+				cb_chan_stable.enabled(false);
+				cb_chan_nightly.enabled(false);
+			}
+			else
+			{
+				cb_chan_stable.enabled(true);
+				cb_chan_nightly.enabled(true);
+			}
+			nana::api::refresh_window(updater);
+		}
+		else if(name == "presets")
+		{
+			if(update_conf) update_conf();
+			const auto w_presets {presets.size().width};
+			change_field_attr(presets.get_place(), "l_pinfo", "weight", l_pinfo.measure(w_presets).height);
+			presets.collocate();
+		}
+		else if(name == "gui")
+		{
+			const auto w_gui {gui.size().width};
+			change_field_attr(gui.get_place(), "l_token_info", "weight", l_token_info.measure(w_gui).height, true);
+			gui.collocate();
+			nana::api::refresh_window(gui);
+		}
+	});
+	
+
 	fm.theme_callback([&](bool dark)
 	{
 		apply_theme(dark);
 		fm.bgcolor(theme::fmbg);
 		l_sblock.caption(std::regex_replace(sblock_text, std::regex {"\\b(0x)"}, theme::is_dark() ? link_dark : link_light));
+		l_token_info.caption(std::regex_replace(token_info_text, std::regex {"\\b(0x)"}, theme::is_dark() ? link_dark : link_light));
 		l_about_ver.caption(std::regex_replace(vertext, std::regex {"\\b(0x)"}, theme::is_dark() ? link_dark : link_light));
 		updater_display_version_deno();
 		updater_display_version_ytdlp();
@@ -1338,7 +1399,6 @@ void GUI::fm_settings()
 	update_preset_widgets();
 	tree.select(start_page);
 	fm.collocate();
-
 	fm.modality();
 }
 
@@ -2094,7 +2154,7 @@ void GUI::updater_update_self(themed_form &parent)
 			// asset order: x64, x86, x64_win7, x86_win7
 			std::map<std::string, unsigned> arc_sizes;
 			std::map<std::string, std::string> arc_urls;
-			auto j_assets {releases[0]["assets"]};
+			const auto &j_assets {releases[0]["assets"]};
 			for(const auto &asset : j_assets)
 			{
 				if(asset.contains("name"))
@@ -2520,7 +2580,7 @@ bool GUI::updater_check_paths(bool ffmpeg_only)
 	}
 	else
 	{
-		if(fs::exists(appdir / "ffmpeg.exe"))
+		if(conf.ffmpeg_path == appdir / "ffmpeg.exe" && fs::exists(appdir / "ffmpeg.exe"))
 			conf.ffmpeg_path = ".\\";
 		l_ffmpeg_path.update_caption();
 		l_ffmpeg_path.refresh_theme();

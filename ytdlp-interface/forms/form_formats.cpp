@@ -208,10 +208,10 @@ void GUI::fm_formats()
 				}
 				else filesize = '~' + util::int_to_filesize(fsize, false);
 			}
-			lbq.item_from_value(url).text(4, format_id);
-			lbq.item_from_value(url).text(5, format_note);
-			lbq.item_from_value(url).text(6, ext);
-			lbq.item_from_value(url).text(7, filesize);
+			lbq.item_from_value(url).text(5, format_id);
+			lbq.item_from_value(url).text(6, format_note);
+			lbq.item_from_value(url).text(7, ext);
+			lbq.item_from_value(url).text(8, filesize);
 		}
 		bottom.use_strfmt = false;
 		fm.close();
@@ -301,12 +301,12 @@ void GUI::fm_formats()
 				else fmt_note = get_string(fmt, "resolution");
 				ext = get_string(fmt, "ext");
 				fmtid = get_string(fmt, "format_id");
-				item.text(4, fmtid);
-				item.text(5, fmt_note);
-				item.text(6, ext);
+				item.text(5, fmtid);
+				item.text(6, fmt_note);
+				item.text(7, ext);
 				if(fsize != "---")
 					fsize = '~' + fsize;
-				item.text(7, fsize);
+				item.text(8, fsize);
 			}
 		}
 		else
@@ -343,10 +343,10 @@ void GUI::fm_formats()
 					fsize = '~' + util::int_to_filesize(size1 + size2, false);
 				else fsize = "---";
 
-				item.text(4, strfmt);
-				item.text(5, fmt_note);
-				item.text(6, ext);
-				item.text(7, fsize);
+				item.text(5, strfmt);
+				item.text(6, fmt_note);
+				item.text(7, ext);
+				item.text(8, fsize);
 			}
 		}
 

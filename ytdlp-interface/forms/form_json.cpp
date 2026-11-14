@@ -2,25 +2,40 @@
 #include <nana/gui/filebox.hpp>
 
 
-void GUI::fm_json()
+void GUI::fm_json(nana::window parent, const nlohmann::json *j, const std::string key_path_to_expand)
 {
 	using widgets::theme;
 	using namespace nana;
 
-	themed_form fm {nullptr, *this, {}, appear::decorate<appear::sizable, appear::minimize, appear::maximize>{}};
+	themed_form fm {nullptr, parent, {}, appear::decorate<appear::sizable, appear::minimize, appear::maximize>{}};
 	fm.center(1000, 1006);
 	fm.caption(title + " - JSON viewer");
 	fm.bgcolor(theme::fmbg);
 	fm.snap(conf.cbsnap);
 
-	fm.div("vert margin=20 <tree> <weight=20> <label weight=48>");
+	fm.div("vert margin=20 <tree> <asd vert weight=68 <weight=20> <label weight=48>>");
+	if(j) fm.get_place().field_display("asd", false);
 
 	auto &bottom {bottoms.current()};
-	::widgets::JSON_Tree t {fm, bottom.playlist_info.empty() ? bottom.vidinfo : bottom.playlist_info, conf.json_hide_null};
+	auto &jsource {bottom.playlist_info.empty() ? bottom.vidinfo : bottom.playlist_info};
+	::widgets::JSON_Tree t {fm, j ? *j : jsource, conf.json_hide_null};
 	::widgets::Label lcmd {fm, ""};
 
 	fm["tree"] << t;
 	fm["label"] << lcmd;
+
+	if(!key_path_to_expand.empty())
+	{
+		auto item {t.find(key_path_to_expand)};
+		if(!item.empty())
+		{
+			item.expand(true).select(true);
+			t.find(key_path_to_expand + "/download_count").select(true);
+			while(!item.owner().empty() && item.owner().key() != "root")
+				(item = item.owner()).expand(true);
+			t.scroll_into_view(item, align_v::top);
+		}
+	}
 
 	lcmd.typeface(paint::font_info {"Tahoma", 10});
 	lcmd.text_align(align::left, align_v::top);
@@ -44,10 +59,13 @@ void GUI::fm_json()
 				filebox fb {fm, false};
 				fb.init_path(bottom.outpath);
 				std::string strname;
-				if(bottom.vidinfo_contains("filename"))
-					strname = bottom.vidinfo["filename"];
-				else if(bottom.vidinfo_contains("_filename"))
-					strname = bottom.vidinfo["_filename"];
+				if(key_path_to_expand.empty())
+				{
+					if(bottom.vidinfo_contains("filename"))
+						strname = bottom.vidinfo["filename"];
+					else if(bottom.vidinfo_contains("_filename"))
+						strname = bottom.vidinfo["_filename"];
+				}
 				if(!strname.empty())
 				{
 					strname = strname.substr(0, strname.rfind('.'));

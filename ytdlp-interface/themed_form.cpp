@@ -389,7 +389,7 @@ bool themed_form::center(double w, double h, bool autoscale)
 }
 
 
-void themed_form::change_field_attr(nana::place &plc, std::string field, std::string attr, unsigned new_val)
+void themed_form::change_field_attr(nana::place &plc, std::string field, std::string attr, unsigned new_val, bool px)
 {
 	std::string divtext {plc.div()};
 	auto pos {divtext.find(field)};
@@ -402,7 +402,12 @@ void themed_form::change_field_attr(nana::place &plc, std::string field, std::st
 			auto cut_pos {pos};
 			while(isdigit(divtext[pos]))
 				pos++;
-			plc.div(divtext.substr(0, cut_pos) + std::to_string(new_val) + divtext.substr(pos));
+			if(px && divtext.size() > pos + 2)
+			{
+				if(divtext[pos] == 'p' && divtext[pos+1] == 'x')
+					px = false;
+			}
+			plc.div(divtext.substr(0, cut_pos) + std::to_string(new_val) + (px ? "px" : "") + divtext.substr(pos));
 			plc.collocate();
 		}
 	}

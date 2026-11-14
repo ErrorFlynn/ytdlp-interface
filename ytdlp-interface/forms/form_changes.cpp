@@ -11,7 +11,11 @@ void GUI::fm_changes(nana::window parent)
 	fm.caption("ytdlp-interface - release notes");
 	fm.bgcolor(theme::fmbg);
 	fm.div(R"(vert margin=20 <tb> <weight=20>
-				<weight=25 <> <l_history weight=164> <weight=10> <com_history weight=75> <weight=20> <cblogview weight=140> <> >)");
+				<weight=25 <>
+					<l_history weight=164> <weight=10> <com_history weight=75> <weight=20>
+					<cblogview weight=140> <weight=10> <btn_json weight=140><> 
+				>
+	)");
 
 	widgets::Textbox tb {fm};
 	{
@@ -93,6 +97,36 @@ void GUI::fm_changes(nana::window parent)
 			display_release_notes(com_history.option());
 		});
 	}
+
+	widgets::Button btn_json {fm, "View JSON data", true};
+	fm["btn_json"] << btn_json;
+	btn_json.events().click([&]
+	{
+		const auto rel_idx {com_history.option()};
+		std::string str_asset_idx;
+		std::map<std::string, std::string> asset_indexes;
+		const auto &j_assets {releases[rel_idx]["assets"]};
+		for(size_t n {0}; n < j_assets.size(); n++)
+			asset_indexes[j_assets[n]["name"].get<std::string>()] = std::to_string(n);
+		if(X64)
+		{
+			if(win7 && asset_indexes.contains("ytdlp-interface_win7.7z"))
+				str_asset_idx = asset_indexes["ytdlp-interface_win7.7z"];
+			else if(asset_indexes.contains("ytdlp-interface.7z"))
+				str_asset_idx = asset_indexes["ytdlp-interface.7z"];
+		}
+		else
+		{
+			if(win7 && asset_indexes.contains("ytdlp-interface_x86_win7.7z"))
+				str_asset_idx = asset_indexes["ytdlp-interface_x86_win7.7z"];
+			else if(asset_indexes.contains("ytdlp-interface_x86.7z"))
+				str_asset_idx = asset_indexes["ytdlp-interface_x86.7z"];
+		}
+		std::string str_assets {"/assets"};
+		if(!str_asset_idx.empty())
+			str_assets += "/" + str_asset_idx;
+		fm_json(fm, &releases, "root/" + std::to_string(com_history.option()) + str_assets);
+	});
 
 	cblogview.events().click([&]
 	{

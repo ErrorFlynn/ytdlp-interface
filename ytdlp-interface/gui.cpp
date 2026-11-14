@@ -715,6 +715,29 @@ bool GUI::process_queue_item(std::wstring url)
 				if(text.find("Unknown B/s") != -1)
 					return;
 
+				std::string streta;
+				auto pos_eta {text.find("ETA")};
+				if(pos_eta != -1)
+				{
+					auto pos_start {pos_eta + 3};
+					while(pos_start < text.size())
+					{
+						const auto c {text[pos_start]};
+						if(c == ' ' || c == '\t' || c == ':')
+							++pos_start;
+						else break;
+					}
+					auto pos_end {pos_start};
+					while(pos_end < text.size())
+					{
+						const auto c {text[pos_end]};
+						if(c == ':' || isalnum(c))
+							++pos_end;
+						else break;
+					}
+					streta = text.substr(pos_start, pos_end - pos_start);
+				}
+
 				const bool current {url == qurl};
 
 				if(playlist_total && !playlist_progress)
@@ -732,13 +755,13 @@ bool GUI::process_queue_item(std::wstring url)
 					if(playlist_progress && working)
 					{
 						auto strprog {"[" + std::to_string(playlist_completed + 1) + "/" + std::to_string(playlist_total) + "] "};
-						lbq.set_line_text(url, {"", "", strprog + strpct, "", "", "", ""});
+						lbq.set_line_text(url, {"", "", strprog + strpct, "", "", "", "", ""});
 						if(i_taskbar && bottoms.size() == 2)
 							i_taskbar->SetProgressValue(hwnd, playlist_completed, playlist_total > 1 ? playlist_total - 1 : playlist_total);
 					}
 					else if(working)
 					{
-						lbq.set_line_text(url, {"", "", strpct, "", "", "", ""});
+						lbq.set_line_text(url, {"", "", strpct, streta, "", "", "", ""});
 						if(i_taskbar && bottoms.size() == 2)
 							i_taskbar->SetProgressValue(hwnd, completed, total);
 					}
@@ -860,7 +883,7 @@ bool GUI::process_queue_item(std::wstring url)
 			bottom.progtext = "";
 			if(i_taskbar && lbq.item_count() == 1)
 				i_taskbar->SetProgressState(hwnd, TBPF_NORMAL);
-			lbq.set_line_text(url, {"", "", "started", "", "", "", ""});
+			lbq.set_line_text(url, {"", "", "started", "", "", "", "", ""});
 
 			auto cb_append = [url, this](std::string text, bool keyword)
 			{
@@ -906,7 +929,7 @@ bool GUI::process_queue_item(std::wstring url)
 					bottom.timer_proc.stop();
 				if(res == "failed")
 				{
-					lbq.set_line_text(url, {"", "", "error", "", "", "", ""});
+					lbq.set_line_text(url, {"", "", "error", "", "", "", "", ""});
 					auto progtext {prog.nana::progress::caption()};
 					auto pos1 {progtext.find('[')};
 					if(pos1 != -1)
@@ -924,7 +947,7 @@ bool GUI::process_queue_item(std::wstring url)
 						}
 					}
 				}
-				else lbq.set_line_text(url, {"", "", "done", "", "", "", ""});
+				else lbq.set_line_text(url, {"", "", "done", " ", "", "", "", ""});
 
 				taskbar_overall_progress();
 				if(i_taskbar && lbq.item_count() == 1)
@@ -981,10 +1004,10 @@ bool GUI::process_queue_item(std::wstring url)
 		auto text {item.text(3)};
 		auto pos {text.find(']')};
 		if(pos != -1)
-			lbq.set_line_text(url, {"", "", "stopped (" + text.substr(1, pos - 1) + ")", "", "", "", ""});
+			lbq.set_line_text(url, {"", "", "stopped (" + text.substr(1, pos - 1) + ")", "", "", "", "", ""});
 		else if(text.find('%') != -1)
-			lbq.set_line_text(url, {"", "", "stopped (" + text + ")", "", "", "", ""});
-		else lbq.set_line_text(url, {"", "", "stopped", "", "", "", ""});
+			lbq.set_line_text(url, {"", "", "stopped (" + text + ")", "", "", "", "", ""});
+		else lbq.set_line_text(url, {"", "", "stopped", "", "", "", "", ""});
 		if(tbpipe.current() == url)
 		{
 			auto ca {tbpipe.colored_area_access()};
@@ -1016,7 +1039,7 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq, const size_t cat)
 	if(item == lbq.empty_item || refresh)
 	{
 		if(refresh)
-			lbq.set_line_text(url, {"...", "...", "", "...", "...", "...", "..."});
+			lbq.set_line_text(url, {"...", "...", "", "...", "...", "...", "...", ""});
 		else SendMessage(hwnd, WM_LBQ_NEWITEM, cat, reinterpret_cast<LPARAM>(&url));
 
 		auto &bottom {bottoms.add(url)};
@@ -1109,7 +1132,10 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq, const size_t cat)
 						format_note {j["columns"]["format_note"].get<std::string>()},
 						ext = j["columns"]["ext"].get<std::string>(),
 						fsize = j["columns"]["fsize"].get<std::string>();
-					lbq.set_line_text(url, {website, media_title, status, format, format_note, ext, fsize}, false);
+					std::string eta {"---"};
+					if(j["columns"].contains("eta"))
+						eta = j["columns"]["eta"].get<std::string>();
+					lbq.set_line_text(url, {website, media_title, status, eta, format, format_note, ext, fsize}, false);
 				}
 				unfinished_qitems_data.erase(url8);
 			}
@@ -1158,11 +1184,11 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq, const size_t cat)
 				else if(conf.cb_cookies && !conf.cookies_path.empty())
 					cookies = L" --cookies \"" + conf.cookies_path.wstring() + L"\" ";
 
-				std::string media_info, media_website {"---"}, media_title, format_id {"---"}, format_note {"---"}, ext {"---"}, filesize {"---"};
+				std::string media_info, media_website {"---"}, media_title, eta {"---"}, format_id {"---"}, format_note {"---"}, ext {"---"}, filesize {"---"};
 				auto json_error = [&](const nlohmann::detail::exception &e)
 				{
 					media_title = "Can't parse the JSON data produced by yt-dlp! See output for details.";
-					lbq.set_line_text(url, {"", "", "error", "", "", "", ""});
+					lbq.set_line_text(url, {"", "", "error", "", "", "", "", ""});
 					outbox.caption(e.what() + std::string {"\n\n"} + media_info, url);
 					if(outbox.current() == url)
 					{
@@ -1241,7 +1267,7 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq, const size_t cat)
 									const auto &jpl {bottom.playlist_info["entries"]};
 									if(jpl.size() == 0)
 									{
-										lbq.set_line_text(url, {"---", "error: playlist with zero entries!", "---", "---", "---", "---"});
+										lbq.set_line_text(url, {"---", "error: playlist with zero entries!", "---", "---", "---", "---", "---"});
 										bottom.vidinfo.clear();
 										bottom.playlist_info.clear();
 										lbq.set_item_bg(url, ::widgets::theme::lbbg);
@@ -1304,7 +1330,7 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq, const size_t cat)
 								if(pos != -1)
 								{
 									auto strtime {media_info.substr(pos + 30, media_info.rfind('.') - pos - 30)};
-									lbq.set_line_text(url, {"youtube.com", "[live event scheduled to begin in " + strtime + ']', "---", "---", "---", "---"});
+									lbq.set_line_text(url, {"youtube.com", "[live event scheduled to begin in " + strtime + ']', "---", "---", "---", "---", "---"});
 									bottom.vidinfo.clear();
 									if(--active_info_threads == 0)
 										queue_save();
@@ -1425,7 +1451,7 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq, const size_t cat)
 							}
 							else
 							{
-								lbq.set_line_text(url, {bottom.is_bcchan ? "bandcamp.com" : "youtube.com", tab + media_title, "", "---", "---", "---", "---"});
+								lbq.set_line_text(url, {bottom.is_bcchan ? "bandcamp.com" : "youtube.com", tab + media_title, "", "---", "---", "---", "---", "---"});
 								bottom.vidinfo.clear();
 								if(vidsel_item.m && lbq.item_from_value(url).selected())
 								{
@@ -1501,7 +1527,7 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq, const size_t cat)
 									const auto &jpl {bottom.playlist_info["entries"]};
 									if(jpl.size() == 0)
 									{
-										lbq.set_line_text(url, {"---", "error: playlist with zero entries!", "---", "---", "---", "---"});
+										lbq.set_line_text(url, {"---", "error: playlist with zero entries!", "---", "---", "---", "---", "---"});
 										bottom.vidinfo.clear();
 										bottom.playlist_info.clear();
 										lbq.set_item_bg(url, ::widgets::theme::lbbg);
@@ -1644,7 +1670,7 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq, const size_t cat)
 
 							if(!g_exiting)
 							{
-								lbq.set_line_text(url, {media_website, media_title, "", format_id, format_note, ext, filesize});
+								lbq.set_line_text(url, {media_website, media_title, "", eta, format_id, format_note, ext, filesize});
 
 								if(bottom.vidinfo_contains("id"))
 								{
@@ -1655,7 +1681,7 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq, const size_t cat)
 						}
 						else
 						{
-							lbq.set_line_text(url, {" ", "yt-dlp failed to get info (see output)", " ", " ", " ", " ", " "});
+							lbq.set_line_text(url, {" ", "yt-dlp failed to get info (see output)", " ", " ", " ", " ", " ", " "});
 
 							auto cmdline {bottom.playlist_vid_cmdinfo.empty() ? to_utf8(bottom.cmdinfo) : to_utf8(bottom.playlist_vid_cmdinfo)};
 							outbox.caption("[GUI] got error executing command line: " + cmdline + "\n\n" + media_info + "\n", url);
@@ -1696,8 +1722,8 @@ void GUI::add_url(std::wstring url, bool refresh, bool saveq, const size_t cat)
 					else if(bottom.working_info && bottom.info_thread.joinable())
 					{
 						if(conf.ytdlp_path.empty() || !fs::exists(conf.ytdlp_path))
-							lbq.set_line_text(url, {"", "can't get data for URL, yt-dlp.exe missing!", "", "", "", "", ""});
-						else lbq.set_line_text(url, {"", "yt-dlp did not provide any data for this URL!", "", "", "", "", ""});
+							lbq.set_line_text(url, {"", "can't get data for URL, yt-dlp.exe missing!", "", "", "", "", "", " "});
+						else lbq.set_line_text(url, {"", "yt-dlp did not provide any data for this URL!", "", "", "", "", "", " "});
 					}
 				}
 				if(!g_exiting)
@@ -1876,7 +1902,8 @@ void GUI::get_releases(nana::window parent_for_msgbox)
 	thr_releases = std::thread {[parent_for_msgbox, this]
 	{
 		using json = nlohmann::json;
-		auto jtext {util::get_inet_res("https://api.github.com/repos/ErrorFlynn/ytdlp-interface/releases", &inet_error)};
+		const std::string strtoken {conf.github_token.empty() ? "" : "Authorization: token " + conf.github_token};
+		auto jtext {util::get_inet_res("https://api.github.com/repos/ErrorFlynn/ytdlp-interface/releases", &inet_error, false, strtoken)};
 		if(!jtext.empty())
 		{
 			try { releases = json::parse(jtext); }
@@ -1955,9 +1982,10 @@ void GUI::get_latest_ffmpeg(nana::window parent_for_msgbox)
 	thr_releases_ffmpeg = std::thread {[=]
 	{
 		std::string jtext;
+		const std::string strtoken {conf.github_token.empty() ? "" : "Authorization: token " + conf.github_token};
 		if(win7)
-			jtext = util::get_inet_res("https://api.github.com/repos/kusaanko/FFmpeg-Auto-Build/releases/latest", &inet_error);
-		else jtext = util::get_inet_res("https://api.github.com/repos/yt-dlp/FFmpeg-Builds/releases/latest", &inet_error);
+			jtext = util::get_inet_res("https://api.github.com/repos/kusaanko/FFmpeg-Auto-Build/releases/latest", &inet_error, false, strtoken);
+		else jtext = util::get_inet_res("https://api.github.com/repos/yt-dlp/FFmpeg-Builds/releases/latest", &inet_error, false, strtoken);
 		if(!jtext.empty())
 		{
 			json json_ffmpeg;
@@ -2011,21 +2039,21 @@ void GUI::get_latest_ytdlp(nana::window parent_for_msgbox)
 
 	thr_releases_ytdlp = std::thread {[=]
 	{
-		std::string jtext;
+		std::string jtext, strtoken {conf.github_token.empty() ? "" : "Authorization: token " + conf.github_token};
 		auto fname {conf.ytdlp_path.filename().string()};
 		if(fname.empty())
 			fname = ytdlp_fname;
 		if(fname == "ytdl-patched-red.exe")
-			jtext = util::get_inet_res("https://api.github.com/repos/ytdl-patched/ytdl-patched/releases/latest", &inet_error);
+			jtext = util::get_inet_res("https://api.github.com/repos/ytdl-patched/ytdl-patched/releases/latest", &inet_error, false, strtoken);
 		else 
 		{
 			if(win7)
-				jtext = util::get_inet_res("https://api.github.com/repos/nicolaasjan/yt-dlp/releases/latest", &inet_error);
+				jtext = util::get_inet_res("https://api.github.com/repos/nicolaasjan/yt-dlp/releases/latest", &inet_error, false, strtoken);
 			else
 			{
 				if(conf.ytdlp_nightly)
-					jtext = util::get_inet_res("https://api.github.com/repos/yt-dlp/yt-dlp-nightly-builds/releases/latest", &inet_error);
-				else jtext = util::get_inet_res("https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest", &inet_error);
+					jtext = util::get_inet_res("https://api.github.com/repos/yt-dlp/yt-dlp-nightly-builds/releases/latest", &inet_error, false, strtoken);
+				else jtext = util::get_inet_res("https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest", &inet_error, false, strtoken);
 			}
 		}
 		if(!jtext.empty() && thr_releases_ytdlp.joinable())
@@ -2078,7 +2106,8 @@ void GUI::get_latest_deno(nana::window parent_for_msgbox)
 	thr_releases_deno = std::thread {[parent_for_msgbox, this]
 	{
 		using json = nlohmann::json;
-		auto jtext {util::get_inet_res("https://api.github.com/repos/denoland/deno/releases/latest", &inet_error)};
+		const std::string strtoken {conf.github_token.empty() ? "" : "Authorization: token " + conf.github_token};
+		auto jtext {util::get_inet_res("https://api.github.com/repos/denoland/deno/releases/latest", &inet_error, false, strtoken)};
 		if(!jtext.empty())
 		{
 			json jrel;
@@ -2349,7 +2378,7 @@ unsigned GUI::start_next_urls(std::wstring current_url)
 					if(item == current_item)
 						continue;
 					auto status_text {item.text(3)};
-					if(status_text == "queued" || status_text.find("stopped") == 0 || !bottoms.at(item.value<lbqval_t>().url).started && status_text.find("%") != -1)
+					if(status_text == "queued")
 					{
 						auto pos {item.pos()};
 						if(pos.cat <= current_pos.cat && pos.item < current_pos.item)
@@ -2421,10 +2450,11 @@ void GUI::adjust_lbq_headers()
 		auto zero {col_zero_size},
 			one {scale(20 + !conf.col_site_text * 10) * conf.col_site_icon + scale(110) * conf.col_site_text},
 			three {scale(116)},
-			four {scale(130) * lbq.column_at(4).visible() + scale(16) * lbq_has_scrollbar()},
-			five {scale(150) * lbq.column_at(5).visible()},
-			six {scale(60) * lbq.column_at(6).visible()},
-			seven {scale(100) * lbq.column_at(7).visible()};
+			four {scale(80) * lbq.column_at(4).visible() + scale(16) * lbq_has_scrollbar()},
+			five {scale(130) * lbq.column_at(5).visible()},
+			six {scale(150) * lbq.column_at(6).visible()},
+			seven {scale(60) * lbq.column_at(7).visible()},
+			eight {scale(100) * lbq.column_at(8).visible()};
 
 		lbq.column_at(0).width(zero);
 
@@ -2437,7 +2467,7 @@ void GUI::adjust_lbq_headers()
 		}
 		else lbq.column_at(1).visible(false);
 
-		const auto two_computed {lbq.size().width - (zero + one + three + four + five + six + seven) - scale(9)};
+		const auto two_computed {lbq.size().width - (zero + one + three + four + five + six + seven + eight) - scale(9)};
 		lbq.column_at(2).width(two_computed);
 	}
 	else PostMessage(hwnd, WM_LBQ_HEADERS, 0, 0);

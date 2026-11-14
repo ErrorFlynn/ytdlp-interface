@@ -446,7 +446,7 @@ void widgets::Listbox::set_line_text(std::wstring url, qline_t text, bool post)
 		auto item {item_from_value(url)};
 		if(item != empty_item)
 		{
-			for(int n{0}; n<7; n++)
+			for(int n{0}; n<8; n++)
 				if(!text[n].empty())
 					item.text(n+1, text[n]);
 		}
@@ -1294,7 +1294,7 @@ unsigned conf_tree::ctree_placer::item_width(graph_reference graph, const item_a
 }
 
 
-void conf_tree::create(nana::window parent, nana::place *place, page_callback callback)
+void conf_tree::create(nana::window parent, nana::place *place)
 {
 	plc = place;
 	treebox::create(parent);
@@ -1304,14 +1304,16 @@ void conf_tree::create(nana::window parent, nana::place *place, page_callback ca
 	placer(ctree_placer {placer()});
 	renderer(ctree_renderer {renderer()});
 	events().expose([this] { refresh_theme(); });
-	events().selected([callback, this](const nana::arg_treebox &arg)
+	events().selected([this](const nana::arg_treebox &arg)
 	{
-		if(arg.item.selected())
+		static auto last_selected_item {arg.item}; // the stupid treebox emits an event both at selection and at deselection with no way to distinguish between the two
+		if(arg.item != last_selected_item)         // because arg.item.selected() returns true in both cases
 		{
+			last_selected_item = arg.item;         // so there must be a user-defined mechanism to exclude the deselection event
 			auto field_name {arg.item.value<std::string>().data()};
 			plc->field_display(field_name, true);
 			plc->collocate();
-			if(callback) callback(field_name);
+			if(page_cb) page_cb(field_name);
 		}
 	});
 }

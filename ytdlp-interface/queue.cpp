@@ -18,16 +18,18 @@ void GUI::queue_make_listbox()
 	lbq.append_header("Website", scale(20 + !conf.col_site_text * 10) * conf.col_site_icon + scale(110) * conf.col_site_text);
 	lbq.append_header("Media title", scale(584));
 	lbq.append_header("Status", scale(116));
+	lbq.append_header("ETA", scale(80));
 	lbq.append_header("Format", scale(130));
 	lbq.append_header("Format note", scale(150));
 	lbq.append_header("Ext", scale(60));
 	lbq.append_header("Filesize", scale(100));
 	lbq.column_movable(false);
 	lbq.column_resizable(false);
-	lbq.column_at(4).visible(conf.col_format);
-	lbq.column_at(5).visible(conf.col_format_note);
-	lbq.column_at(6).visible(conf.col_ext);
-	lbq.column_at(7).visible(conf.col_fsize);
+	lbq.column_at(4).visible(conf.col_eta);
+	lbq.column_at(5).visible(conf.col_format);
+	lbq.column_at(6).visible(conf.col_format_note);
+	lbq.column_at(7).visible(conf.col_ext);
+	lbq.column_at(8).visible(conf.col_fsize);
 	lbq.column_at(0).text_align(align::center);
 	lbq.at(0).inline_factory(1, pat::make_factory<inline_widget>());
 
@@ -151,7 +153,8 @@ void GUI::queue_make_listbox()
 					seltext4 {lb.at(selected.item).text(4)},
 					seltext5 {lb.at(selected.item).text(5)},
 					seltext6 {lb.at(selected.item).text(6)},
-					seltext7 {lb.at(selected.item).text(7)};
+					seltext7 {lb.at(selected.item).text(7)},
+					seltext8 {lb.at(selected.item).text(8)};
 
 				lbqval_t selval {lb.at(selected.item).value<lbqval_t>()};
 				std::string sel_favicon_url {lbq.favicon_url_from_value(selval)};
@@ -174,6 +177,7 @@ void GUI::queue_make_listbox()
 						item.text(5, prev_item.text(5));
 						item.text(6, prev_item.text(6));
 						item.text(7, prev_item.text(7));
+						item.text(8, prev_item.text(8));
 						item.check(prev_item.checked());
 						if(!conf.common_dl_options)
 							gpopt.caption("Download options for queue item #" + item.text(0));
@@ -217,6 +221,7 @@ void GUI::queue_make_listbox()
 						item.text(5, next_item.text(5));
 						item.text(6, next_item.text(6));
 						item.text(7, next_item.text(7));
+						item.text(8, next_item.text(8));
 						item.check(next_item.checked());
 						if(!conf.common_dl_options)
 							gpopt.caption("Download options for queue item #" + item.text(0));
@@ -256,6 +261,7 @@ void GUI::queue_make_listbox()
 				hovitem.text(5, seltext5);
 				hovitem.text(6, seltext6);
 				hovitem.text(7, seltext7);
+				hovitem.text(8, seltext8);
 				hovitem.select(true);
 				hovitem.fgcolor(dragging_color);
 				if(!conf.common_dl_options)
@@ -995,12 +1001,22 @@ void GUI::make_columns_menu(nana::menu *m)
 
 	if(m)
 	{
+		m->append("ETA", [this](menu::item_proxy ip)
+		{
+			conf.col_eta = !conf.col_eta;
+			ip.checked(conf.col_eta);
+			lbq.auto_draw(false);
+			lbq.column_at(4).visible(conf.col_eta);
+			adjust_lbq_headers();
+			lbq.auto_draw(true);
+		}).checked(conf.col_eta);
+		
 		m->append("Format", [this](menu::item_proxy ip)
 		{
 			conf.col_format = !conf.col_format;
 			ip.checked(conf.col_format);
 			lbq.auto_draw(false);
-			lbq.column_at(4).visible(conf.col_format);
+			lbq.column_at(5).visible(conf.col_format);
 			adjust_lbq_headers();
 			lbq.auto_draw(true);
 		}).checked(conf.col_format);
@@ -1010,7 +1026,7 @@ void GUI::make_columns_menu(nana::menu *m)
 			conf.col_format_note = !conf.col_format_note;
 			ip.checked(conf.col_format_note);
 			lbq.auto_draw(false);
-			lbq.column_at(5).visible(conf.col_format_note);
+			lbq.column_at(6).visible(conf.col_format_note);
 			adjust_lbq_headers();
 			lbq.auto_draw(true);
 		}).checked(conf.col_format_note);
@@ -1020,7 +1036,7 @@ void GUI::make_columns_menu(nana::menu *m)
 			conf.col_ext = !conf.col_ext;
 			ip.checked(conf.col_ext);
 			lbq.auto_draw(false);
-			lbq.column_at(6).visible(conf.col_ext);
+			lbq.column_at(7).visible(conf.col_ext);
 			adjust_lbq_headers();
 			lbq.auto_draw(true);
 		}).checked(conf.col_ext);
@@ -1030,7 +1046,7 @@ void GUI::make_columns_menu(nana::menu *m)
 			conf.col_fsize = !conf.col_fsize;
 			ip.checked(conf.col_fsize);
 			lbq.auto_draw(false);
-			lbq.column_at(7).visible(conf.col_fsize);
+			lbq.column_at(8).visible(conf.col_fsize);
 			adjust_lbq_headers();
 			lbq.auto_draw(true);
 		}).checked(conf.col_fsize);
@@ -1114,10 +1130,11 @@ void GUI::queue_save_data(size_t max_qitems_to_process)
 								bottom.to_json(j);
 								j["columns"]["website"] = item.text(1);
 								j["columns"]["status"] = text;
-								j["columns"]["format"] = item.text(4);
-								j["columns"]["format_note"] = item.text(5);
-								j["columns"]["ext"] = item.text(6);
-								j["columns"]["fsize"] = item.text(7);
+								j["columns"]["eta"] = item.text(4);
+								j["columns"]["format"] = item.text(5);
+								j["columns"]["format_note"] = item.text(6);
+								j["columns"]["ext"] = item.text(7);
+								j["columns"]["fsize"] = item.text(8);
 							}
 						}
 					}

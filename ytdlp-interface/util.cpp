@@ -300,14 +300,10 @@ std::string util::run_piped_process
 						{
 							auto paren {line.rfind('(', pos) + 1};
 							auto strpct {line.substr(paren, pos - paren)};
-							auto pos3 {line.find("ETA:")};
-							std::string eta;
-							if(pos3 != -1)
-								eta = line.substr(pos3, line.size() - 2 - pos3);
 							auto slash {line.find('/')}, first {line.find(' ')};
 							std::string text {line.substr(first, slash-first) + " of "};
 							text += line.substr(slash + 1, paren - slash - 2) + " ";
-							text += line.substr(paren-1, line.rfind(']') - paren);
+							text += line.substr(paren-1, line.rfind(']') - paren + 1);
 							if(*working)
 								cbprog(static_cast<ULONGLONG>(std::stod(strpct) * 10), 1000, text, playlist_complete - 1, playlist_total);
 						}
@@ -316,7 +312,7 @@ std::string util::run_piped_process
 				} while(lnend != -1);
 			}
 			else ret += buf;
-			if(cbappend && *working)
+			if(cbappend && working && *working)
 			{
 				if(s.size() > 2)
 				{
@@ -452,7 +448,7 @@ std::wstring util::get_sys_folder(REFKNOWNFOLDERID rfid)
 }
 
 
-std::string util::get_inet_res(std::string res, std::string *error, bool truncate)
+std::string util::get_inet_res(std::string res_url, std::string *error, bool truncate, std::string headers)
 {
 	std::string ret;
 	if(error) error->clear();
@@ -467,11 +463,11 @@ std::string util::get_inet_res(std::string res, std::string *error, bool truncat
 		return str;
 	};*/
 
-	const char *agent {res.find("github.com") == -1 ? "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" : "ytdlp-interface"};
+	const char *agent {res_url.contains("github.com") ? "ytdlp-interface" : "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"};
 	auto hinet {InternetOpenA(agent, INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0)};
 	if(hinet)
 	{
-		auto hfile {InternetOpenUrlA(hinet, res.data(), NULL, 0, 0, 0)};
+		auto hfile {InternetOpenUrlA(hinet, res_url.data(), headers.empty() ? NULL : headers.data(), -1L, 0, 0)};
 		if(hfile)
 		{
 			DWORD read {1};

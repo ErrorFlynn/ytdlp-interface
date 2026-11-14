@@ -57,7 +57,7 @@ private:
 		thr_qitem_data, thr_queue_remove, thr_ver_deno, thr_releases_deno, thr_updater_deno;
 	CComPtr<ITaskbarList3> i_taskbar;
 	UINT WM_TASKBAR_BUTTON_CREATED {0};
-	const std::string ver_tag {"v2.19.1"}, title {"ytdlp-interface " + ver_tag/*.substr(0, 5)*/};
+	const std::string ver_tag {"v2.20.0"}, title {"ytdlp-interface " + ver_tag.substr(0, 5)};
 	const unsigned MINW {900}, MINH {700}; // min client area size
 	nana::drawerbase::listbox::item_proxy *last_selected {nullptr};
 	nana::timer tmsg, tqueue, t_load_qitem_data, t_url_flash;
@@ -276,7 +276,7 @@ private:
 	void fm_settings();
 	void fm_settings_info(nana::window owner);
 	void fm_changes(nana::window parent);
-	void fm_json();
+	void fm_json(nana::window parent = nullptr, const nlohmann::json *j = nullptr, const std::string key_path_to_expand = "");
 	void fm_sections();
 	void fm_playlist();
 	void fm_formats();
